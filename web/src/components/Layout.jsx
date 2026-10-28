@@ -137,6 +137,14 @@ export function Layout() {
               Feedback
               <UnreadDot n={unreadReplies} className="ml-1.5" />
             </Link>
+            <a
+              href="https://github.com/sir-axel/penged.dev"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex min-h-10 items-center underline underline-offset-4 hover:text-foreground"
+            >
+              Open source · contribute on GitHub
+            </a>
             <span>penged.dev — verified match play</span>
           </p>
         </div>
