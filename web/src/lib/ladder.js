@@ -39,6 +39,7 @@ export function matchesPlayed(e, t) {
   let n = t === "doubles" ? "doubles" : "singles";
   return (Number(e?.[`${n}_wins`]) || 0) + (Number(e?.[`${n}_losses`]) || 0);
 }
+/** DISPLAY ONLY: blend of the two independent ratings for the Overall board. Never an input to any rating, rank or stored field. */
 export function overallRating(e) {
   let t = matchesPlayed(e, "singles"),
     n = matchesPlayed(e, "doubles"),
@@ -55,4 +56,11 @@ export const PROVISIONAL_MATCHES = 5;
 export const ACTIVE_DAYS = 30;
 export const isProvisional = (player, format) => matchesPlayed(player, format) < PROVISIONAL_MATCHES;
 /** Singles only: played at least once but off the ranked ladder (no verified match for 30 days). */
-export const isInactive = (player) => !(Number(player?.singles_rank) > 0) && matchesPlayed(player, "singles") > 0;
+/** Played that format at least once but is off its ranked ladder (no verified match of that format for 30 days). */
+export const isInactive = (player, format = "singles") =>
+  !(Number(player?.[`${format === "doubles" ? "doubles" : "singles"}_rank`]) > 0) && matchesPlayed(player, format) > 0;
+/** Per-format rank / streaks: singles and doubles share nothing. */
+export const rankFor = (player, format) => Number(player?.[format === "doubles" ? "doubles_rank" : "singles_rank"]) || 0;
+export const ratingFor = (player, format) => Number(player?.[format === "doubles" ? "doubles_rating" : "singles_rating"]) || 1400;
+export const streakFor = (player, format) => Number(player?.[format === "doubles" ? "doubles_win_streak" : "singles_win_streak"]) || 0;
+export const bestStreakFor = (player, format) => Number(player?.[format === "doubles" ? "doubles_best_streak" : "singles_best_streak"]) || 0;

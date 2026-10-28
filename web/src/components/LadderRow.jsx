@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import { Avatar } from "@/components/Avatar";
 import { playerName } from "@/lib/ladder";
 
-export function LadderRow({ rank, player, rating: rating, wins = 0, losses = 0, provisional = false, inactive = false }) {
+export function LadderRow({ rank, player, rating: rating, wins = 0, losses = 0, provisional = false, inactive = false, streak = 0 }) {
   return (
     <li className="border-b border-border last:border-0">
       <Link
@@ -34,8 +34,8 @@ export function LadderRow({ rank, player, rating: rating, wins = 0, losses = 0, 
             {player.level || 1}
             {" · "}
             {wins}W–{losses}L
-            {(player.win_streak || 0) >= 2 && (
-              <span className="ml-1.5 text-brand">{` · ${player.win_streak}W STREAK`}</span>
+            {streak >= 2 && (
+              <span className="ml-1.5 text-brand">{` · ${streak}W STREAK`}</span>
             )}
           </span>
         </span>

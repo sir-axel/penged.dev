@@ -1,3 +1,4 @@
+import { BackButton } from "@/components/BackButton";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { LoaderCircle } from "lucide-react";
@@ -46,6 +47,7 @@ export function AdminReviews() {
     };
   return user?.role === "admin" ? (
     <>
+      <BackButton fallback="/profile" />
       <PageHeader
         eyebrow="Admin"
         title="Challenge penalties"

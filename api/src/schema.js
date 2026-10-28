@@ -6,9 +6,9 @@ export const ENTITIES = {
     table: 'players',
     cols: {
       ...common, user_id: 'text', username: 'text', username_lower: 'text', display_name: 'text',
-      avatar_url: 'text', bio: 'text', singles_rating: 'int', doubles_rating: 'int', singles_rank: 'int',
+      avatar_url: 'text', bio: 'text', singles_rating: 'int', doubles_rating: 'int', singles_rank: 'int', doubles_rank: 'int',
       singles_wins: 'int', singles_losses: 'int', doubles_wins: 'int', doubles_losses: 'int', xp: 'int',
-      level: 'int', win_streak: 'int', best_streak: 'int', last_match_day: 'text', unanswered_challenges: 'int', under_review: 'bool', last_active_at: 'ts', singles_last_verified_at: 'ts', doubles_last_verified_at: 'ts',
+      level: 'int', win_streak: 'int', best_streak: 'int', singles_win_streak: 'int', singles_best_streak: 'int', doubles_win_streak: 'int', doubles_best_streak: 'int', last_match_day: 'text', unanswered_challenges: 'int', under_review: 'bool', last_active_at: 'ts', singles_last_verified_at: 'ts', doubles_last_verified_at: 'ts',
     },
   },
   Match: {

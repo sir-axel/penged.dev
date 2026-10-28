@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { formatRecord, playerName } from "@/lib/ladder";
+import { formatRecord, playerName, overallRating, rankFor, ratingFor, streakFor, isProvisional, isInactive } from "@/lib/ladder";
 import { LevelBar } from "@/components/LevelBar";
 
 export function YourSpot({ player, toConfirm = 0 }) {
@@ -7,32 +7,40 @@ export function YourSpot({ player, toConfirm = 0 }) {
     <section className="border-b border-border bg-card">
       <div className="mx-auto max-w-5xl px-4 py-5 sm:px-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-          <div className="flex flex-1 items-center gap-4">
-            <div>
-              <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-                Your rank
-              </p>
-              <p className="font-heading text-2xl font-bold leading-none">
-                {player.singles_rank ? `#${player.singles_rank}` : "—"}
-              </p>
-            </div>
-            <div className="h-9 w-px bg-border" />
-            <div className="min-w-0">
+          <div className="flex flex-1 flex-col gap-3">
+            <div className="flex items-center justify-between gap-3">
               <p className="truncate font-heading text-sm font-semibold">{playerName(player)}</p>
-              <p className="font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
-                {player.singles_rating}
-                {" singles · "}
-                {formatRecord(player.singles_wins, player.singles_losses)}
-              </p>
-              {(player.win_streak || 0) >= 2 && (
-                <p className="mt-0.5 font-display text-[0.55rem] uppercase tracking-[0.16em] text-brand">
-                  {player.win_streak}W STREAK
-                </p>
-              )}
+              <div className="hidden w-32 sm:block">
+                <LevelBar xp={player.xp || 0} />
+              </div>
             </div>
-            <div className="ml-auto hidden w-32 sm:block">
-              <LevelBar xp={player.xp || 0} />
+            <div className="grid grid-cols-2 gap-3">
+              {["singles", "doubles"].map((fmt) => {
+                const rank = rankFor(player, fmt);
+                const streak = streakFor(player, fmt);
+                return (
+                  <div key={fmt} data-testid={`yourspot-${fmt}`}>
+                    <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                      {`${fmt} rank`}
+                    </p>
+                    <p className="font-heading text-2xl font-bold leading-none">{rank ? `#${rank}` : "—"}</p>
+                    <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+                      {ratingFor(player, fmt)}
+                      {" · "}
+                      {formatRecord(player[`${fmt}_wins`], player[`${fmt}_losses`])}
+                    </p>
+                    <p className="font-display text-[0.55rem] uppercase tracking-[0.16em] text-brand">
+                      {streak >= 2 && `${streak}W STREAK `}
+                      {isProvisional(player, fmt) && "provisional "}
+                      {isInactive(player, fmt) && <span className="text-muted-foreground">inactive</span>}
+                    </p>
+                  </div>
+                );
+              })}
             </div>
+            <p className="font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+              {`Overall ${overallRating(player)}`}
+            </p>
           </div>
           <div className="flex gap-2">
             {toConfirm > 0 && (
@@ -48,7 +56,7 @@ export function YourSpot({ player, toConfirm = 0 }) {
               to="/challenges"
               className="flex-1 rounded-sm border border-border px-3 py-3 text-center text-xs font-medium sm:py-2 hover:border-foreground/40 sm:flex-none"
             >
-              Challenge up
+              Challenge up (singles)
             </Link>
           </div>
         </div>

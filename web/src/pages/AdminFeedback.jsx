@@ -1,3 +1,4 @@
+import { BackButton } from "@/components/BackButton";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
@@ -142,6 +143,7 @@ export function AdminFeedback() {
   }
   return (
     <>
+      <BackButton fallback="/profile" />
       <PageHeader
         eyebrow="Admin"
         title="Feedback"

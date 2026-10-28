@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useMyPlayer } from "@/hooks/useMyPlayer";
-import { matchesPlayed, overallRating, PROVISIONAL_MATCHES, ACTIVE_DAYS, isInactive } from "@/lib/ladder";
+import { matchesPlayed, overallRating, PROVISIONAL_MATCHES, ACTIVE_DAYS, isInactive, rankFor, ratingFor, streakFor } from "@/lib/ladder";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { LadderRow } from "@/components/LadderRow";
@@ -36,50 +36,46 @@ export function Leaderboard() {
     }),
     inactiveRows = useMemo(
       () =>
-        players
-          .filter(isInactive)
-          .sort((a, b) => (b.singles_rating || 1400) - (a.singles_rating || 1400))
-          .map((e) => ({
-            player: e,
-            rank: 0,
-            rating: e.singles_rating || 1400,
-            wins: e.singles_wins || 0,
-            losses: e.singles_losses || 0,
-          })),
-      [players],
+        view === "overall"
+          ? []
+          : players
+              .filter((p) => isInactive(p, view))
+              .sort((a, b) => ratingFor(b, view) - ratingFor(a, view))
+              .map((e) => ({
+                player: e,
+                rank: 0,
+                rating: ratingFor(e, view),
+                wins: e[`${view}_wins`] || 0,
+                losses: e[`${view}_losses`] || 0,
+                streak: 0,
+              })),
+      [players, view],
     ),
     rows = useMemo(() => {
-      let t = [...players];
-      return view === "singles"
-        ? t
-            .filter((e) => Number(e.singles_rank) > 0)
-            .sort((e, t) => e.singles_rank - t.singles_rank)
-            .map((e) => ({
-              player: e,
-              rank: e.singles_rank,
-              rating: e.singles_rating || 1400,
-              wins: e.singles_wins || 0,
-              losses: e.singles_losses || 0,
-            }))
-        : view === "doubles"
-          ? t
-              .sort((e, t) => (t.doubles_rating || 1400) - (e.doubles_rating || 1400))
-              .map((e, t) => ({
-                player: e,
-                rank: t + 1,
-                rating: e.doubles_rating || 1400,
-                wins: e.doubles_wins || 0,
-                losses: e.doubles_losses || 0,
-              }))
-          : t
-              .sort((e, t) => overallRating(t) - overallRating(e))
-              .map((e, t) => ({
-                player: e,
-                rank: t + 1,
-                rating: overallRating(e),
-                wins: (e.singles_wins || 0) + (e.doubles_wins || 0),
-                losses: (e.singles_losses || 0) + (e.doubles_losses || 0),
-              }));
+      if (view === "overall") {
+        // Display-only blend of two independent ratings; computed here, never stored or fed back.
+        return [...players]
+          .sort((e, t) => overallRating(t) - overallRating(e))
+          .map((e, t) => ({
+            player: e,
+            rank: t + 1,
+            rating: overallRating(e),
+            wins: (e.singles_wins || 0) + (e.doubles_wins || 0),
+            losses: (e.singles_losses || 0) + (e.doubles_losses || 0),
+          }));
+      }
+      // Singles and doubles ranks both come from the API (own rank SQL per format); no client ranking.
+      return players
+        .filter((e) => rankFor(e, view) > 0)
+        .sort((e, t) => rankFor(e, view) - rankFor(t, view))
+        .map((e) => ({
+          player: e,
+          rank: rankFor(e, view),
+          rating: ratingFor(e, view),
+          wins: e[`${view}_wins`] || 0,
+          losses: e[`${view}_losses`] || 0,
+          streak: streakFor(e, view),
+        }));
     }, [players, view]);
   return (
     <>
@@ -142,13 +138,13 @@ export function Leaderboard() {
             </ul>
           </div>
         )}
-        {view === "singles" && inactiveRows.length > 0 && (
+        {view !== "overall" && inactiveRows.length > 0 && (
           <section className="mt-6" aria-label="Inactive players">
             <h2 className="font-display text-[0.58rem] uppercase tracking-[0.22em] text-muted-foreground">
               Inactive
             </h2>
             <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              {`No verified singles match in ${ACTIVE_DAYS} days, so off the ranked ladder. Play one and you are back, with your rating intact.`}
+              {`No verified ${view} match in ${ACTIVE_DAYS} days, so off the ranked ladder. Play one and you are back, with your rating intact.`}
             </p>
             <ul className="mt-2 overflow-hidden rounded-sm border border-border bg-card opacity-80">
               {inactiveRows.map((e) => (
@@ -159,10 +155,10 @@ export function Leaderboard() {
         )}
         <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
           {view === "singles"
-            ? "Singles rank is rating order for active players (a verified match in the last 30 days). Ties go to whoever has played more."
+            ? "Singles rank is rating order for active players (a verified singles match in the last 30 days). Ties go to whoever has played more."
             : view === "doubles"
-              ? "Doubles rating is a separate pool — it only moves on verified doubles results."
-              : "Overall weights your singles and doubles ratings by how much you have played each."}{" "}
+              ? "Doubles is its own ladder: doubles rating, doubles rank, doubles activity. It only moves on verified doubles results and never touches singles."
+              : "Overall is only a blend of your two separate ratings, weighted by how much you have played each. It is not used for any rating or rank."}{" "}
           <Link to="/rules" className="inline-block py-3 text-brand underline underline-offset-2 sm:py-0">
             How ranking works
           </Link>

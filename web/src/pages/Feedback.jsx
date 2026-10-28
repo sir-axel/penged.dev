@@ -1,3 +1,4 @@
+import { BackButton } from "@/components/BackButton";
 import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { LoaderCircle } from "lucide-react";
@@ -71,6 +72,7 @@ export function Feedback() {
 
   return (
     <>
+      <BackButton fallback="/" />
       <PageHeader
         eyebrow="Tell us"
         title="Feedback"

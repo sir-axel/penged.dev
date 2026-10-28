@@ -79,8 +79,8 @@ describe('match flow', () => {
     expect(rc.find((x) => x.player_id === a.player.id)).toMatchObject({ delta: -27, xp_gained: 25 + 10 });
     const players = (await get('/api/entities/Player?sort=singles_rank')).body.items;
     expect(players.map((p) => [p.username, p.singles_rank])).toEqual([['Bobby', 1], ['Carol', 2], ['Alice', 3]]);
-    expect(players[0]).toMatchObject({ singles_wins: 1, xp: 70, level: 2, singles_rating: 1427, win_streak: 1, best_streak: 1 });
-    expect(players[2]).toMatchObject({ singles_losses: 1, xp: 35, singles_rating: 1373, win_streak: 0 });
+    expect(players[0]).toMatchObject({ singles_wins: 1, xp: 70, level: 2, singles_rating: 1427, singles_win_streak: 1, singles_best_streak: 1 });
+    expect(players[2]).toMatchObject({ singles_losses: 1, xp: 35, singles_rating: 1373, singles_win_streak: 0 });
     // second response after verification is rejected
     expect((await call(a, 'respondMatch', { match_id: m.id, decision: 'accept' })).status).toBe(400);
   });
@@ -405,12 +405,12 @@ describe('streaks and daily bonus', () => {
     expect(part(r2, a.player.id, 'streak')).toBe(10);
     const r3 = await play(a, b);
     expect(part(r3, a.player.id, 'streak')).toBe(20);
-    expect(await ent(a.player.id)).toMatchObject({ win_streak: 3, best_streak: 3 });
-    expect(await ent(b.player.id)).toMatchObject({ win_streak: 0, best_streak: 0 });
+    expect(await ent(a.player.id)).toMatchObject({ singles_win_streak: 3, singles_best_streak: 3 });
+    expect(await ent(b.player.id)).toMatchObject({ singles_win_streak: 0, singles_best_streak: 0 });
     await play(b, a);
-    expect(await ent(a.player.id)).toMatchObject({ win_streak: 0, best_streak: 3 });
-    expect(await ent(b.player.id)).toMatchObject({ win_streak: 1, best_streak: 1 });
-    expect((await get('/api/entities/Player?sort=-best_streak')).body.items[0].best_streak).toBe(3);
+    expect(await ent(a.player.id)).toMatchObject({ singles_win_streak: 0, singles_best_streak: 3 });
+    expect(await ent(b.player.id)).toMatchObject({ singles_win_streak: 1, singles_best_streak: 1 });
+    expect((await get('/api/entities/Player?sort=-singles_best_streak')).body.items[0].singles_best_streak).toBe(3);
   });
 
   it('first verified match of the UTC day pays once per day per player', async () => {

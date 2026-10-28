@@ -1,3 +1,4 @@
+import { BackButton } from "@/components/BackButton";
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
@@ -49,6 +50,7 @@ export function Profile() {
   };
   return player ? (
     <>
+      <BackButton fallback="/" />
       <PageHeader
         eyebrow="Account"
         title="My profile"
@@ -61,11 +63,9 @@ export function Profile() {
             <div className="min-w-0 flex-1">
               <p className="truncate font-heading text-lg font-semibold">{playerName(player)}</p>
               <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-                {"rank "}
-                {player.singles_rank || "—"}
-                {" · "}
-                {player.singles_rating}
-                {" singles ·"} {formatRecord(player.singles_wins, player.singles_losses)}
+                {`Singles #${player.singles_rank || "—"} · ${player.singles_rating} · ${formatRecord(player.singles_wins, player.singles_losses)}`}
+                <br />
+                {`Doubles #${player.doubles_rank || "—"} · ${player.doubles_rating} · ${formatRecord(player.doubles_wins, player.doubles_losses)}`}
               </p>
             </div>
             <Link

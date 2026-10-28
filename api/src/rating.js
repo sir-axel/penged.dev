@@ -297,12 +297,17 @@ export function rankPlayers(players, activeSince = null) {
   return out;
 }
 
-/** Rewrites players.singles_rank from ratings (same order as rankPlayers); bind ONE param: the activeSince ISO cutoff. Inactive = NULL. */
-export const RANK_SQL = `UPDATE players SET singles_rank = r.rk FROM (
+/** Same ordering for one format's own columns. Singles and doubles ladders share no inputs. */
+const rankSqlFor = (fmt) => `UPDATE players SET ${fmt}_rank = r.rk FROM (
   SELECT id, CASE WHEN active THEN ROW_NUMBER() OVER (PARTITION BY active
-    ORDER BY singles_rating DESC, (singles_wins + singles_losses) DESC, created_date ASC, id ASC) END AS rk
-  FROM (SELECT *, (singles_last_verified_at IS NULL OR singles_last_verified_at >= ?) AS active FROM players)) AS r
-  WHERE players.id = r.id AND players.singles_rank IS NOT r.rk`;
+    ORDER BY ${fmt}_rating DESC, (${fmt}_wins + ${fmt}_losses) DESC, created_date ASC, id ASC) END AS rk
+  FROM (SELECT *, (${fmt}_last_verified_at IS NULL OR ${fmt}_last_verified_at >= ?) AS active FROM players)) AS r
+  WHERE players.id = r.id AND players.${fmt}_rank IS NOT r.rk`;
+
+/** Rewrites players.singles_rank from singles ratings (same order as rankPlayers); bind ONE param: the activeSince ISO cutoff. Inactive = NULL. */
+export const RANK_SQL = rankSqlFor('singles');
+/** Rewrites players.doubles_rank from doubles ratings / doubles games / doubles activity only. Same single param. */
+export const DOUBLES_RANK_SQL = rankSqlFor('doubles');
 
 // ---------- Challenge penalties (ducking a duel costs the defender) ----------
 export const EXPIRE_MULT = 1.0;

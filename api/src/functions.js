@@ -10,7 +10,7 @@ import { avatarOwner, removeAvatar } from './uploads.js';
 import { decodeInternal, pub } from './schema.js';
 import {
   START_RATING, REPEAT_WINDOW_DAYS, rateMatch, xpForMatch, levelForXp, validateGames, summarizeGames,
-  RANK_SQL, rankPlayers, ACTIVE_DAYS, REPEAT_RECENT_DAYS, meetingWeight, RATING_FLOOR, challengePenalty, WALKOVER_XP, COOLDOWN_DAYS, WAIVER_DAYS, FATIGUE_DAYS,
+  RANK_SQL, DOUBLES_RANK_SQL, rankPlayers, ACTIVE_DAYS, REPEAT_RECENT_DAYS, meetingWeight, RATING_FLOOR, challengePenalty, WALKOVER_XP, COOLDOWN_DAYS, WAIVER_DAYS, FATIGUE_DAYS,
 } from './rating.js';
 
 const MATCH_EXPIRY_MS = 7 * 86400000;
@@ -68,9 +68,9 @@ const getChallenge = (env, id) => first(env, 'SELECT * FROM challenges WHERE id 
 const touch = (env, playerId, now) =>
   stmt(env, 'UPDATE players SET last_active_at = ?, updated_date = ? WHERE id = ?', now, now, playerId);
 
-/** Recompute singles_rank for everyone from ratings (put AFTER every rating / membership change in a batch), then bump the ladder version. */
+/** Recompute singles_rank AND doubles_rank (separate SQL, separate inputs) for everyone from ratings (put AFTER every rating / membership change in a batch), then bump the ladder version. */
 const activeCut = () => daysAgoIso(ACTIVE_DAYS);
-const rankStmts = (env) => [stmt(env, RANK_SQL, activeCut()), bumpLadder(env)];
+const rankStmts = (env) => [stmt(env, RANK_SQL, activeCut()), stmt(env, DOUBLES_RANK_SQL, activeCut()), bumpLadder(env)];
 const rankRows = (env) =>
   all(env, 'SELECT id, singles_rating AS rating, singles_wins + singles_losses AS played, created_date, singles_last_verified_at AS last_verified_at FROM players');
 /**
@@ -347,7 +347,7 @@ async function verifyPlan(env, m, now) {
       m.created_date, now, winner, loser, loser, winner);
   }
 
-  const rc = `${fmt}_rating`, wc = `${fmt}_wins`, lc = `${fmt}_losses`, vc = `${fmt}_last_verified_at`;
+  const rc = `${fmt}_rating`, wc = `${fmt}_wins`, lc = `${fmt}_losses`, vc = `${fmt}_last_verified_at`, sc = `${fmt}_win_streak`, bc = `${fmt}_best_streak`;
   const paddleOf = (id) => [...m.side_a, ...m.side_b].find((e) => e.player_id === id)?.paddle;
   const parts = players.map((p) => ({
     id: p.id, side: sideOf(p.id), paddle: paddleOf(p.id), rating: p[rc], matchesPlayed: p[wc] + p[lc], earlierMeetings: earlier(p.id),
@@ -365,8 +365,8 @@ async function verifyPlan(env, m, now) {
     const gamesWon = m.games.filter((g) => (side === 'a' ? g.a > g.b : g.b > g.a)).length;
     const mine = side === 'a' ? (g) => g.a : (g) => g.b;
     const theirs = side === 'a' ? (g) => g.b : (g) => g.a;
-    const streak = won ? (p.win_streak || 0) + 1 : 0;
-    const best = Math.max(p.best_streak || 0, streak);
+    const streak = won ? (p[sc] || 0) + 1 : 0;
+    const best = Math.max(p[bc] || 0, streak);
     const xpRes = xpForMatch({
       won,
       gamesWon,
@@ -381,7 +381,7 @@ async function verifyPlan(env, m, now) {
     stmts.push(guardRow(env, 'players', p.id, p.version));
     stmts.push(stmt(env,
       `UPDATE players SET ${rc} = ?, ${won ? wc : lc} = ${won ? wc : lc} + 1, xp = ?, level = ?, last_active_at = ?,
-         win_streak = ?, best_streak = ?, last_match_day = ?, ${vc} = ?, updated_date = ?, version = version + 1 WHERE id = ?`,
+         ${sc} = ?, ${bc} = ?, last_match_day = ?, ${vc} = ?, updated_date = ?, version = version + 1 WHERE id = ?`,
       res.after, xp, levelForXp(xp), now, streak, best, today, now, now, p.id));
     changes.push({
       player_id: p.id, name: nameOf(p), before: res.before, after: res.after, delta: res.delta,
@@ -391,8 +391,8 @@ async function verifyPlan(env, m, now) {
       xp_gained: xpGain, xp_parts: xpRes.parts, win_streak: streak,
     });
   }
+  stmts.push(...rankStmts(env)); // each format's rank SQL reads only its own columns; the other is a no-op
   if (fmt === 'singles') {
-    stmts.push(...rankStmts(env));
     if (ch) {
       stmts.push(guardRow(env, 'challenges', ch.id, ch.version, 'accepted'));
       stmts.push(stmt(env, `UPDATE challenges SET status = 'completed', updated_date = ?, version = version + 1 WHERE id = ?`, now, ch.id));
@@ -586,7 +586,7 @@ export const runSyncLadder = ({ env }) =>
     const stmts = [...plan.guards, ...plan.stmts];
     const iC = stmts.push(stmt(env, `UPDATE challenges SET status = 'expired', updated_date = ?, version = version + 1 WHERE status IN ('open','accepted') AND expires_at < ?`, now, now)) - 1;
     const iM = stmts.push(stmt(env, `UPDATE matches SET status = 'expired', updated_date = ?, version = version + 1 WHERE status = 'pending' AND expires_at < ?`, now, now)) - 1;
-    stmts.push(flagsStmt(env), stmt(env, RANK_SQL, activeCut())); // ranks are derived from ratings; idempotent
+    stmts.push(flagsStmt(env), stmt(env, RANK_SQL, activeCut()), stmt(env, DOUBLES_RANK_SQL, activeCut())); // ranks are derived from ratings; idempotent
     const res = await commit(env, stmts);
     return { ok: true, expired_challenges: plan.changed + res[iC].meta.changes, expired_matches: res[iM].meta.changes };
   });

@@ -51,6 +51,7 @@ export function TopLadder({ players = [] }) {
                 rating={e.singles_rating || 1400}
                 wins={e.singles_wins || 0}
                 losses={e.singles_losses || 0}
+                streak={e.singles_win_streak || 0}
                 key={e.id}
               />
             ))}

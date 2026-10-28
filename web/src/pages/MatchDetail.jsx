@@ -1,3 +1,4 @@
+import { BackButton } from "@/components/BackButton";
 import { describeChange } from "@/lib/ratingFactors";
 import { useState, useEffect } from "react";
 import { Link, useParams } from "react-router-dom";
@@ -60,20 +61,12 @@ export function MatchDetail() {
     );
   if (!match)
     return (
-      <div className="mx-auto max-w-2xl px-4 py-16 sm:px-6">
-        <EmptyState
-          title="Match not found"
-          body="This result may have been removed."
-          action={
-            <Link
-              to="/matches"
-              className="inline-flex min-h-10 items-center rounded-sm bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground"
-            >
-              Back to matches
-            </Link>
-          }
-        />
-      </div>
+      <>
+        <BackButton fallback="/matches" />
+        <div className="mx-auto max-w-2xl px-4 py-12 sm:px-6">
+          <EmptyState title="Match not found" body="This result may have been removed." />
+        </div>
+      </>
     );
   let participants = match.all_user_ids || [],
     accepted = match.accepted_user_ids || [],
@@ -87,6 +80,7 @@ export function MatchDetail() {
     };
   return (
     <>
+      <BackButton fallback="/matches" />
       <PageHeader
         eyebrow={`${match.format === "doubles" ? "Doubles" : "Singles"} · to ${match.target}`}
         title="Match result"

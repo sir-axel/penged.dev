@@ -1,3 +1,4 @@
+import { BackButton } from "@/components/BackButton";
 import { Link } from "react-router-dom";
 import { PageHeader } from "@/components/PageHeader";
 import { RATING_POINTS, XP_POINTS, CHALLENGE_POINTS } from "@/components/home/RatingExplainer";
@@ -15,7 +16,6 @@ export const RULE_SECTIONS = [
   {
     title: "Rating",
     items: [
-      "Each format has its own pool: a singles rating and a doubles rating. Doubles results never move your singles rating.",
       ...RATING_POINTS,
     ],
   },
@@ -32,10 +32,10 @@ export const RULE_SECTIONS = [
     items: [
       "Rank is your place in the rating order. New players start at 1400 and slot in by rating.",
       "Win and your rating rises, so you pass everyone you now out-rate. Ties go to whoever has played more, then whoever joined first.",
-      "Stay active: with no verified singles match in 30 days you move to the Inactive list, keeping your rating, and are ranked again when you next play. Under 5 matches is marked provisional.",
+      "Stay active: with no verified match of a format in 30 days you move to that format's Inactive list (singles and doubles are tracked separately), keeping your rating, and are ranked again when you next play it. Under 5 matches is marked provisional.",
       "Beating someone far below you earns little rating, so it barely moves you.",
-      "Doubles is ranked the same way, by doubles rating.",
-      "Overall blends both ratings, weighted by how many matches you have played in each.",
+      "Doubles is ranked the same way, on its own: by doubles rating, then doubles matches played.",
+      "Overall blends both ratings, weighted by how many matches you have played in each. It is shown on the Overall board only and is never used in any rating, rank or challenge.",
     ],
   },
   {
@@ -49,6 +49,7 @@ export const RULE_SECTIONS = [
 export function Rules() {
   return (
     <>
+      <BackButton fallback="/" />
       <PageHeader
         eyebrow="House rules"
         title="How rating, level and challenges work"

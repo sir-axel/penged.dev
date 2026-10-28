@@ -1,15 +1,18 @@
 import { Link } from "react-router-dom";
 
+export const SEPARATE_RATINGS =
+  "Singles and doubles are two separate ratings and ladders — a doubles result never moves your singles rating, and vice versa. Overall is just a blend of the two for the Overall board.";
 export const RATING_POINTS = [
+  SEPARATE_RATINGS,
   "Everyone starts at 1400. No rating ever drops below 700.",
   "Margins matter. Win 11-2 and you gain far more than winning 11-9 — up to double.",
   "Upsets pay. Beat someone rated above you and the win is boosted; crushing someone far below you is damped.",
   "You lose points the same way you win them. Get crushed and you lose big; lose narrowly to someone better and it barely stings. In singles, what the winner gains the loser drops.",
-  "K-factor: 48 for your first 10 matches, 32 until 30, then 24 for good.",
+  "K-factor (per format): 48 for your first 10 matches, 32 until 30, then 24 for good.",
   "One result moves you at most 80 points.",
   "Rematches are worth less. Each earlier meeting with the same opponent in the last 180 days scales the swing by 1 / (1 + 0.75 × meetings). After six, neither of you moves.",
   "Paddles count. A paid paddle is treated as +50 rating when working out who was expected to win: win with one and you gain a little less, beat one and you gain a little more.",
-  "Doubles uses each team's average rating.",
+  "Doubles uses each team's average rating. Each format has its own games played (K-factor, provisional), rematch count, time away, streaks and rank: nothing is shared.",
 ];
 export const RATING_FORMULA =
   "edge      = 50 * share of paid paddles on your side  (0, 25 or 50)\nexpected  = 1 / (1 + 10 ^ (((opponent + their edge) - (you + your edge)) / 400))\ndominance = (winnerPoints - loserPoints) / (winnerPoints + loserPoints)\nmargin    = 0.75 + 1.25 * sqrt(dominance)         (0.75 to 2.0)\nupset     = 2.2 / (2.2 + 0.001 * (winner - loser))  (0.6 to 1.6, edges included)\nchange    = K * (result - expected) * repeat * margin * upset   (max 80)\n\nresult = 1 for a win, 0 for a loss (the loser gets the same margin and upset factors)\nK      = 48 (first 10) / 32 (next 20) / 24 (after)\nrepeat = 1 / (1 + 0.75 * earlier meetings)";
@@ -17,13 +20,13 @@ export const XP_POINTS = [
   "+25 xp for playing, +25 for winning",
   "+5 xp per game you take (five games max)",
   "Upset: +10 xp per full 50 rating points you were behind (max +60)",
-  "Streak: +10 xp x (wins in a row - 1) from your second straight win (max +50)",
+  "Streak: +10 xp x (wins in a row - 1) from your second straight win in the format you are playing (max +50)",
   "Skunk: +15 xp for every game you win 11-0",
   "Comeback: +15 xp for winning after losing game 1",
   "First verified match of the day: +10 xp",
 ];
 export const CHALLENGE_POINTS = [
-  "You can challenge a player up to three ranks above you. One open challenge at a time.",
+  "Challenges are singles-only: you can challenge a player up to three singles ranks above you. One open challenge at a time.",
   "The defender has 72 hours to accept. Ducking a challenge costs rating, and rank follows rating.",
   "Decline: the defender loses rating.",
   "No answer in 72 hours: the defender loses twice as much, the challenger gains the same points as a walkover and earns 15 xp.",
