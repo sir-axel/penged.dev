@@ -134,7 +134,7 @@ export function Leaderboard() {
             : view === "doubles"
               ? "Doubles rating is a separate pool — it only moves on verified doubles results."
               : "Overall weights your singles and doubles ratings by how much you have played each."}{" "}
-          <Link to="/rules" className="text-brand underline underline-offset-2">
+          <Link to="/rules" className="inline-block py-3 text-brand underline underline-offset-2 sm:py-0">
             How ranking works
           </Link>
         </p>

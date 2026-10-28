@@ -85,7 +85,7 @@ export function RatingExplainer() {
           </p>
           <Link
             to="/rules"
-            className="mt-1 inline-flex py-2 font-display text-[0.55rem] uppercase tracking-[0.16em] text-brand hover:underline"
+            className="mt-1 inline-flex min-h-10 items-center py-2 font-display text-[0.55rem] uppercase tracking-[0.16em] text-brand hover:underline"
           >
             Full house rules
           </Link>

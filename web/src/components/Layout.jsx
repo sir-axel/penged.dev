@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Link, NavLink, Outlet } from "react-router-dom";
 import { Trophy, Plus, Swords, User, LogIn } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
@@ -25,11 +26,29 @@ export const NAV_ITEMS = [
 ];
 export function Layout() {
   let { isAuthenticated } = useAuth();
+  // While a text field is focused the on-screen keyboard is (probably) open: drop the bottom nav and
+  // let the fixed submit bar sit flush at the bottom so neither covers the field being typed in.
+  useEffect(() => {
+    const root = document.documentElement;
+    const isField = (t) =>
+      t instanceof HTMLElement &&
+      (t.matches("textarea, select") ||
+        (t.matches("input") && !/^(checkbox|radio|file|button|submit|range|color)$/.test(t.type)));
+    const on = (e) => isField(e.target) && root.setAttribute("data-kb", "");
+    const off = () => root.removeAttribute("data-kb");
+    document.addEventListener("focusin", on);
+    document.addEventListener("focusout", off);
+    return () => {
+      document.removeEventListener("focusin", on);
+      document.removeEventListener("focusout", off);
+      off();
+    };
+  }, []);
   return (
     <div className="flex min-h-screen flex-col bg-background">
       <header className="sticky top-0 z-30 border-b-2 border-foreground/80 bg-background/95 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-3 px-4 sm:px-6">
-          <Link to="/" aria-label="Penged.dev home" className="rounded-none py-1">
+          <Link to="/" aria-label="Penged.dev home" className="inline-flex min-h-10 items-center rounded-none py-1">
             <Logo />
           </Link>
           <nav aria-label="Main" className="hidden items-center gap-1 md:flex">
@@ -64,7 +83,7 @@ export function Layout() {
           )}
         </div>
       </header>
-      <main className="flex-1 pb-24 md:pb-0">
+      <main className="flex-1 pb-[calc(6rem+env(safe-area-inset-bottom))] md:pb-0">
         <Outlet />
       </main>
       <footer className="border-t border-border px-4 py-8 sm:px-6">
@@ -75,7 +94,7 @@ export function Layout() {
       </footer>
       <nav
         aria-label="Primary"
-        className="fixed inset-x-0 bottom-0 z-30 border-t-2 border-foreground/80 bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
+        className="kb-hide fixed inset-x-0 bottom-0 z-30 border-t-2 border-foreground/80 bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
       >
         <ul className="grid grid-cols-3">
           {NAV_ITEMS.map(({ to, short, icon: Icon }) => (

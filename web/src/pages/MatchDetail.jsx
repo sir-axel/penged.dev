@@ -66,7 +66,7 @@ export function MatchDetail() {
           action={
             <Link
               to="/matches"
-              className="rounded-sm bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground"
+              className="inline-flex min-h-10 items-center rounded-sm bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground"
             >
               Back to matches
             </Link>

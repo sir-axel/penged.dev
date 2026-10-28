@@ -33,7 +33,7 @@ export function YourSpot({ player, toConfirm = 0 }) {
             {toConfirm > 0 && (
               <Link
                 to="/matches"
-                className="flex-1 rounded-sm border border-warning/40 bg-warning/10 px-3 py-2 text-center text-xs font-medium text-warning sm:flex-none"
+                className="flex-1 rounded-sm border border-warning/40 bg-warning/10 px-3 py-3 text-center text-xs font-medium sm:py-2 text-warning sm:flex-none"
               >
                 {toConfirm}
                 {" to confirm"}
@@ -41,7 +41,7 @@ export function YourSpot({ player, toConfirm = 0 }) {
             )}
             <Link
               to="/challenges"
-              className="flex-1 rounded-sm border border-border px-3 py-2 text-center text-xs font-medium hover:border-foreground/40 sm:flex-none"
+              className="flex-1 rounded-sm border border-border px-3 py-3 text-center text-xs font-medium sm:py-2 hover:border-foreground/40 sm:flex-none"
             >
               Challenge up
             </Link>

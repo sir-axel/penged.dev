@@ -30,7 +30,7 @@ export function AccountPanel({ email }) {
           <button
             type="button"
             onClick={() => logout(true)}
-            className="inline-flex items-center gap-1.5 border border-border bg-card px-3 py-2 text-sm font-medium hover:border-foreground/50"
+            className="inline-flex min-h-10 items-center gap-1.5 border border-border bg-card px-3 py-2 text-sm font-medium hover:border-foreground/50"
           >
             <LogOut className="h-4 w-4" aria-hidden="true" />
             Sign out

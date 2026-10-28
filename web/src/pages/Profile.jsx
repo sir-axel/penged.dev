@@ -67,7 +67,7 @@ export function Profile() {
             </div>
             <Link
               to={`/players/${player.username}`}
-              className="shrink-0 rounded-sm border border-border px-2.5 py-1.5 text-xs font-medium hover:border-foreground/40"
+              className="inline-flex min-h-10 shrink-0 items-center rounded-sm border border-border px-3 py-1.5 text-xs font-medium sm:min-h-0 sm:px-2.5 hover:border-foreground/40"
             >
               View
             </Link>
@@ -174,7 +174,7 @@ export function Profile() {
           <div className="flex flex-wrap gap-2">
             <Link
               to="/matches"
-              className="rounded-sm border border-border bg-card px-3 py-2 text-sm font-medium hover:border-foreground/40"
+              className="inline-flex min-h-10 items-center rounded-sm border border-border bg-card px-3 py-2 text-sm font-medium hover:border-foreground/40"
             >
               My matches
             </Link>

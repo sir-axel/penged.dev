@@ -60,7 +60,7 @@ export function Register() {
           Already have an account?{" "}
           <Link
             to={"/login" + (returnTo === "/" ? "" : "?returnTo=" + encodeURIComponent(returnTo))}
-            className="text-primary font-medium hover:underline"
+            className="inline-block py-2.5 text-primary font-medium hover:underline sm:py-0"
           >
             Log in
           </Link>

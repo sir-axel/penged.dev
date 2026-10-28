@@ -16,7 +16,7 @@ export function TopLadder({ players = [] }) {
         </div>
         <Link
           to="/leaderboard"
-          className="inline-flex shrink-0 items-center gap-1 rounded-sm py-2 text-sm font-medium text-brand hover:underline"
+          className="inline-flex min-h-10 shrink-0 items-center gap-1 rounded-sm py-2 text-sm font-medium text-brand hover:underline"
         >
           Full ladder
           <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />

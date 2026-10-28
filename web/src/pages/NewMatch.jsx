@@ -273,7 +273,7 @@ export function NewMatch() {
           </p>
         )}
       </div>
-      <div className="fixed inset-x-0 bottom-[58px] z-20 border-t border-border bg-background/95 px-4 py-3 backdrop-blur md:bottom-0">
+      <div className="kb-bar fixed inset-x-0 bottom-[calc(58px+env(safe-area-inset-bottom))] z-20 border-t border-border bg-background/95 px-4 py-3 backdrop-blur md:bottom-0">
         <div className="mx-auto max-w-2xl">
           <Button
             onClick={async () => {

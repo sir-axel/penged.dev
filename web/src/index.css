@@ -130,3 +130,10 @@
     animation-iteration-count: 1 !important;
   }
 }
+
+/* Mobile: keep a focused field clear of the fixed bottom bars, and drop them while the keyboard is up. */
+@media (max-width: 767px) {
+  html { scroll-padding-bottom: 9rem; }
+  html[data-kb] .kb-hide { display: none; }
+  html[data-kb] .kb-bar { bottom: 0; padding-bottom: calc(0.75rem + env(safe-area-inset-bottom)); }
+}

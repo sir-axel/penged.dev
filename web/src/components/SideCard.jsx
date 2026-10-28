@@ -23,7 +23,7 @@ export function SideCard({ side, gamesWon: gamesWon, winner: winner, label: labe
             <Avatar name={e.display_name || e.username} src={e.avatar_url} size={26} />
             <Link
               to={`/players/${e.username}`}
-              className="min-w-0 flex-1 truncate font-heading text-sm font-medium hover:underline"
+              className="min-w-0 flex-1 truncate py-2.5 font-heading text-sm font-medium hover:underline sm:py-1"
             >
               {e.display_name || e.username}
             </Link>
