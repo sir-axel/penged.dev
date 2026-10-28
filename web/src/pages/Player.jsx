@@ -95,6 +95,11 @@ export function PlayerProfile() {
               <p className="font-heading text-2xl font-bold leading-none">
                 {player.singles_rank ? `#${player.singles_rank}` : "—"}
               </p>
+              {(player.win_streak || 0) >= 2 && (
+                <p className="mt-1 font-display text-[0.55rem] uppercase tracking-[0.16em] text-brand">
+                  {player.win_streak}W STREAK
+                </p>
+              )}
               {player.under_review && (
                 <p className="mt-1 inline-flex rounded-sm border border-destructive/40 px-1.5 py-0.5 font-mono text-[9px] uppercase text-destructive">
                   under review
@@ -129,6 +134,10 @@ export function PlayerProfile() {
             value={(player.singles_losses || 0) + (player.doubles_losses || 0)}
           />
           <Stat label="Level" value={player.level || 1} />
+        </div>
+        <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <Stat label="Win streak" value={player.win_streak || 0} />
+          <Stat label="Best streak" value={player.best_streak || 0} />
         </div>
         <section className="mt-8">
           <h2 className="font-display text-[0.58rem] uppercase tracking-[0.22em] text-muted-foreground">

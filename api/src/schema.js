@@ -8,7 +8,7 @@ export const ENTITIES = {
       ...common, user_id: 'text', username: 'text', username_lower: 'text', display_name: 'text',
       avatar_url: 'text', bio: 'text', singles_rating: 'int', doubles_rating: 'int', singles_rank: 'int',
       singles_wins: 'int', singles_losses: 'int', doubles_wins: 'int', doubles_losses: 'int', xp: 'int',
-      level: 'int', unanswered_challenges: 'int', under_review: 'bool', last_active_at: 'ts',
+      level: 'int', win_streak: 'int', best_streak: 'int', last_match_day: 'text', unanswered_challenges: 'int', under_review: 'bool', last_active_at: 'ts',
     },
   },
   Match: {
@@ -26,7 +26,8 @@ export const ENTITIES = {
       ...common, challenger_user_id: 'text', challenger_player_id: 'text', challenger_name: 'text',
       challenger_rank: 'int', defender_user_id: 'text', defender_player_id: 'text', defender_name: 'text',
       defender_rank: 'int', message: 'text', status: 'text', review_requested: 'bool', expires_at: 'ts',
-      responded_at: 'ts', resolved_by: 'text',
+      responded_at: 'ts', resolved_by: 'text', penalty_rating: 'int', penalty_rank_before: 'int',
+      penalty_rank_after: 'int', penalty_reason: 'text', penalized_at: 'ts', reversed: 'bool',
     },
   },
 };

@@ -5,6 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { formatShortDate } from "@/lib/ladder";
+import { outcomeText } from "@/pages/Challenges";
 import { Button } from "@/components/ui/button";
 import { api } from "@/api/client";
 
@@ -19,32 +20,23 @@ export function AdminReviews() {
       queryFn: async () =>
         (
           await api.entities.Challenge.filter(
-            {
-              status: "expired",
-            },
-            {
-              sort: "-created_date",
-              limit: 100,
-            },
+            { penalized_at: { $ne: null } },
+            { sort: "-penalized_at", limit: 100 },
           )
         ).items || [],
     }),
-    resolve = async (e, n) => {
-      (setBusy(`${n}-${e.id}`), setError(""));
+    reverse = async (e) => {
+      (setBusy(e.id), setError(""));
       try {
         let r = await api.functions.invoke("resolveChallenge", {
           challenge_id: e.id,
-          action: n,
+          action: "reverse",
         });
         if (r.data?.error) throw Error(r.data.error);
-        (queryClient.invalidateQueries({
-          queryKey: ["review-queue"],
-        }),
-          queryClient.invalidateQueries({
-            queryKey: ["players"],
-          }));
+        (queryClient.invalidateQueries({ queryKey: ["review-queue"] }),
+          queryClient.invalidateQueries({ queryKey: ["players"] }));
       } catch (e) {
-        setError(e.response?.data?.error || e.message || "Could not resolve that review.");
+        setError(e.response?.data?.error || e.message || "Could not reverse that penalty.");
       } finally {
         setBusy("");
       }
@@ -53,8 +45,8 @@ export function AdminReviews() {
     <>
       <PageHeader
         eyebrow="Admin"
-        title="Forfeit review"
-        description="Challenges that ran out of time. A forfeit moves the ladder position only — ratings never change without a played match."
+        title="Challenge penalties"
+        description="Recent declines and no-shows. Reversing a penalty gives the defender back their rating and spot, and takes any walkover xp from the challenger."
       />
       <div className="mx-auto max-w-2xl space-y-3 px-4 py-6 sm:px-6">
         {error && (
@@ -63,47 +55,33 @@ export function AdminReviews() {
           </p>
         )}
         {queue.length === 0 ? (
-          <EmptyState
-            title="Nothing to review"
-            body="No challenge windows have closed without a response."
-          />
+          <EmptyState title="No penalties" body="Nobody has ducked a challenge yet." />
         ) : (
           <ul className="space-y-2">
             {queue.map((e) => (
               <li className="rounded-sm border border-border bg-card p-3" key={e.id}>
                 <p className="font-heading text-sm font-semibold">
-                  {e.challenger_name}
-                  {" (#"}
-                  {e.challenger_rank}) → {e.defender_name}
-                  {" (#"}
-                  {e.defender_rank})
+                  {e.challenger_name} → {e.defender_name}
                 </p>
                 <p className="mt-0.5 font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
-                  {"sent "}
-                  {formatShortDate(e.created_date)}
-                  {" ·"} {e.review_requested ? "review requested" : "no response"}
+                  {formatShortDate(e.penalized_at)}
+                  {e.review_requested && !e.reversed ? " · review requested" : ""}
                 </p>
+                <p className="mt-2 text-xs text-muted-foreground">{outcomeText(e, false)}</p>
                 {e.message && <p className="mt-2 text-xs text-muted-foreground">“{e.message}”</p>}
-                <div className="mt-3 grid grid-cols-2 gap-2">
+                {!e.reversed && (e.penalty_rating > 0 || e.penalty_rank_after !== e.penalty_rank_before) && (
                   <Button
-                    onClick={() => resolve(e, "forfeit")}
-                    disabled={!!busy}
-                    className="h-11 rounded-sm"
-                  >
-                    {busy === `forfeit-${e.id}` && (
-                      <LoaderCircle className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
-                    )}
-                    Award position
-                  </Button>
-                  <Button
-                    onClick={() => resolve(e, "dismiss")}
+                    onClick={() => reverse(e)}
                     disabled={!!busy}
                     variant="outline"
-                    className="h-11 rounded-sm"
+                    className="mt-3 h-11 w-full rounded-sm"
                   >
-                    Dismiss
+                    {busy === e.id && (
+                      <LoaderCircle className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                    )}
+                    Reverse
                   </Button>
-                </div>
+                )}
               </li>
             ))}
           </ul>
@@ -112,10 +90,7 @@ export function AdminReviews() {
     </>
   ) : (
     <div className="mx-auto max-w-2xl px-4 py-16 sm:px-6">
-      <EmptyState
-        title="Admins only"
-        body="The forfeit review queue is limited to ladder admins."
-      />
+      <EmptyState title="Admins only" body="The penalty review list is limited to ladder admins." />
     </div>
   );
 }

@@ -75,12 +75,12 @@ describe('match flow', () => {
     expect(acc.status).toBe(200);
     expect(acc.body.match.status).toBe('verified');
     const rc = acc.body.match.rating_changes;
-    expect(rc.find((x) => x.player_id === b.player.id)).toMatchObject({ before: 1400, after: 1424, delta: 24, xp_gained: 25 + 25 + 10 });
-    expect(rc.find((x) => x.player_id === a.player.id)).toMatchObject({ delta: -24, xp_gained: 25 });
+    expect(rc.find((x) => x.player_id === b.player.id)).toMatchObject({ before: 1400, after: 1434, delta: 34, xp_gained: 25 + 25 + 10 + 10 });
+    expect(rc.find((x) => x.player_id === a.player.id)).toMatchObject({ delta: -34, xp_gained: 25 + 10 });
     const players = (await get('/api/entities/Player?sort=singles_rank')).body.items;
     expect(players.map((p) => [p.username, p.singles_rank])).toEqual([['Bobby', 1], ['Alice', 2], ['Carol', 3]]);
-    expect(players[0]).toMatchObject({ singles_wins: 1, xp: 60, level: 2, singles_rating: 1424 });
-    expect(players[1]).toMatchObject({ singles_losses: 1, xp: 25, singles_rating: 1376 });
+    expect(players[0]).toMatchObject({ singles_wins: 1, xp: 70, level: 2, singles_rating: 1434, win_streak: 1, best_streak: 1 });
+    expect(players[1]).toMatchObject({ singles_losses: 1, xp: 35, singles_rating: 1366, win_streak: 0 });
     // second response after verification is rejected
     expect((await call(a, 'respondMatch', { match_id: m.id, decision: 'accept' })).status).toBe(400);
   });
@@ -95,7 +95,7 @@ describe('match flow', () => {
     const first = await play();
     const second = await play();
     const d = (rc, id) => rc.find((x) => x.player_id === id).delta;
-    expect(d(first, a.player.id)).toBe(24);
+    expect(d(first, a.player.id)).toBe(34);
     expect(d(second, a.player.id)).toBeLessThan(d(first, a.player.id));
   });
 
@@ -128,7 +128,7 @@ describe('match flow', () => {
     expect(last.body.match.status).toBe('verified');
     const ps = (await get('/api/entities/Player?sort=singles_rank')).body.items;
     expect(ps.map((p) => p.username)).toEqual(['Aa1', 'Bb2', 'Cc3', 'Dd4']);
-    expect(ps.find((p) => p.username === 'Dd4')).toMatchObject({ doubles_wins: 1, doubles_rating: 1424, singles_rating: 1400 });
+    expect(ps.find((p) => p.username === 'Dd4')).toMatchObject({ doubles_wins: 1, doubles_rating: 1430, singles_rating: 1400 });
   });
 });
 
@@ -153,39 +153,6 @@ describe('challenges', () => {
     void d;
   });
 
-  it('expiry, review request, admin forfeit and dismiss', async () => {
-    const admin = await signUp('admin@penged.test', 'boss');
-    await makeAdmin(admin);
-    const a = await mkPlayer('Aa1');
-    const b = await mkPlayer('Bb2');
-    const c = await mkPlayer('Cc3');
-    const ch1 = (await call(c, 'createChallenge', { defender_player_id: a.player.id })).body.challenge;
-    await sql('UPDATE challenges SET expires_at = ?', past());
-    expect((await call(a, 'respondChallenge', { challenge_id: ch1.id, decision: 'accept' })).status).toBe(400);
-    const sync = await call(c, 'syncLadder');
-    expect(sync.body).toEqual({ ok: true, expired_challenges: 1, expired_matches: 0 });
-    expect((await call(c, 'syncLadder')).body.expired_challenges).toBe(0); // idempotent
-    expect((await get('/api/entities/Player/' + a.player.id)).body.unanswered_challenges).toBe(1);
-    expect((await get('/api/entities/Challenge?filter=' + encodeURIComponent('{"status":"expired"}'))).body.items).toHaveLength(1);
-    // only the challenger may request; only once
-    expect((await call(b, 'resolveChallenge', { challenge_id: ch1.id, action: 'request' })).status).toBe(403);
-    expect((await call(c, 'resolveChallenge', { challenge_id: ch1.id, action: 'request' })).body.challenge.review_requested).toBe(true);
-    expect((await call(c, 'resolveChallenge', { challenge_id: ch1.id, action: 'request' })).status).toBe(400);
-    // non-admin cannot forfeit
-    expect((await call(c, 'resolveChallenge', { challenge_id: ch1.id, action: 'forfeit' })).status).toBe(403);
-    const f = await call(admin, 'resolveChallenge', { challenge_id: ch1.id, action: 'forfeit' });
-    expect(f.body.challenge.status).toBe('forfeited');
-    const ranks = (await get('/api/entities/Player?sort=singles_rank')).body.items.map((p) => [p.username, p.singles_rank]);
-    expect(ranks).toEqual([['Cc3', 1], ['Aa1', 2], ['Bb2', 3]]);
-    expect((await get('/api/entities/Player/' + a.player.id)).body.unanswered_challenges).toBe(0);
-    expect((await call(admin, 'resolveChallenge', { challenge_id: ch1.id, action: 'dismiss' })).status).toBe(400);
-    // dismiss path
-    const ch2 = (await call(a, 'createChallenge', { defender_player_id: c.player.id })).body.challenge;
-    await sql('UPDATE challenges SET expires_at = ? WHERE id = ?', past(), ch2.id);
-    await call(a, 'syncLadder');
-    expect((await call(admin, 'resolveChallenge', { challenge_id: ch2.id, action: 'dismiss' })).body.challenge.status).toBe('cancelled');
-  });
-
   it('expires pending matches', async () => {
     const a = await mkPlayer('Alice');
     const b = await mkPlayer('Bobby');
@@ -194,6 +161,198 @@ describe('challenges', () => {
     expect((await call(b, 'respondMatch', { match_id: m.id, decision: 'accept' })).status).toBe(400);
     expect((await call(a, 'syncLadder')).body.expired_matches).toBe(1);
     expect((await get('/api/entities/Match/' + m.id)).body.status).toBe('expired');
+  });
+});
+
+describe('challenge penalties', () => {
+  const ent = async (name, id) => (await get(`/api/entities/${name}/${id}`)).body;
+  const order = async () => (await get('/api/entities/Player?sort=singles_rank')).body.items.map((p) => p.username);
+  const expire = (id) => sql('UPDATE challenges SET expires_at = ? WHERE id = ?', past(), id);
+  const trio = async () => {
+    const admin = await signUp('admin@penged.test', 'boss');
+    await makeAdmin(admin);
+    return { admin, a: await mkPlayer('Aa1'), b: await mkPlayer('Bb2'), c: await mkPlayer('Cc3') };
+  };
+  /** Insert a verified singles match between two players, `ago` ms in the past. */
+  const verified = (p, q, ago = 3600e3, format = 'singles') => sql(
+    `INSERT INTO matches (id, format, target, side_a, side_b, games, games_a, games_b, winner_side, status, all_player_ids, all_user_ids,
+       accepted_user_ids, verified_at, created_date, updated_date) VALUES (?,?,11,'[]','[]','[]',2,0,'a','verified',?,'[]','[]',?,?,?)`,
+    crypto.randomUUID(), format, JSON.stringify([p.player.id, q.player.id]), new Date(Date.now() - ago).toISOString(),
+    new Date(Date.now() - ago).toISOString(), new Date(Date.now() - ago).toISOString());
+
+  it('decline: defender loses half the dodge, drops one place, challenger moves up; idempotent', async () => {
+    const { a, b, c } = await trio();
+    const ch = (await call(c, 'createChallenge', { defender_player_id: b.player.id })).body.challenge;
+    const pv = await call(b, 'challengePenaltyPreview', { challenge_id: ch.id });
+    expect(pv.body.decline).toMatchObject({ penalty: 12, reason: 'declined', drops_rank: true, rank_after: 3 });
+    expect(pv.body.expire.penalty).toBe(24);
+    expect((await call(c, 'challengePenaltyPreview', { challenge_id: ch.id })).status).toBe(403);
+    const r = await call(b, 'respondChallenge', { challenge_id: ch.id, decision: 'decline' });
+    expect(r.body.challenge).toMatchObject({ status: 'declined', penalty_rating: 12, penalty_rank_before: 2, penalty_rank_after: 3, penalty_reason: 'declined', reversed: false });
+    expect(r.body.challenge.penalized_at).toBeTruthy();
+    expect((await ent('Player', b.player.id)).singles_rating).toBe(1388);
+    expect((await ent('Player', c.player.id)).singles_rating).toBe(1400);
+    expect(await order()).toEqual(['Aa1', 'Cc3', 'Bb2']);
+    expect((await call(b, 'respondChallenge', { challenge_id: ch.id, decision: 'decline' })).status).toBe(400);
+    expect((await ent('Player', b.player.id)).singles_rating).toBe(1388);
+    void a;
+  });
+
+  it('expiry: defender loses the full dodge, challenger takes the spot (+15 xp walkover), cron + syncLadder penalise once', async () => {
+    const { a, c } = await trio();
+    const ch = (await call(c, 'createChallenge', { defender_player_id: a.player.id })).body.challenge; // rank gap 2
+    await expire(ch.id);
+    const pending = [];
+    await worker.scheduled({}, env, { waitUntil: (p) => pending.push(p) });
+    await Promise.all(pending);
+    const sync = await call(c, 'syncLadder');
+    expect(sync.body.expired_challenges).toBe(0);
+    const row = await ent('Challenge', ch.id);
+    expect(row).toMatchObject({ status: 'expired', penalty_rating: 19, penalty_reason: 'expired', penalty_rank_before: 1, penalty_rank_after: 2 });
+    expect((await ent('Player', a.player.id)).singles_rating).toBe(1381);
+    const chal = await ent('Player', c.player.id);
+    expect(chal).toMatchObject({ singles_rating: 1400, xp: 15, singles_rank: 1 });
+    expect(await order()).toEqual(['Cc3', 'Aa1', 'Bb2']);
+    expect((await ent('Player', a.player.id)).unanswered_challenges).toBe(1);
+  });
+
+  it('a verified match between the pair in the last 7 days waives a decline (no loss, no drop) but starts the cooldown', async () => {
+    const { b, c } = await trio();
+    await verified(b, c, 2 * 86400e3);
+    const ch = (await call(c, 'createChallenge', { defender_player_id: b.player.id })).body.challenge;
+    expect((await call(b, 'challengePenaltyPreview', { challenge_id: ch.id })).body.decline).toMatchObject({ penalty: 0, reason: 'waived_recent_match', drops_rank: false });
+    const r = (await call(b, 'respondChallenge', { challenge_id: ch.id, decision: 'decline' })).body.challenge;
+    expect(r).toMatchObject({ status: 'declined', penalty_rating: 0, penalty_reason: 'waived_recent_match', penalty_rank_before: 2, penalty_rank_after: 2 });
+    expect(await order()).toEqual(['Aa1', 'Bb2', 'Cc3']);
+    expect((await ent('Player', b.player.id)).singles_rating).toBe(1400);
+    const again = await call(c, 'createChallenge', { defender_player_id: b.player.id });
+    expect(again.status).toBe(409);
+    expect(again.body.error).toMatch(/challenged Bb2 recently.*again after .* UTC/);
+    // an old match (8 days) does not waive
+  });
+
+  it('an 8-day-old match does not waive; repeat meetings reduce the cost', async () => {
+    const { b, c } = await trio();
+    await verified(b, c, 8 * 86400e3);
+    const ch = (await call(c, 'createChallenge', { defender_player_id: b.player.id })).body.challenge;
+    // 1 earlier meeting in 180d: repeatFactor 1/1.75 => 12 * .5714 = 6.86 -> 7
+    expect((await call(b, 'respondChallenge', { challenge_id: ch.id, decision: 'decline' })).body.challenge.penalty_rating).toBe(7);
+  });
+
+  it('fatigue: 3+ verified matches in 7 days halve a decline', async () => {
+    const { a, b, c } = await trio();
+    for (let i = 0; i < 3; i++) await verified(b, a, (i + 1) * 3600e3);
+    const ch = (await call(c, 'createChallenge', { defender_player_id: b.player.id })).body.challenge;
+    // facts: 3 matches, K48 (0 played in wins/losses columns), repeat vs c none, pair c-b none
+    const r = (await call(b, 'respondChallenge', { challenge_id: ch.id, decision: 'decline' })).body.challenge;
+    expect(r).toMatchObject({ penalty_rating: 6, penalty_reason: 'fatigue_halved' });
+  });
+
+  it('respects the 700 floor', async () => {
+    const { b, c } = await trio();
+    await sql('UPDATE players SET singles_rating = 702, doubles_rating = 702 WHERE id = ?', b.player.id);
+    await sql('UPDATE players SET singles_rating = 702 WHERE id = ?', c.player.id);
+    const ch = (await call(c, 'createChallenge', { defender_player_id: b.player.id })).body.challenge;
+    await expire(ch.id);
+    await call(c, 'syncLadder');
+    expect((await ent('Player', b.player.id)).singles_rating).toBe(700);
+    expect((await ent('Challenge', ch.id)).penalty_rating).toBe(2);
+  });
+
+  it('admin reverse restores rating, rank and xp; reversing twice and non-admin reversal are rejected', async () => {
+    const { admin, a, b, c } = await trio();
+    const ch1 = (await call(c, 'createChallenge', { defender_player_id: b.player.id })).body.challenge;
+    await call(b, 'respondChallenge', { challenge_id: ch1.id, decision: 'decline' });
+    expect((await call(b, 'resolveChallenge', { challenge_id: ch1.id, action: 'reverse' })).status).toBe(403);
+    expect((await call(c, 'resolveChallenge', { challenge_id: ch1.id, action: 'reverse' })).status).toBe(403);
+    // defender may ask for a review, once; challenger may not
+    expect((await call(c, 'resolveChallenge', { challenge_id: ch1.id, action: 'request' })).status).toBe(403);
+    expect((await call(b, 'resolveChallenge', { challenge_id: ch1.id, action: 'request' })).body.challenge.review_requested).toBe(true);
+    expect((await call(b, 'resolveChallenge', { challenge_id: ch1.id, action: 'request' })).status).toBe(400);
+    const rev = await call(admin, 'resolveChallenge', { challenge_id: ch1.id, action: 'reverse' });
+    expect(rev.body.challenge.reversed).toBe(true);
+    expect((await ent('Player', b.player.id)).singles_rating).toBe(1400);
+    expect(await order()).toEqual(['Aa1', 'Bb2', 'Cc3']);
+    expect((await call(admin, 'resolveChallenge', { challenge_id: ch1.id, action: 'reverse' })).status).toBe(400);
+    // reversing a penalty clears the cooldown
+    expect((await call(c, 'createChallenge', { defender_player_id: b.player.id })).status).toBe(200);
+    // expiry reverse
+    await sql('DELETE FROM challenges WHERE id <> ?', ch1.id);
+    const ch2 = (await call(c, 'createChallenge', { defender_player_id: a.player.id })).body.challenge;
+    await expire(ch2.id);
+    await call(c, 'syncLadder');
+    expect(await order()).toEqual(['Cc3', 'Aa1', 'Bb2']);
+    expect((await ent('Player', c.player.id)).xp).toBe(15);
+    await call(admin, 'resolveChallenge', { challenge_id: ch2.id, action: 'reverse' });
+    expect((await ent('Player', c.player.id)).xp).toBe(0);
+    expect((await ent('Player', a.player.id)).singles_rating).toBe(1400);
+    expect(await order()).toEqual(['Aa1', 'Cc3', 'Bb2']); // a restored to #1; others shift down
+    expect((await ent('Player', a.player.id)).unanswered_challenges).toBe(0);
+  });
+
+  it('an accepted-then-unplayed challenge expiring carries no penalty', async () => {
+    const { a, c } = await trio();
+    const ch = (await call(c, 'createChallenge', { defender_player_id: a.player.id })).body.challenge;
+    await call(a, 'respondChallenge', { challenge_id: ch.id, decision: 'accept' });
+    await expire(ch.id);
+    await call(c, 'syncLadder');
+    expect(await ent('Challenge', ch.id)).toMatchObject({ status: 'expired', penalty_reason: null });
+    expect((await ent('Player', a.player.id)).singles_rating).toBe(1400);
+    expect(await order()).toEqual(['Aa1', 'Bb2', 'Cc3']);
+  });
+});
+
+describe('streaks and daily bonus', () => {
+  const play = async (w, l, extra = {}) => {
+    const s = await submit(w, w.player, l.player, extra);
+    return (await call(l, 'respondMatch', { match_id: s.body.match.id, decision: 'accept' })).body.match.rating_changes;
+  };
+  const part = (rc, id, key) => rc.find((x) => x.player_id === id).xp_parts.find((p) => p.key === key)?.xp;
+  const ent = async (id) => (await get('/api/entities/Player/' + id)).body;
+
+  it('win streak increments, best_streak sticks, a loss resets; streak XP applies from 2', async () => {
+    const a = await mkPlayer('Alice');
+    const b = await mkPlayer('Bobby');
+    const r1 = await play(a, b);
+    expect(part(r1, a.player.id, 'streak')).toBeUndefined();
+    const r2 = await play(a, b);
+    expect(part(r2, a.player.id, 'streak')).toBe(10);
+    const r3 = await play(a, b);
+    expect(part(r3, a.player.id, 'streak')).toBe(20);
+    expect(await ent(a.player.id)).toMatchObject({ win_streak: 3, best_streak: 3 });
+    expect(await ent(b.player.id)).toMatchObject({ win_streak: 0, best_streak: 0 });
+    await play(b, a);
+    expect(await ent(a.player.id)).toMatchObject({ win_streak: 0, best_streak: 3 });
+    expect(await ent(b.player.id)).toMatchObject({ win_streak: 1, best_streak: 1 });
+    expect((await get('/api/entities/Player?sort=-best_streak')).body.items[0].best_streak).toBe(3);
+  });
+
+  it('first verified match of the UTC day pays once per day per player', async () => {
+    const a = await mkPlayer('Alice');
+    const b = await mkPlayer('Bobby');
+    const r1 = await play(a, b);
+    expect(part(r1, a.player.id, 'first_of_day')).toBe(10);
+    expect(part(r1, b.player.id, 'first_of_day')).toBe(10);
+    const r2 = await play(a, b);
+    expect(part(r2, a.player.id, 'first_of_day')).toBeUndefined();
+    await sql("UPDATE players SET last_match_day = '2000-01-01'");
+    const r3 = await play(a, b);
+    expect(part(r3, a.player.id, 'first_of_day')).toBe(10);
+    expect((await ent(a.player.id)).last_match_day).toBe(new Date().toISOString().slice(0, 10));
+  });
+
+  it('skunk, comeback and upset parts show up in the stored breakdown', async () => {
+    const a = await mkPlayer('Alice');
+    const b = await mkPlayer('Bobby');
+    await sql('UPDATE players SET singles_rating = 1650 WHERE id = ?', b.player.id); // loser is 250 higher
+    const rc = await play(a, b, { games: [{ a: 9, b: 11 }, { a: 11, b: 0 }, { a: 11, b: 0 }] });
+    expect(part(rc, a.player.id, 'upset')).toBe(50);
+    expect(part(rc, a.player.id, 'skunk')).toBe(30);
+    expect(part(rc, a.player.id, 'comeback')).toBe(15);
+    const w = rc.find((x) => x.player_id === a.player.id);
+    expect(w).toMatchObject({ win_streak: 1 });
+    expect(w.mov).toBeGreaterThan(1.5);
+    expect(w.xp_gained).toBe(w.xp_parts.reduce((n, p) => n + p.xp, 0));
   });
 });
 
@@ -310,7 +469,7 @@ describe('atomicity / races (D1 batch guards)', () => {
     expect(m.rating_changes).toHaveLength(4);
     const ps = (await get('/api/entities/Player')).body.items;
     expect(ps.every((p) => p.doubles_wins + p.doubles_losses === 1)).toBe(true);
-    expect(ps.reduce((n, p) => n + p.xp, 0)).toBe(2 * (25 + 25 + 10) + 2 * 25);
+    expect(ps.reduce((n, p) => n + p.xp, 0)).toBe(2 * (25 + 25 + 10 + 10) + 2 * (25 + 10));
   });
 
   it('a stale guard rolls back the whole batch', async () => {
@@ -443,7 +602,7 @@ describe('review fixes', () => {
     expect(row.status).toBe('expired');
     // not the defender's fault: no unanswered strike, and no review path
     expect((await get('/api/entities/Player/' + a.player.id)).body.unanswered_challenges).toBe(0);
-    expect((await call(b, 'resolveChallenge', { challenge_id: ch.id, action: 'request' })).status).toBe(400);
+    expect((await call(a, 'resolveChallenge', { challenge_id: ch.id, action: 'request' })).status).toBe(400);
     expect((await call(b, 'createChallenge', { defender_player_id: a.player.id })).status).not.toBe(409);
   });
 

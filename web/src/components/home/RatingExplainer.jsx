@@ -1,20 +1,36 @@
 import { Link } from "react-router-dom";
 
 export const RATING_POINTS = [
-  "Everyone starts at 1400.",
-  "Beating someone above you gains more than beating someone below you.",
-  "Losing to a stronger opponent costs fewer points.",
+  "Everyone starts at 1400. No rating ever drops below 700.",
+  "Margins matter. Win 11-2 and you gain far more than winning 11-9 — up to double.",
+  "Upsets pay. Beat someone rated above you and the win is boosted; crushing someone far below you is damped.",
+  "You lose points the same way you win them. Get crushed and you lose big; lose narrowly to someone better and it barely stings. In singles, what the winner gains the loser drops.",
   "K-factor: 48 for your first 10 matches, 32 until 30, then 24 for good.",
-  "One result moves you at most 45 points, and no rating ever drops below 700.",
-  "Rematches are worth less — every earlier meeting with the same opponent halves the gain, and after six in six months a win pays nothing.",
-  "Margins don't matter: 11-0 and 11-9 count exactly the same.",
+  "One result moves you at most 80 points.",
+  "Rematches are worth less. Each earlier meeting with the same opponent in the last 180 days scales the swing by 1 / (1 + 0.75 × meetings). After six, neither of you moves.",
+  "Doubles uses each team's average rating.",
 ];
 export const RATING_FORMULA =
-  "expected = 1 / (1 + 10 ^ ((opponentRating - yourRating) / 400))\nnewRating = yourRating + K * (result - expected) * repeatFactor\n\nresult       = 1 for a win, 0 for a loss\nK            = 48 (first 10) / 32 (next 20) / 24 (after)\nrepeatFactor = 1 / (1 + 0.75 * earlier meetings)";
+  "expected  = 1 / (1 + 10 ^ ((opponent - you) / 400))\ndominance = (winnerPoints - loserPoints) / (winnerPoints + loserPoints)\nmargin    = 0.75 + 1.25 * sqrt(dominance)         (0.75 to 2.0)\nupset     = 2.2 / (2.2 + 0.001 * (winner - loser))  (0.6 to 1.6)\nchange    = K * (result - expected) * repeat * margin * upset   (max 80)\n\nresult = 1 for a win, 0 for a loss (the loser gets the same margin and upset factors)\nK      = 48 (first 10) / 32 (next 20) / 24 (after)\nrepeat = 1 / (1 + 0.75 * earlier meetings)";
 export const XP_POINTS = [
-  "+25 xp for turning up",
-  "+25 xp for winning",
+  "+25 xp for playing, +25 for winning",
   "+5 xp per game you take (five games max)",
+  "Upset: +10 xp per full 50 rating points you were behind (max +60)",
+  "Streak: +10 xp x (wins in a row - 1) from your second straight win (max +50)",
+  "Skunk: +15 xp for every game you win 11-0",
+  "Comeback: +15 xp for winning after losing game 1",
+  "First verified match of the day: +10 xp",
+];
+export const CHALLENGE_POINTS = [
+  "You can challenge a player up to three places above you. One open challenge at a time.",
+  "The defender has 72 hours to accept. Ducking a challenge costs rating and rank.",
+  "Decline: the defender loses rating and drops one place.",
+  "No answer in 72 hours: the defender loses twice as much, the challenger takes their spot on the ladder and earns 15 xp.",
+  "The cost peaks when you are evenly rated and close in rank. Ducking someone far below you costs little (at least 5 for silence, 3 for a decline). Rematches cost less.",
+  "Played that challenger in the last 7 days? Declining is free. Played 3 or more matches this week? A decline costs half.",
+  "After a decline or no answer, the same challenger cannot challenge you again for 7 days.",
+  "Penalised unfairly? Ask for a review; an admin can reverse it and give back your rating and spot.",
+  "An accepted challenge that never gets played expires with no penalty.",
 ];
 export function RatingExplainer() {
   return (
@@ -25,8 +41,8 @@ export function RatingExplainer() {
           How ratings work
         </h2>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
-          Elo, like chess ratings. Your rating moves only once everyone who played has confirmed the
-          result, so nobody can award themselves a win.
+          Elo, like chess ratings, plus margins and upsets. Your rating moves only once everyone who
+          played has confirmed the result, so nobody can award themselves a win.
         </p>
         <div className="mt-6 grid grid-cols-1 gap-3 lg:grid-cols-2">
           <article className="min-w-0 border border-foreground bg-card p-5">
@@ -56,7 +72,7 @@ export function RatingExplainer() {
               <h3 className="font-heading text-base font-semibold">Level is not rating</h3>
               <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
                 Level counts the work you put in. Rating counts who you beat — so grinding easy
-                games never buys rank.
+                games never buys rank. Bonus xp:
               </p>
               <ul className="mt-3 space-y-1.5">
                 {XP_POINTS.map((e) => (
@@ -79,9 +95,10 @@ export function RatingExplainer() {
             Worked example
           </h3>
           <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
-            In your first match, a 1400-rated player beats a 1600-rated one. Expected score is 0.24,
-            so the win is worth 48 × (1 − 0.24) = 36 points: the winner moves to 1436 and, because
-            the win came against a higher rank, also takes that spot on the ladder.
+            First match: 1400 beats 1600, expected score 0.24. A 3-0 blowout (11-2, 11-3, 11-1) is
+            margin ×1.79 and upset ×1.10, so the winner gains 72 and the loser drops 72. The same
+            win, narrowly (11-9, 9-11, 12-10), is margin ×0.97: +39 and −39. The winner also takes
+            the higher spot on the ladder.
           </p>
           <Link
             to="/rules"

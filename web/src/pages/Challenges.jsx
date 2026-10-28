@@ -11,6 +11,56 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/EmptyState";
 import { api } from "@/api/client";
 
+const minus = (n) => `−${Math.abs(n)}`;
+export function outcomeText(t, asChallenger) {
+  const pen = t.penalty_rating || 0;
+  if (!t.penalty_reason) return null;
+  if (t.reversed) return "Penalty reversed by an admin";
+  const rankMoved = t.penalty_rank_after != null && t.penalty_rank_after !== t.penalty_rank_before;
+  if (t.penalty_reason === "waived_recent_match") {
+    return asChallenger
+      ? `Declined · no penalty — ${t.defender_name} played you this week`
+      : "Declined · no penalty — you played this week";
+  }
+  if (t.penalty_reason === "expired") {
+    return asChallenger
+      ? `No response · you take #${t.penalty_rank_before} from ${t.defender_name} · +15 xp walkover`
+      : `No response · ${minus(pen)} rating · lost #${t.penalty_rank_before} to ${t.challenger_name}`;
+  }
+  const halved = t.penalty_reason === "fatigue_halved" ? " (halved: busy week)" : "";
+  return asChallenger
+    ? `Declined · ${t.defender_name} ${minus(pen)} rating${rankMoved ? ` · dropped to #${t.penalty_rank_after}` : ""}`
+    : `Declined · ${minus(pen)} rating${rankMoved ? ` · dropped to #${t.penalty_rank_after}` : ""}${halved}`;
+}
+
+function DeclineButton({ challenge, busy, onDecline }) {
+  const { data } = useQuery({
+    queryKey: ["penalty-preview", challenge.id],
+    queryFn: async () => (await api.functions.invoke("challengePenaltyPreview", { challenge_id: challenge.id })).data,
+  });
+  const d = data?.decline;
+  const label = !d
+    ? "Decline"
+    : d.penalty > 0
+      ? `Decline · ${minus(d.penalty)}`
+      : "Decline · free";
+  const confirmText = !d
+    ? "Decline this challenge?"
+    : d.penalty > 0
+      ? `Declining costs ${d.penalty} rating${d.drops_rank ? ` and drops you to #${d.rank_after}` : ""}. Staying silent for 72 hours would cost ${data.expire.penalty} and hand over your spot. Decline anyway?`
+      : "Declining is free this time — you played this challenger this week. Decline?";
+  return (
+    <Button
+      onClick={() => window.confirm(confirmText) && onDecline()}
+      disabled={busy}
+      variant="outline"
+      className="h-11 rounded-sm"
+    >
+      {label}
+    </Button>
+  );
+}
+
 export function Challenges() {
   let { user } = useAuth(),
     { player, isLoading: playerLoading } = useMyPlayer(),
@@ -96,7 +146,7 @@ export function Challenges() {
       <PageHeader
         eyebrow="Rank duels"
         title="Challenges"
-        description="Challenge up to three places above you. The window is 72 hours, and a forfeit is only awarded after review."
+        description="Challenge up to three places above you. The window is 72 hours — ducking a challenge costs the defender rating and rank."
       />
       <div className="mx-auto max-w-2xl space-y-7 px-4 py-6 sm:px-6">
         {error && (
@@ -152,23 +202,17 @@ export function Challenges() {
                       )}
                       Accept
                     </Button>
-                    <Button
-                      onClick={() =>
+                    <DeclineButton
+                      challenge={e}
+                      busy={!!busy}
+                      onDecline={() =>
                         act(
                           "respondChallenge",
-                          {
-                            challenge_id: e.id,
-                            decision: "decline",
-                          },
+                          { challenge_id: e.id, decision: "decline" },
                           `decline-${e.id}`,
                         )
                       }
-                      disabled={!!busy}
-                      variant="outline"
-                      className="h-11 rounded-sm"
-                    >
-                      Decline
-                    </Button>
+                    />
                   </div>
                 </li>
               ))}
@@ -298,29 +342,31 @@ export function Challenges() {
                       </span>
                       <StatusBadge status={t.status} />
                     </div>
-                    {t.status === "expired" && n && !t.review_requested && !t.responded_at && (
-                      <Button
-                        onClick={() =>
-                          act(
-                            "resolveChallenge",
-                            {
-                              challenge_id: t.id,
-                              action: "request",
-                            },
-                            `review-${t.id}`,
-                          )
-                        }
-                        variant="outline"
-                        className="h-9 w-full rounded-sm text-xs"
-                        disabled={!!busy}
-                      >
-                        Request a review
-                      </Button>
+                    {outcomeText(t, n) && (
+                      <p className="text-xs text-muted-foreground">{outcomeText(t, n)}</p>
                     )}
-                    {t.status === "expired" && n && t.review_requested && (
-                      <p className="text-xs text-warning">
-                        Review requested — an admin will decide.
-                      </p>
+                    {!n &&
+                      t.penalty_reason &&
+                      !t.reversed &&
+                      !t.review_requested &&
+                      (t.penalty_rating > 0 || t.penalty_rank_after !== t.penalty_rank_before) && (
+                        <Button
+                          onClick={() =>
+                            act(
+                              "resolveChallenge",
+                              { challenge_id: t.id, action: "request" },
+                              `review-${t.id}`,
+                            )
+                          }
+                          variant="outline"
+                          className="h-9 w-full rounded-sm text-xs"
+                          disabled={!!busy}
+                        >
+                          Ask an admin to review this penalty
+                        </Button>
+                      )}
+                    {!n && t.review_requested && !t.reversed && (
+                      <p className="text-xs text-warning">Review requested — an admin will decide.</p>
                     )}
                   </li>
                 );
@@ -330,7 +376,7 @@ export function Challenges() {
         )}
         <EmptyState
           title="How challenges move rank"
-          body="Beating someone above you takes their place. Silence never does: an unanswered challenge is only resolved after an admin review."
+          body="Beating someone above you takes their place. Ducking costs rating and rank: declining drops you a place, and staying silent for 72 hours costs double and hands the challenger your spot."
           action={
             <Link
               to="/rules"

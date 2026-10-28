@@ -24,6 +24,11 @@ export function YourSpot({ player, toConfirm = 0 }) {
                 {" singles · "}
                 {formatRecord(player.singles_wins, player.singles_losses)}
               </p>
+              {(player.win_streak || 0) >= 2 && (
+                <p className="mt-0.5 font-display text-[0.55rem] uppercase tracking-[0.16em] text-brand">
+                  {player.win_streak}W STREAK
+                </p>
+              )}
             </div>
             <div className="ml-auto hidden w-32 sm:block">
               <LevelBar xp={player.xp || 0} />

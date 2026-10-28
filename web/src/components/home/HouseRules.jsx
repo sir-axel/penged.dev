@@ -12,7 +12,7 @@ export const PRINCIPLES = [
   {
     tag: "03",
     title: "Challenges, not shortcuts",
-    body: "You climb by beating the player above you. A challenge has a 72-hour window, and silence never hands anyone a rank automatically.",
+    body: "You climb by beating the player above you. Ducking one costs rating and a place on the ladder, and ignoring it for 72 hours costs double.",
   },
 ];
 export function HouseRules() {

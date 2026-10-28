@@ -29,6 +29,9 @@ export function LadderRow({ rank, player, rating: rating, wins = 0, losses = 0 }
             {player.level || 1}
             {" · "}
             {wins}W–{losses}L
+            {(player.win_streak || 0) >= 2 && (
+              <span className="ml-1.5 text-brand">{` · ${player.win_streak}W STREAK`}</span>
+            )}
           </span>
         </span>
         <span className="w-12 shrink-0 text-right font-mono text-sm tabular-nums">{rating}</span>

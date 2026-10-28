@@ -9,7 +9,7 @@ import { avatarOwner, removeAvatar } from './uploads.js';
 import { decodeInternal, pub } from './schema.js';
 import {
   START_RATING, REPEAT_WINDOW_DAYS, rateMatch, xpForMatch, levelForXp, validateGames, summarizeGames,
-  applyLadderSwap,
+  applyLadderSwap, challengePenalty, WALKOVER_XP, COOLDOWN_DAYS, WAIVER_DAYS, FATIGUE_DAYS,
 } from './rating.js';
 
 const MATCH_EXPIRY_MS = 7 * 86400000;
@@ -86,7 +86,7 @@ async function compactPlan(env, exclude) {
  */
 export const flagsStmt = (env) => {
   // Only challenges the defender never responded to count (responded_at IS NULL excludes accepted-then-unplayed).
-  const un = `(SELECT count(*) FROM challenges c WHERE c.defender_player_id = players.id AND c.status = 'expired' AND c.responded_at IS NULL)`;
+  const un = `(SELECT count(*) FROM challenges c WHERE c.defender_player_id = players.id AND c.status = 'expired' AND c.responded_at IS NULL AND c.reversed = 0)`;
   const ur = `CASE WHEN ${un} >= 2 OR (last_active_at IS NOT NULL AND last_active_at < ?
          AND EXISTS (SELECT 1 FROM matches m WHERE m.status = 'disputed'
                      AND EXISTS (SELECT 1 FROM json_each(m.all_player_ids) WHERE value = players.id))) THEN 1 ELSE 0 END`;
@@ -105,6 +105,101 @@ async function swapPlan(env, winnerId, loserId) {
   return Object.entries(after).filter(([id, r]) => before[id] !== r)
     .map(([id, r]) => stmt(env, 'UPDATE players SET singles_rank = ?, updated_date = ? WHERE id = ?', r, now, id));
 }
+
+
+// ---------- challenge penalties ----------
+/** Meeting count (180d), recent pair match (7d) and defender fatigue (verified matches in 7d) for a challenge. */
+async function penaltyFacts(env, c) {
+  const ids = [c.challenger_player_id, c.defender_player_id];
+  const pair = (days) => first(env,
+    `SELECT count(*) AS n FROM matches WHERE status = 'verified' AND format = 'singles' AND verified_at > ?
+       AND EXISTS (SELECT 1 FROM json_each(all_player_ids) WHERE value = ?) AND EXISTS (SELECT 1 FROM json_each(all_player_ids) WHERE value = ?)`,
+    daysAgoIso(days), ...ids);
+  const meetings = (await pair(REPEAT_WINDOW_DAYS)).n;
+  const recentPairMatch = (await pair(WAIVER_DAYS)).n > 0;
+  const defRecentMatches = (await first(env,
+    `SELECT count(*) AS n FROM matches WHERE status = 'verified' AND verified_at > ?
+       AND EXISTS (SELECT 1 FROM json_each(all_player_ids) WHERE value = ?)`, daysAgoIso(FATIGUE_DAYS), c.defender_player_id)).n;
+  return { meetings, recentPairMatch, defRecentMatches };
+}
+const penaltyOf = (kind, def, chal, facts) =>
+  challengePenalty({
+    kind, rankGap: def.singles_rank != null && chal.singles_rank != null ? Math.abs(chal.singles_rank - def.singles_rank) : 1, defRating: def.singles_rating, defMatches: def.singles_wins + def.singles_losses, chalRating: chal.singles_rating, ...facts,
+  });
+
+/**
+ * Guarded statements that penalise the defender of each OPEN challenge (kind 'expired' | 'declined') and move the ladder.
+ * Returns { guards, stmts, changed }; the caller puts guards first and commits. Each challenge is guarded on
+ * status 'open' + version, so a challenge is penalised at most once (cron + syncLadder racing => one wins).
+ */
+async function penaltyPlan(env, challenges, kind, now, lv) {
+  const rows = await all(env, 'SELECT id, singles_rank FROM players WHERE singles_rank IS NOT NULL');
+  const ranks0 = Object.fromEntries(rows.map((x) => [x.id, x.singles_rank]));
+  let ranks = { ...ranks0 };
+  const pl = {};
+  const dirty = new Set();
+  const guards = [];
+  const chStmts = [];
+  const load = async (id) => {
+    if (!(id in pl)) {
+      const p = (await getPlayers(env, [id]))[0];
+      pl[id] = p ? { ...p } : null;
+      if (p) guards.push(guardRow(env, 'players', p.id, p.version));
+    }
+    return pl[id];
+  };
+  let changed = 0;
+  for (const c of challenges) {
+    const def = await load(c.defender_player_id);
+    const chal = await load(c.challenger_player_id);
+    if (!def || !chal) continue;
+    guards.push(guardRow(env, 'challenges', c.id, c.version, 'open'));
+    def.singles_rank = ranks[def.id] ?? null;
+    chal.singles_rank = ranks[chal.id] ?? null;
+    const res = penaltyOf(kind, def, chal, await penaltyFacts(env, c));
+    const before = ranks[def.id] ?? null;
+    if (res.dropsRank && before != null) {
+      if (kind === 'expired') ranks = applyLadderSwap(ranks, chal.id, def.id);
+      else {
+        const below = Object.keys(ranks).find((id) => ranks[id] === before + 1);
+        if (below) ranks = applyLadderSwap(ranks, below, def.id);
+      }
+    }
+    const after = ranks[def.id] ?? null;
+    if (res.penalty > 0) { def.singles_rating -= res.penalty; dirty.add(def.id); }
+    if (res.walkover) {
+      chal.xp += WALKOVER_XP;
+      chal.level = levelForXp(chal.xp);
+      dirty.add(chal.id);
+    }
+    chStmts.push(stmt(env,
+      `UPDATE challenges SET status = ?, responded_at = ?, penalty_rating = ?, penalty_rank_before = ?, penalty_rank_after = ?,
+         penalty_reason = ?, penalized_at = ?, updated_date = ?, version = version + 1 WHERE id = ?`,
+      kind === 'expired' ? 'expired' : 'declined', kind === 'expired' ? c.responded_at : now, res.penalty, before, after,
+      res.reason, now, now, c.id));
+    changed++;
+  }
+  const stmts = [...chStmts];
+  for (const id of dirty) {
+    const p = pl[id];
+    stmts.push(stmt(env,
+      'UPDATE players SET singles_rating = ?, xp = ?, level = ?, updated_date = ?, version = version + 1 WHERE id = ?',
+      p.singles_rating, p.xp, p.level, now, id));
+  }
+  const moved = Object.entries(ranks).filter(([id, r]) => ranks0[id] !== r);
+  if (moved.length) {
+    guards.unshift(guardLadder(env, lv));
+    for (const [id, r] of moved) stmts.push(stmt(env, 'UPDATE players SET singles_rank = ?, updated_date = ? WHERE id = ?', r, now, id));
+    stmts.push(bumpLadder(env));
+  }
+  return { guards, stmts, changed };
+}
+
+const fmtUtc = (iso) => {
+  const d = new Date(iso);
+  const h = d.getUTCHours();
+  return `${d.toLocaleString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })}, ${h % 12 || 12}:${String(d.getUTCMinutes()).padStart(2, '0')}${h < 12 ? 'am' : 'pm'} UTC`;
+};
 
 // ---------- functions ----------
 const fns = {};
@@ -260,7 +355,9 @@ async function verifyPlan(env, m, now, lv) {
 
   const rc = `${fmt}_rating`, wc = `${fmt}_wins`, lc = `${fmt}_losses`;
   const parts = players.map((p) => ({ id: p.id, side: sideOf(p.id), rating: p[rc], matchesPlayed: p[wc] + p[lc], earlierMeetings: earlier(p.id) }));
-  const results = rateMatch(parts, m.winner_side);
+  const results = rateMatch(parts, m.winner_side, m.games);
+  const sideAvg = (s) => sides[s].reduce((t, id) => t + players.find((x) => x.id === id)[rc], 0) / sides[s].length;
+  const today = now.slice(0, 10);
   const changes = [];
   const stmts = [];
   for (const res of results) {
@@ -268,14 +365,31 @@ async function verifyPlan(env, m, now, lv) {
     const side = sideOf(p.id);
     const won = side === m.winner_side;
     const gamesWon = m.games.filter((g) => (side === 'a' ? g.a > g.b : g.b > g.a)).length;
-    const xpGain = xpForMatch({ won, gamesWon });
+    const mine = side === 'a' ? (g) => g.a : (g) => g.b;
+    const theirs = side === 'a' ? (g) => g.b : (g) => g.a;
+    const streak = won ? (p.win_streak || 0) + 1 : 0;
+    const best = Math.max(p.best_streak || 0, streak);
+    const xpRes = xpForMatch({
+      won,
+      gamesWon,
+      ratingGap: sideAvg(side === 'a' ? 'b' : 'a') - sideAvg(side),
+      streak,
+      skunks: m.games.filter((g) => mine(g) > theirs(g) && theirs(g) === 0).length,
+      lostFirstGame: mine(m.games[0]) < theirs(m.games[0]),
+      firstOfDay: p.last_match_day !== today,
+    });
+    const xpGain = xpRes.total;
     const xp = p.xp + xpGain;
     stmts.push(guardRow(env, 'players', p.id, p.version));
     stmts.push(stmt(env,
       `UPDATE players SET ${rc} = ?, ${won ? wc : lc} = ${won ? wc : lc} + 1, xp = ?, level = ?, last_active_at = ?,
-         updated_date = ?, version = version + 1 WHERE id = ?`,
-      res.after, xp, levelForXp(xp), now, now, p.id));
-    changes.push({ player_id: p.id, name: nameOf(p), before: res.before, after: res.after, delta: res.delta, xp_gained: xpGain });
+         win_streak = ?, best_streak = ?, last_match_day = ?, updated_date = ?, version = version + 1 WHERE id = ?`,
+      res.after, xp, levelForXp(xp), now, streak, best, today, now, p.id));
+    changes.push({
+      player_id: p.id, name: nameOf(p), before: res.before, after: res.after, delta: res.delta,
+      expected: res.expected, mov: res.mov, ac: res.ac, dominance: res.dominance,
+      xp_gained: xpGain, xp_parts: xpRes.parts, win_streak: streak,
+    });
   }
   if (fmt === 'singles') {
     const winner = sides[m.winner_side][0];
@@ -346,6 +460,13 @@ fns.createChallenge = ({ env, user }, body) =>
     if (me.singles_rank == null || def.singles_rank == null) throw bad('Both players need a ladder position.');
     const gap = me.singles_rank - def.singles_rank;
     if (gap < 1 || gap > 3) throw bad('You can only challenge players 1–3 ranks above you.');
+    const cool = await first(env,
+      `SELECT penalized_at FROM challenges WHERE challenger_player_id = ? AND defender_player_id = ? AND penalized_at > ? AND reversed = 0
+         ORDER BY penalized_at DESC LIMIT 1`, me.id, def.id, daysAgoIso(COOLDOWN_DAYS));
+    if (cool) {
+      const retry = new Date(Date.parse(cool.penalized_at) + COOLDOWN_DAYS * 86400000).toISOString();
+      throw new HttpError(409, `You challenged ${nameOf(def)} recently. You can challenge them again after ${fmtUtc(retry)}.`);
+    }
     if (await first(env, `SELECT 1 AS x FROM challenges WHERE challenger_user_id = ? AND status IN ('open','accepted') LIMIT 1`, user.id)) {
       throw new HttpError(409, 'You already have an active challenge.');
     }
@@ -376,43 +497,92 @@ fns.respondChallenge = ({ env, user }, body) =>
     if (c.status !== 'open') throw bad('This challenge is no longer open.');
     const now = nowIso();
     if (c.expires_at && c.expires_at <= now) throw bad('This challenge has expired.');
-    const accept = decision === 'accept';
+    if (decision === 'decline') {
+      const lv = await ladderVersion(env);
+      const plan = await penaltyPlan(env, [c], 'declined', now, lv);
+      if (!plan.changed) throw new HttpError(409, 'That challenge can no longer be answered.');
+      await commit(env, [...plan.guards, ...plan.stmts, flagsStmt(env)]);
+      return { challenge: pub('Challenge', await getChallenge(env, id)) };
+    }
     // Accepting starts a fresh 72h window to actually play; unplayed accepted challenges expire in syncLadder.
     await commit(env, [
       guardRow(env, 'challenges', c.id, c.version, 'open'),
       stmt(env, 'UPDATE challenges SET status = ?, responded_at = ?, expires_at = ?, updated_date = ?, version = version + 1 WHERE id = ?',
-        accept ? 'accepted' : 'declined', now, accept ? inFutureIso(CHALLENGE_MS) : c.expires_at, now, c.id),
+        'accepted', now, inFutureIso(CHALLENGE_MS), now, c.id),
     ]);
     return { challenge: pub('Challenge', await getChallenge(env, id)) };
   });
+
+/** What declining (or ignoring) this open challenge would cost the defender. */
+fns.challengePenaltyPreview = async ({ env, user }, body) => {
+  if (!isStr(body.challenge_id)) throw bad('Missing challenge.');
+  const c = await getChallenge(env, body.challenge_id);
+  if (!c) throw new HttpError(404, 'Challenge not found.');
+  if (c.defender_user_id !== user.id) throw new HttpError(403, 'Only the challenged player can see this.');
+  if (c.status !== 'open') throw bad('This challenge is no longer open.');
+  const [def, chal] = await Promise.all([getPlayers(env, [c.defender_player_id]), getPlayers(env, [c.challenger_player_id])]).then((r) => [r[0][0], r[1][0]]);
+  if (!def || !chal) throw new HttpError(404, 'Player not found.');
+  const facts = await penaltyFacts(env, c);
+  const out = {};
+  for (const kind of ['declined', 'expired']) {
+    const r = penaltyOf(kind, def, chal, facts);
+    const rank = def.singles_rank;
+    out[kind === 'declined' ? 'decline' : 'expire'] = {
+      penalty: r.penalty, reason: r.reason, drops_rank: r.dropsRank && rank != null,
+      rank_after: r.dropsRank && rank != null ? rank + 1 : rank,
+    };
+  }
+  return out;
+};
 
 fns.resolveChallenge = ({ env, user }, body) =>
   retrying(async () => {
     const { challenge_id: id, action } = body;
     if (!isStr(id)) throw bad('Missing challenge.');
-    if (!['request', 'forfeit', 'dismiss'].includes(action)) throw bad('Choose request, forfeit or dismiss.');
+    if (!['request', 'reverse'].includes(action)) throw bad('Choose request or reverse.');
     const lv = await ladderVersion(env);
     const c = await getChallenge(env, id);
     if (!c) throw new HttpError(404, 'Challenge not found.');
     if (action === 'request') {
-      if (c.challenger_user_id !== user.id) throw new HttpError(403, 'Only the challenger can request a review.');
+      if (c.defender_user_id !== user.id) throw new HttpError(403, 'Only the penalised player can ask for a review.');
     } else if (user.role !== 'admin') {
       throw new HttpError(403, 'Admins only.');
     }
-    if (c.status !== 'expired') throw bad('Only expired challenges can be reviewed.');
-    if (c.responded_at) throw bad('That challenge was accepted but never played, so there is nothing to review.');
+    if (!c.penalty_reason) throw bad('That challenge has no penalty to review.');
+    if (c.reversed) throw bad('That penalty was already reversed.');
     const now = nowIso();
-    const stmts = [guardRow(env, 'challenges', c.id, c.version, 'expired')];
+    const stmts = [guardRow(env, 'challenges', c.id, c.version)];
     if (action === 'request') {
       if (c.review_requested) throw bad('A review was already requested.');
       stmts.push(stmt(env, 'UPDATE challenges SET review_requested = 1, updated_date = ?, version = version + 1 WHERE id = ?', now, c.id));
-    } else if (action === 'dismiss') {
-      stmts.push(stmt(env, `UPDATE challenges SET status = 'cancelled', resolved_by = ?, responded_at = ?, updated_date = ?, version = version + 1 WHERE id = ?`, user.id, now, now, c.id), flagsStmt(env));
     } else {
-      // applyLadderSwap is a no-op unless the challenger is still below the defender.
-      const swap = await swapPlan(env, c.challenger_player_id, c.defender_player_id);
-      if (swap.length) stmts.push(guardLadder(env, lv), ...swap, bumpLadder(env));
-      stmts.push(stmt(env, `UPDATE challenges SET status = 'forfeited', resolved_by = ?, responded_at = ?, updated_date = ?, version = version + 1 WHERE id = ?`, user.id, now, now, c.id), flagsStmt(env));
+      const def = (await getPlayers(env, [c.defender_player_id]))[0];
+      const chal = (await getPlayers(env, [c.challenger_player_id]))[0];
+      if (def) {
+        stmts.push(guardRow(env, 'players', def.id, def.version));
+        stmts.push(stmt(env, 'UPDATE players SET singles_rating = singles_rating + ?, updated_date = ?, version = version + 1 WHERE id = ?',
+          c.penalty_rating || 0, now, def.id));
+        const rows = await all(env, 'SELECT id, singles_rank FROM players WHERE singles_rank IS NOT NULL');
+        const before = Object.fromEntries(rows.map((x) => [x.id, x.singles_rank]));
+        const target = c.penalty_rank_before;
+        if (target != null && before[def.id] != null && before[def.id] > target) {
+          const after = { ...before };
+          for (const [pid, r] of Object.entries(before)) if (r >= target && r < before[def.id]) after[pid] = r + 1;
+          after[def.id] = target;
+          stmts.push(guardLadder(env, lv));
+          for (const [pid, r] of Object.entries(after)) {
+            if (before[pid] !== r) stmts.push(stmt(env, 'UPDATE players SET singles_rank = ?, updated_date = ? WHERE id = ?', r, now, pid));
+          }
+          stmts.push(bumpLadder(env));
+        }
+      }
+      if (chal && c.penalty_reason === 'expired') {
+        const xp = Math.max(0, chal.xp - WALKOVER_XP);
+        stmts.push(guardRow(env, 'players', chal.id, chal.version));
+        stmts.push(stmt(env, 'UPDATE players SET xp = ?, level = ?, updated_date = ?, version = version + 1 WHERE id = ?', xp, levelForXp(xp), now, chal.id));
+      }
+      stmts.push(stmt(env, 'UPDATE challenges SET reversed = 1, resolved_by = ?, updated_date = ?, version = version + 1 WHERE id = ?', user.id, now, c.id));
+      stmts.push(flagsStmt(env));
     }
     await commit(env, stmts);
     return { challenge: pub('Challenge', await getChallenge(env, id)) };
@@ -423,15 +593,18 @@ export const runSyncLadder = ({ env }) =>
   retrying(async () => {
     const lv = await ladderVersion(env);
     const now = nowIso();
-    const compact = await compactPlan(env, null);
-    const stmts = [];
+    // Unanswered (never responded) challenges that ran out of time cost the defender rating + rank.
+    const overdue = await all(env, `SELECT * FROM challenges WHERE status = 'open' AND responded_at IS NULL AND expires_at < ? ORDER BY expires_at, id`, now);
+    const plan = overdue.length ? await penaltyPlan(env, overdue, 'expired', now, lv) : { guards: [], stmts: [], changed: 0 };
+    const compact = plan.changed ? [] : await compactPlan(env, null);
+    const stmts = [...plan.guards, ...plan.stmts];
     if (compact.length) stmts.push(guardLadder(env, lv));
     const iC = stmts.push(stmt(env, `UPDATE challenges SET status = 'expired', updated_date = ?, version = version + 1 WHERE status IN ('open','accepted') AND expires_at < ?`, now, now)) - 1;
     const iM = stmts.push(stmt(env, `UPDATE matches SET status = 'expired', updated_date = ?, version = version + 1 WHERE status = 'pending' AND expires_at < ?`, now, now)) - 1;
     stmts.push(flagsStmt(env), ...compact);
     if (compact.length) stmts.push(bumpLadder(env));
     const res = await commit(env, stmts);
-    return { ok: true, expired_challenges: res[iC].meta.changes, expired_matches: res[iM].meta.changes };
+    return { ok: true, expired_challenges: plan.changed + res[iC].meta.changes, expired_matches: res[iM].meta.changes };
   });
 
 fns.syncLadder = runSyncLadder;

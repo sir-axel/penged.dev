@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { PageHeader } from "@/components/PageHeader";
+import { RATING_POINTS, XP_POINTS, CHALLENGE_POINTS } from "@/components/home/RatingExplainer";
 
 export const RULE_SECTIONS = [
   {
@@ -15,18 +16,14 @@ export const RULE_SECTIONS = [
     title: "Rating",
     items: [
       "Each format has its own pool: a singles rating and a doubles rating. Doubles results never move your singles rating.",
-      "Ratings use a standard Elo-style expected score, so beating a stronger opponent is worth more than beating a weaker one.",
-      "New players move faster (K 48) for their first 10 matches, then 32 up to 30 matches, then 24.",
-      "Who won is all that counts — running up the score earns nothing extra.",
-      "Farming protection: every match you complete against the same opponent inside 180 days is worth less. After six meetings, a win against them earns zero rating.",
-      "Rating is capped at +45 / −45 per match and never drops below 700.",
+      ...RATING_POINTS,
     ],
   },
   {
     title: "Level",
     items: [
-      "Level is earned by turning up: every verified match gives experience, plus a bonus for winning and for games won.",
-      "Responding to a challenge also earns a little experience.",
+      "Level is earned by playing: every verified match gives experience, with bonuses for winning and for how you win.",
+      ...XP_POINTS,
       "Level grows without limit and never affects rating, rank or matchmaking. It is a record of activity, not a shortcut.",
     ],
   },
@@ -41,13 +38,9 @@ export const RULE_SECTIONS = [
     ],
   },
   {
-    title: "Challenges, forfeits and inactivity",
+    title: "Challenges and inactivity",
     items: [
-      "You can challenge a player up to three places above you. Only one challenge can be open at a time.",
-      "The challenged player has 72 hours to accept or decline. Declining is allowed and costs nothing — refusing a challenge never hands over a rank.",
-      "If the window closes with no answer, the challenge expires and is counted against the defender.",
-      "Silence is never enough on its own: the challenger can request a review, and an admin decides whether to award the position as a forfeit.",
-      "A forfeit moves the ladder position only. Ratings stay untouched, because no match was played.",
+      ...CHALLENGE_POINTS,
       "Two unanswered challenges, or a player inactive for 30 days with an open dispute, puts a 'review' badge next to their name on the ladder.",
     ],
   },
