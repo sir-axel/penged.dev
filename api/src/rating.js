@@ -5,7 +5,11 @@
 // ===================================================================================================
 export const START_RATING = 1400;
 export const RATING_FLOOR = 700;
-export const MAX_DELTA = 80; // hard cap on one player's change in one match
+export const MAX_DELTA = 80; // hard cap on one player's TOTAL change in one match (all its games together)
+// Every game in a verified match is its own Elo event, applied in order (game 2 starts from the ratings after game 1).
+// GAME_K_SCALE shrinks K so a single game moves you less than a whole match used to; MAX_GAME_DELTA caps one game.
+export const GAME_K_SCALE = 0.5;
+export const MAX_GAME_DELTA = 40;
 // Margin of victory: mov = MOV_BASE + MOV_SCALE * sqrt(dominance)
 export const MOV_BASE = 0.75;
 export const MOV_SCALE = 1.25;
@@ -17,11 +21,11 @@ export const AC_MAX = 1.6;
 // Paddle edge: a paid ('modded') paddle counts as +PADDLE_EDGE rating inside the expectation and upset factor only
 // (like home advantage). Scaled by the share of a side's players using one. Stored ratings never include it.
 export const PADDLE_EDGE = 50;
-// K (how far one result moves you): smooth in games played, Glicko-lite. K = K_FLOOR + K_EXTRA * exp(-games / K_DECAY_GAMES)
+// K (how far one result moves you): smooth in games played, Glicko-lite. K = K_FLOOR + K_EXTRA * exp(-games / K_DECAY_GAMES), games = GAMES played in that format (before GAME_K_SCALE)
 // => 48 for a brand-new player, easing to 32 once seasoned. (Tuned with scripts/simulate.js: the first-draft 24 floor lagged real skill.)
 export const K_FLOOR = 32;
 export const K_EXTRA = 16;
-export const K_DECAY_GAMES = 12;
+export const K_DECAY_GAMES = 30;
 // Rust: after RUST_FREE_DAYS without a verified match (same format) K grows by (days - free) / RUST_RAMP_DAYS, at most RUST_MAX.
 export const RUST_FREE_DAYS = 21;
 export const RUST_RAMP_DAYS = 120;
@@ -29,8 +33,8 @@ export const RUST_MAX = 0.5;
 // Opponent certainty: your change is scaled by CERT_BASE + (1 - CERT_BASE) * min(1, opponentGames / CERT_FULL_GAMES).
 export const CERT_BASE = 0.8;
 export const CERT_FULL_GAMES = 10;
-// Evidence: more games in the match = a more trustworthy result. By number of games played (1 / 2-3 / 4-5), x1.1 if target 21.
-export const EVIDENCE_BY_GAMES = { 1: 0.8, 2: 1.0, 3: 1.0, 4: 1.1, 5: 1.1 };
+// Target 21: a game to 21 is a more reliable result than a game to 11 (the old by-number-of-games evidence factor is gone:
+// every game counts on its own now).
 export const EVIDENCE_TARGET_21 = 1.1;
 // Rematches: earlier meetings in the last REPEAT_WINDOW_DAYS count 1 if within REPEAT_RECENT_DAYS, else REPEAT_OLD_WEIGHT.
 // repeat = 1 / (1 + REPEAT_STEP * weightedMeetings); at ZERO_GAIN_MEETINGS weighted meetings neither player moves.
@@ -73,9 +77,9 @@ export function kFactor(matchesPlayed) {
   return 24;
 }
 
-/** Smooth K for match ratings (48 new -> ~24 seasoned). */
-export function kSmooth(gamesPlayed) {
-  return K_FLOOR + K_EXTRA * Math.exp(-Math.max(0, gamesPlayed) / K_DECAY_GAMES);
+/** Smooth K (48 for a new player -> 32 seasoned), by GAMES played in the format. */
+export function kSmooth(gamesPlayed, decay = K_DECAY_GAMES) {
+  return K_FLOOR + K_EXTRA * Math.exp(-Math.max(0, gamesPlayed) / decay);
 }
 
 /** K multiplier for a player returning after daysSinceLast days (null = first ever match: none). */
@@ -89,10 +93,9 @@ export function certaintyWeight(oppGamesPlayed) {
   return CERT_BASE + (1 - CERT_BASE) * Math.min(1, Math.max(0, oppGamesPlayed) / CERT_FULL_GAMES);
 }
 
-/** Weight by games actually played in the match (1 / 2-3 / 4-5) and the game target. */
-export function evidenceWeight(gamesPlayed, target = 11) {
-  const n = Math.max(1, Math.min(5, Math.round(gamesPlayed)));
-  return EVIDENCE_BY_GAMES[n] * (target === 21 ? EVIDENCE_TARGET_21 : 1);
+/** Weight by the game target (21 is worth a little more than 11). */
+export function evidenceWeight(target = 11) {
+  return target === 21 ? EVIDENCE_TARGET_21 : 1;
 }
 
 /** How much one earlier meeting counts, by how long ago it was. */
@@ -134,23 +137,27 @@ export function autocorrMultiplier(winnerRating, loserRating) {
 }
 
 /**
- * Rating delta for one player. `rating` / `oppRating` may be team averages (doubles).
- * delta = K * (result - expected) * repeat * margin * upset * oppCertainty * evidence * teammate * challenge, capped.
- * Pass already-resolved `evidence` / `teammate` / `challenge` multipliers; K, rust and certainty are derived here.
+ * Rating delta for ONE GAME for one player. `rating` / `oppRating` may be team averages (doubles).
+ * delta = K * GAME_K_SCALE * (result - expected) * repeat * margin * upset * oppCertainty * evidence * teammate * challenge,
+ * capped at MAX_GAME_DELTA. `dominance` is that game's (winnerPts - loserPts) / total. K and rust come from gamesPlayed / daysSinceLast.
+ * Pass already-resolved `evidence` / `teammate` / `challenge` multipliers.
  * Returns { delta, after, expected, mov, ac, dominance, paddle_edge, k, rust, opp_certainty, evidence, repeat, teammate, challenge }.
  */
 export function computeDelta({
-  rating, oppRating, matchesPlayed, won, earlierMeetings = 0, dominance: dom = 0, edge = 0, oppEdge = 0,
-  daysSinceLast = null, oppMatchesPlayed = CERT_FULL_GAMES, evidence = 1, teammate = 1, challenge = 1,
+  rating, oppRating, gamesPlayed, won, earlierMeetings = 0, dominance: dom = 0, edge = 0, oppEdge = 0,
+  daysSinceLast = null, oppGamesPlayed = CERT_FULL_GAMES, evidence = 1, teammate = 1, challenge = 1,
+  scale = GAME_K_SCALE, kDecay = K_DECAY_GAMES,
 }) {
+  scale = scale ?? GAME_K_SCALE;
+  kDecay = kDecay ?? K_DECAY_GAMES;
   const eff = rating + edge;
   const oppEff = oppRating + oppEdge;
   const expected = expectedScore(eff, oppEff);
   const mov = movMultiplier(dom);
   const ac = won ? autocorrMultiplier(eff, oppEff) : autocorrMultiplier(oppEff, eff);
   const rust = rustFactor(daysSinceLast);
-  const k = kSmooth(matchesPlayed) * rust;
-  const certainty = certaintyWeight(oppMatchesPlayed);
+  const k = kSmooth(gamesPlayed, kDecay) * rust;
+  const certainty = certaintyWeight(oppGamesPlayed);
   const repeat = earlierMeetings >= ZERO_GAIN_MEETINGS ? 0 : repeatFactor(earlierMeetings);
   const base = {
     expected, mov, ac, dominance: dom, paddle_edge: oppEdge - edge, k, rust, opp_certainty: certainty,
@@ -158,9 +165,9 @@ export function computeDelta({
   };
   if (repeat === 0) return { delta: 0, after: rating, ...base };
   const result = won ? 1 : 0;
-  const raw = k * (result - expected) * repeat * mov * ac * certainty * evidence * teammate * challenge;
+  const raw = k * scale * (result - expected) * repeat * mov * ac * certainty * evidence * teammate * challenge;
   let delta = Math.sign(raw) * Math.round(Math.abs(raw));
-  delta = Math.max(-MAX_DELTA, Math.min(MAX_DELTA, delta));
+  delta = Math.max(-MAX_GAME_DELTA, Math.min(MAX_GAME_DELTA, delta));
   if (delta === 0) delta = 0; // normalise -0
   let after = rating + delta;
   if (after < RATING_FLOOR) after = RATING_FLOOR;
@@ -175,46 +182,92 @@ export function paddleEdge(paddles) {
   return PADDLE_EDGE * (paddles.filter((x) => x === 'modded').length / paddles.length);
 }
 
+/** Dominance of ONE game: (winnerPts - loserPts) / total points, in [0, 1]. */
+export function gameDominance(g) {
+  const t = g.a + g.b;
+  return t <= 0 ? 0 : Math.min(1, Math.abs(g.a - g.b) / t);
+}
+
 /**
- * Rate a verified match. Each participant:
- * { id, rating, matchesPlayed (this format), earlierMeetings (recency-weighted), side: 'a'|'b',
- *   paddle?: 'default'|'modded', daysSinceLast?: number|null }
+ * Rate a verified match GAME BY GAME. Each game is its own Elo event, applied in order: game 2 starts from the
+ * ratings game 1 left behind. Each participant:
+ * { id, rating, gamesPlayed (this format, before the match), earlierMeetings (recency-weighted MATCHES, not games),
+ *   side: 'a'|'b', paddle?: 'default'|'modded', daysSinceLast?: number|null }
  * Singles uses 1 per side, doubles 2 per side; opposing rating = opposing side average (+ paddle edge).
- * `games` ([{a,b}]) feeds margin and evidence; `ctx` = { target?: 11|21, challenge?: boolean }.
- * Returns [{ id, before, after, delta, ...factors }] (see computeDelta).
+ * `games` ([{a,b}]) are in play order; `ctx` = { target?: 11|21, challenge?: boolean, gameKScale?, kDecayGames? }.
+ * Rust applies on the first game only. K decays with games, so it also eases within the match.
+ * The running match total is clamped to +-MAX_DELTA (a game's delta is trimmed so the total stays inside it).
+ * Returns [{ id, before, after, delta (match total), dominance (whole match), rust, repeat, challenge, evidence,
+ *            games: [per-game entry] }].
+ * Per-game entry: { game, score: [mine, theirs], won, before, after, delta, ...computeDelta factors incl. that game's dominance }.
  */
 export function rateMatch(participants, winnerSide, games = [], ctx = {}) {
   const side = (s) => participants.filter((p) => p.side === s);
-  const avg = {};
   const edge = {};
-  for (const s of ['a', 'b']) {
-    avg[s] = average(side(s).map((p) => p.rating));
-    edge[s] = paddleEdge(side(s).map((p) => p.paddle));
-  }
-  const dom = dominance(games, winnerSide);
-  const evidence = evidenceWeight(games.length || 2, ctx.target || 11);
+  for (const s of ['a', 'b']) edge[s] = paddleEdge(side(s).map((p) => p.paddle));
+  const evidence = evidenceWeight(ctx.target || 11);
   const challenge = ctx.challenge ? CHALLENGE_STAKES : 1;
+  const cur = Object.fromEntries(participants.map((p) => [p.id, p.rating]));
+  const gp = Object.fromEntries(participants.map((p) => [p.id, p.gamesPlayed ?? 0]));
+  const total = Object.fromEntries(participants.map((p) => [p.id, 0]));
+  const out = Object.fromEntries(participants.map((p) => [p.id, []]));
+  games.forEach((g, gi) => {
+    const gameWinner = g.a > g.b ? 'a' : 'b';
+    const dom = gameDominance(g);
+    const avg = {};
+    const avgGames = {};
+    for (const s of ['a', 'b']) {
+      avg[s] = average(side(s).map((p) => cur[p.id]));
+      avgGames[s] = average(side(s).map((p) => gp[p.id]));
+    }
+    const step = {};
+    for (const p of participants) {
+      const opp = p.side === 'a' ? 'b' : 'a';
+      const won = p.side === gameWinner;
+      const mate = side(p.side).find((x) => x.id !== p.id);
+      step[p.id] = computeDelta({
+        rating: avg[p.side],
+        oppRating: avg[opp],
+        gamesPlayed: gp[p.id],
+        won,
+        earlierMeetings: p.earlierMeetings,
+        dominance: dom,
+        edge: edge[p.side],
+        oppEdge: edge[opp],
+        daysSinceLast: gi === 0 ? (p.daysSinceLast ?? null) : null,
+        oppGamesPlayed: avgGames[opp],
+        evidence,
+        teammate: mate ? teammateFactor(cur[p.id], cur[mate.id], won) : 1,
+        challenge,
+        scale: ctx.gameKScale,
+        kDecay: ctx.kDecayGames,
+      });
+    }
+    // all of this game's deltas are computed from the same pre-game ratings, then applied together
+    for (const p of participants) {
+      const r = step[p.id];
+      const before = cur[p.id];
+      let d = r.delta;
+      if (d > 0 && total[p.id] + d > MAX_DELTA) d = Math.max(0, MAX_DELTA - total[p.id]);
+      if (d < 0 && total[p.id] + d < -MAX_DELTA) d = Math.min(0, -MAX_DELTA - total[p.id]);
+      const after = Math.max(RATING_FLOOR, before + d);
+      d = after - before;
+      total[p.id] += d;
+      cur[p.id] = after;
+      gp[p.id] += 1;
+      const mine = p.side === 'a' ? g.a : g.b;
+      const theirs = p.side === 'a' ? g.b : g.a;
+      out[p.id].push({ ...r, game: gi + 1, score: [mine, theirs], won: p.side === gameWinner, before, after, delta: d });
+    }
+  });
+  const matchDom = dominance(games, winnerSide);
   return participants.map((p) => {
-    const opp = p.side === 'a' ? 'b' : 'a';
-    const won = p.side === winnerSide;
-    const mate = side(p.side).find((x) => x.id !== p.id);
-    const r = computeDelta({
-      rating: avg[p.side],
-      oppRating: avg[opp],
-      matchesPlayed: p.matchesPlayed,
-      won,
-      earlierMeetings: p.earlierMeetings,
-      dominance: dom,
-      edge: edge[p.side],
-      oppEdge: edge[opp],
-      daysSinceLast: p.daysSinceLast ?? null,
-      oppMatchesPlayed: average(side(opp).map((x) => x.matchesPlayed)),
-      evidence,
-      teammate: mate ? teammateFactor(p.rating, mate.rating, won) : 1,
-      challenge,
-    });
-    const after = Math.max(RATING_FLOOR, p.rating + r.delta);
-    return { ...r, id: p.id, before: p.rating, after, delta: after - p.rating };
+    const gs = out[p.id];
+    return {
+      id: p.id, before: p.rating, after: cur[p.id], delta: cur[p.id] - p.rating,
+      dominance: matchDom, rust: gs[0]?.rust ?? 1, repeat: gs[0]?.repeat ?? 1, challenge, evidence,
+      games: gs,
+    };
   });
 }
 

@@ -349,10 +349,10 @@ async function verifyPlan(env, m, now) {
       m.created_date, now, winner, loser, loser, winner);
   }
 
-  const rc = `${fmt}_rating`, wc = `${fmt}_wins`, lc = `${fmt}_losses`, vc = `${fmt}_last_verified_at`, sc = `${fmt}_win_streak`, bc = `${fmt}_best_streak`;
+  const rc = `${fmt}_rating`, wc = `${fmt}_wins`, lc = `${fmt}_losses`, gwc = `${fmt}_game_wins`, glc = `${fmt}_game_losses`, vc = `${fmt}_last_verified_at`, sc = `${fmt}_win_streak`, bc = `${fmt}_best_streak`;
   const paddleOf = (id) => [...m.side_a, ...m.side_b].find((e) => e.player_id === id)?.paddle;
   const parts = players.map((p) => ({
-    id: p.id, side: sideOf(p.id), paddle: paddleOf(p.id), rating: p[rc], matchesPlayed: p[wc] + p[lc], earlierMeetings: earlier(p.id),
+    id: p.id, side: sideOf(p.id), paddle: paddleOf(p.id), rating: p[rc], gamesPlayed: p[gwc] + p[glc], earlierMeetings: earlier(p.id),
     daysSinceLast: p[vc] ? Math.max(0, (Date.parse(now) - Date.parse(p[vc])) / 86400000) : null,
   }));
   const results = rateMatch(parts, m.winner_side, m.games, { target: m.target, challenge: !!ch });
@@ -382,14 +382,18 @@ async function verifyPlan(env, m, now) {
     const xp = p.xp + xpGain;
     stmts.push(guardRow(env, 'players', p.id, p.version));
     stmts.push(stmt(env,
-      `UPDATE players SET ${rc} = ?, ${won ? wc : lc} = ${won ? wc : lc} + 1, xp = ?, level = ?, last_active_at = ?,
+      `UPDATE players SET ${rc} = ?, ${won ? wc : lc} = ${won ? wc : lc} + 1, ${gwc} = ${gwc} + ?, ${glc} = ${glc} + ?, xp = ?, level = ?, last_active_at = ?,
          ${sc} = ?, ${bc} = ?, last_match_day = ?, ${vc} = ?, updated_date = ?, version = version + 1 WHERE id = ?`,
-      res.after, xp, levelForXp(xp), now, streak, best, today, now, now, p.id));
+      res.after, gamesWon, m.games.length - gamesWon, xp, levelForXp(xp), now, streak, best, today, now, now, p.id));
     changes.push({
       player_id: p.id, name: nameOf(p), before: res.before, after: res.after, delta: res.delta,
-      expected: res.expected, mov: res.mov, ac: res.ac, dominance: res.dominance, paddle_edge: res.paddle_edge,
-      k: res.k, rust: res.rust, opp_certainty: res.opp_certainty, evidence: res.evidence, repeat: res.repeat,
-      teammate: res.teammate, challenge: res.challenge,
+      dominance: res.dominance, rust: res.rust, repeat: res.repeat, evidence: res.evidence, challenge: res.challenge,
+      games: res.games.map((g) => ({
+        game: g.game, score: g.score, won: g.won, before: g.before, after: g.after, delta: g.delta,
+        expected: g.expected, dominance: g.dominance, mov: g.mov, ac: g.ac, paddle_edge: g.paddle_edge, k: g.k,
+        rust: g.rust, opp_certainty: g.opp_certainty, evidence: g.evidence, repeat: g.repeat, teammate: g.teammate,
+        challenge: g.challenge,
+      })),
       xp_gained: xpGain, xp_parts: xpRes.parts, win_streak: streak,
       // Tier crossing (derived from rating); only once placed (5+ matches in this format before this one).
       ...(p[wc] + p[lc] >= PROVISIONAL ? tierChange(res.before, res.after) : null),

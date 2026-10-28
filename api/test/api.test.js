@@ -128,7 +128,7 @@ describe('match flow', () => {
     expect(last.body.match.status).toBe('verified');
     const ps = (await get('/api/entities/Player?sort=singles_rank')).body.items;
     expect(ps.map((p) => p.username)).toEqual(['Aa1', 'Bb2', 'Cc3', 'Dd4']);
-    expect(ps.find((p) => p.username === 'Dd4')).toMatchObject({ doubles_wins: 1, doubles_rating: 1421, singles_rating: 1400 });
+    expect(ps.find((p) => p.username === 'Dd4')).toMatchObject({ doubles_wins: 1, doubles_game_wins: 1, doubles_game_losses: 0, singles_game_wins: 0, doubles_rating: 1413, singles_rating: 1400 });
   });
 });
 
@@ -437,7 +437,7 @@ describe('streaks and daily bonus', () => {
     expect(part(rc, a.player.id, 'comeback')).toBe(15);
     const w = rc.find((x) => x.player_id === a.player.id);
     expect(w).toMatchObject({ win_streak: 1 });
-    expect(w.mov).toBeGreaterThan(1.5);
+    expect(w.games[1].mov).toBeGreaterThan(1.9); // an 11-0 game is dominance 1
     expect(w.xp_gained).toBe(w.xp_parts.reduce((n, p) => n + p.xp, 0));
   });
 });
@@ -808,15 +808,17 @@ describe('rating factors wired through verification', () => {
     expect((await player(a)).singles_last_verified_at).toBeNull();
     const m = await play(a, b, { side_a: [{ player_id: a.player.id, paddle: 'modded' }] });
     const w = m.rating_changes.find((x) => x.player_id === a.player.id);
-    expect(w).toMatchObject({ paddle_edge: -50, rust: 1, challenge: 1, teammate: 1, opp_certainty: 0.8, evidence: 1 });
-    expect(w.k).toBe(48);
+    expect(w).toMatchObject({ rust: 1, challenge: 1, evidence: 1 });
+    expect(w.games[0]).toMatchObject({ paddle_edge: -50, rust: 1, challenge: 1, teammate: 1, opp_certainty: 0.8, evidence: 1 });
+    expect(w.games[0].k).toBe(48);
+    expect(w.games[1].k).toBeLessThan(48); // K eases game by game
     expect(typeof w.repeat).toBe('number');
     expect((await player(a)).singles_last_verified_at).toBeTruthy();
     // second match: K shrinks, certainty grows
     const m2 = await play(a, b);
     const w2 = m2.rating_changes.find((x) => x.player_id === a.player.id);
-    expect(w2.k).toBeLessThan(48);
-    expect(w2.opp_certainty).toBeGreaterThan(0.8);
+    expect(w2.games[0].k).toBeLessThan(w.games[1].k);
+    expect(w2.games[0].opp_certainty).toBeGreaterThan(0.8);
   });
 
   it('rust: a long-absent player gets a larger K', async () => {
@@ -866,8 +868,8 @@ describe('rating factors wired through verification', () => {
     for (const u of [b, c, d]) m = (await call(u, 'respondMatch', { match_id: s.body.match.id, decision: 'accept' })).body.match;
     const ra = m.rating_changes.find((x) => x.player_id === a.player.id);
     const rb = m.rating_changes.find((x) => x.player_id === b.player.id);
-    expect(ra.teammate).toBeLessThan(1);
-    expect(rb.teammate).toBeGreaterThan(1);
+    expect(ra.games[0].teammate).toBeLessThan(1);
+    expect(rb.games[0].teammate).toBeGreaterThan(1);
     expect((await player(a)).doubles_last_verified_at).toBeTruthy();
     expect((await player(a)).singles_last_verified_at).toBeNull();
   });

@@ -1,11 +1,12 @@
-// Offline simulation: compares the LEGACY rating rules (pre-paddle-edge, step K) with the current rules in src/rating.js.
-// No DB. Usage: node scripts/simulate.js [--seeds 200] [--matches 600] [--paddle-effect 0|50] [--out path.md]
-// --rating <path> swaps in an alternative copy of rating.js (used to ablate/tune constants without touching src).
-const ratingPath = (() => { const i = process.argv.indexOf('--rating'); return i > 0 ? process.argv[i + 1] : '../src/rating.js'; })();
-const { rateMatch: rateNew, expectedScore, paddleEdge, meetingWeight, REPEAT_WINDOW_DAYS } = await import(ratingPath);
+// Offline simulation: per-game rating (current src/rating.js) vs the match-level rules it replaced
+// (scripts/rating-match-level.js) vs the original legacy rules (step K, no paddle). No DB.
+// Usage: node scripts/simulate.js [--seeds 200] [--matches 600] [--out path.md]            full comparison tables
+//        node scripts/simulate.js --sweep [--seeds 60]                                      GAME_K_SCALE x K_DECAY_GAMES grid
 import { writeFileSync } from 'node:fs';
+import { rateMatch as rateGame, expectedScore, paddleEdge, meetingWeight, REPEAT_WINDOW_DAYS, GAME_K_SCALE, K_DECAY_GAMES } from '../src/rating.js';
+import { rateMatch as rateOld } from './rating-match-level.js';
 
-// ---------------- legacy (verbatim behaviour of the committed rating.js before this work) ----------------
+// ---------------- original legacy rules (verbatim behaviour before the paddle-edge / smooth-K work) ----------------
 const legacy = (() => {
   const kFactor = (n) => (n < 10 ? 48 : n < 30 ? 32 : 24);
   const repeatFactor = (m) => 1 / (1 + 0.75 * Math.max(0, m));
@@ -38,8 +39,10 @@ const mean = (a) => a.reduce((x, y) => x + y, 0) / a.length;
 const std = (a) => { const m = mean(a); return Math.sqrt(mean(a.map((x) => (x - m) ** 2))); };
 function ranksOf(vals) { const idx = vals.map((v, i) => [v, i]).sort((a, b) => b[0] - a[0]); const r = []; idx.forEach(([, i], k) => { r[i] = k + 1; }); return r; }
 function spearman(a, b) { const ra = ranksOf(a), rb = ranksOf(b); const n = a.length; return 1 - (6 * ra.reduce((s, x, i) => s + (x - rb[i]) ** 2, 0)) / (n * (n * n - 1)); }
+const ll = (p, won) => -Math.log(Math.max(1e-6, won ? p : 1 - p));
+/** P(win a best-of-n) from a per-game win probability. */
+const bestOfProb = (g, n) => (n === 1 ? g : n === 3 ? g * g * (3 - 2 * g) : g ** 3 * (10 - 15 * g + 6 * g * g));
 
-/** Play a game to `target` (win by 2) with per-rally prob q for A. */
 function playGame(r, q, target) {
   let a = 0, b = 0;
   while (!((a >= target || b >= target) && Math.abs(a - b) >= 2)) { if (r() < q) a++; else b++; }
@@ -52,25 +55,28 @@ function playMatch(r, q, target, bestOf) {
 }
 
 // ---------------- one world ----------------
-const SYSTEMS = ['L', 'W', 'N']; // legacy / new / new with the paddle edge switched off (isolates the paddle term)
-function runSeed(seed, { matches, players: N = 16, paddleEffect, days = 300, evolving, cfg }) {
+// Systems: L = original legacy (match), O = match-level rules shipped before this work, G = per-game (src/rating.js with cfg)
+const SYSTEMS = ['L', 'O', 'G'];
+function runSeed(seed, { matches, players: N = 16, evolving, cfg, paddleEffect = 0, days = 300 }) {
   const r = rng(seed);
   const base = Array.from({ length: N }, () => 1500 + 200 * gauss(r));
   const drift = Array(N).fill(0);
   const played = Array(N).fill(0);
-  // evolving world: people improve with play (learning curve, up to +80) and wander (random walk ~ +-25 over the season)
   const skillOf = (i) => base[i] + (evolving ? 80 * (1 - Math.exp(-played[i] / 15)) + drift[i] : 0);
-  const visible = base.map((s) => s + 150 * gauss(r)); // pairing order proxy (what people think of each other)
+  const visible = base.map((s) => s + 150 * gauss(r));
   const breaks = base.map(() => Array.from({ length: Math.floor(r() * 3) }, () => { const s = r() * days; return [s, s + 25 + r() * 70]; }));
   const away = (i, t) => breaks[i].some(([a, b]) => t >= a && t <= b);
   const paddleOf = () => (r() < 0.3 ? 'modded' : 'default');
-  const mkState = () => ({ rating: Array(N).fill(1400), gp: Array(N).fill(0), last: Array(N).fill(null), hist: [], pred: [], ad: [] });
-  const S = { L: mkState(), W: mkState(), N: mkState() };
+  const mkState = () => ({ rating: Array(N).fill(1400), mp: Array(N).fill(0), gp: Array(N).fill(0), last: Array(N).fill(null), hist: [], gamePred: [], matchPred: [], ad: [], early: null });
+  const S = { L: mkState(), O: mkState(), G: mkState() };
   const dt = days / matches;
+  const EARLY = 150; // matches in (~19 per player): how fast does the ladder find the order?
+  const skillAtEarly = { v: null };
 
   for (let k = 0; k < matches; k++) {
     const t = k * dt;
     if (evolving) for (let i = 0; i < N; i++) drift[i] += 1.5 * Math.sqrt(dt) * gauss(r);
+    if (k === EARLY) { skillAtEarly.v = base.map((_, i) => skillOf(i)); for (const sys of SYSTEMS) S[sys].early = spearman(S[sys].rating, skillAtEarly.v); }
     const avail = [...Array(N).keys()].filter((i) => !away(i, t));
     if (avail.length < 2) continue;
     const i = avail[Math.floor(r() * avail.length)];
@@ -89,75 +95,104 @@ function runSeed(seed, { matches, players: N = 16, paddleEffect, days = 300, evo
     for (const sys of SYSTEMS) {
       const st = S[sys];
       const ms = st.hist.filter((h) => ((h.i === i && h.j === j) || (h.i === j && h.j === i)) && t - h.t <= REPEAT_WINDOW_DAYS);
+      const dsl = (y) => (st.last[y] == null ? null : t - st.last[y]);
       if (sys === 'L') {
         const p = expectedScore(st.rating[i], st.rating[j]);
-        st.pred.push({ p, aWon, k });
+        st.matchPred.push({ p, aWon, k });
+        for (const g of m.games) st.gamePred.push({ p, aWon: g.a > g.b, k });
         const res = legacy.rateMatch([
-          { id: i, side: 'a', rating: st.rating[i], matchesPlayed: st.gp[i], earlierMeetings: ms.length },
-          { id: j, side: 'b', rating: st.rating[j], matchesPlayed: st.gp[j], earlierMeetings: ms.length }], m.winner, dom);
+          { id: i, side: 'a', rating: st.rating[i], matchesPlayed: st.mp[i], earlierMeetings: ms.length },
+          { id: j, side: 'b', rating: st.rating[j], matchesPlayed: st.mp[j], earlierMeetings: ms.length }], m.winner, dom);
         st.rating[i] += res[0].delta; st.rating[j] += res[1].delta;
         st.ad.push({ d: Math.abs(res[0].delta), k });
       } else {
         const wgt = ms.reduce((s, h) => s + meetingWeight(t - h.t), 0);
-        const dsl = (y) => (st.last[y] == null ? null : t - st.last[y]);
-        const usePad = sys === 'W';
-        const parts = [
-          { id: i, side: 'a', rating: st.rating[i], matchesPlayed: st.gp[i], earlierMeetings: wgt, paddle: usePad ? pi : 'default', daysSinceLast: dsl(i) },
-          { id: j, side: 'b', rating: st.rating[j], matchesPlayed: st.gp[j], earlierMeetings: wgt, paddle: usePad ? pj : 'default', daysSinceLast: dsl(j) }];
-        const p = expectedScore(st.rating[i] + paddleEdge([parts[0].paddle]), st.rating[j] + paddleEdge([parts[1].paddle]));
-        st.pred.push({ p, aWon, k });
-        const res = rateNew(parts, m.winner, m.games, { target, ...cfg });
-        st.rating[i] = res[0].after; st.rating[j] = res[1].after; st.last[i] = t; st.last[j] = t;
-        st.ad.push({ d: Math.abs(res[0].delta), k });
+        const mk = (id, side, pd) => ({ id, side, rating: st.rating[id], matchesPlayed: st.mp[id], gamesPlayed: st.gp[id], earlierMeetings: wgt, paddle: pd, daysSinceLast: dsl(id) });
+        const parts = [mk(i, 'a', pi), mk(j, 'b', pj)];
+        const edgeA = paddleEdge([pi]), edgeB = paddleEdge([pj]);
+        const p0 = expectedScore(st.rating[i] + edgeA, st.rating[j] + edgeB);
+        if (sys === 'O') {
+          st.matchPred.push({ p: p0, aWon, k });
+          for (const g of m.games) st.gamePred.push({ p: p0, aWon: g.a > g.b, k });
+          const res = rateOld(parts, m.winner, m.games, { target });
+          st.rating[i] = res[0].after; st.rating[j] = res[1].after;
+          st.ad.push({ d: Math.abs(res[0].delta), k });
+        } else {
+          st.matchPred.push({ p: bestOfProb(p0, bestOf), aWon, k });
+          const res = rateGame(parts, m.winner, m.games, { target, gameKScale: cfg.scale, kDecayGames: cfg.decay });
+          // per-game predictions use the rating going INTO each game (the sequential state)
+          res[0].games.forEach((gm, gi) => {
+            const bi = res[1].games[gi].before;
+            st.gamePred.push({ p: expectedScore(gm.before + edgeA, bi + edgeB), aWon: m.games[gi].a > m.games[gi].b, k });
+          });
+          st.rating[i] = res[0].after; st.rating[j] = res[1].after;
+          st.ad.push({ d: Math.abs(res[0].delta), k });
+        }
+        st.last[i] = t; st.last[j] = t;
       }
-      st.gp[i]++; st.gp[j]++; st.hist.push({ i, j, t });
+      st.mp[i]++; st.mp[j]++; st.gp[i] += m.games.length; st.gp[j] += m.games.length;
+      st.hist.push({ i, j, t });
     }
     played[i]++; played[j]++;
   }
-  const BURN = 100; // ignore the first matches when scoring predictions (everyone is still 1400)
+  const BURN = 100;
   const finalSkill = base.map((_, i) => skillOf(i));
   const score = (st) => {
-    const ev = st.pred.filter((x) => x.k >= BURN);
     const rk = ranksOf(finalSkill);
+    const gp = st.gamePred.filter((x) => x.k >= BURN), mp = st.matchPred.filter((x) => x.k >= BURN);
     return {
-      logloss: mean(ev.map((x) => -Math.log(Math.max(1e-6, x.aWon ? x.p : 1 - x.p)))),
-      brier: mean(ev.map((x) => (x.p - (x.aWon ? 1 : 0)) ** 2)),
+      gameLL: mean(gp.map((x) => ll(x.p, x.aWon))),
+      matchLL: mean(mp.map((x) => ll(x.p, x.aWon))),
       spearman: spearman(st.rating, finalSkill),
+      early: st.early,
       rankErr: mean(ranksOf(st.rating).map((v, n) => Math.abs(v - rk[n]))),
       volatility: mean(st.ad.filter((x) => x.k >= matches / 2).map((x) => x.d)),
-      ratingSpread: std(st.rating),
+      spread: std(st.rating),
     };
   };
-  return { L: score(S.L), W: score(S.W), N: score(S.N) };
+  return { L: score(S.L), O: score(S.O), G: score(S.G) };
 }
 
-// ---------------- driver ----------------
-export function simulate({ seeds = 200, matches = 600, paddleEffect = 0, evolving = false, cfg = {} } = {}) {
-  const acc = { L: {}, W: {}, N: {} };
+export function simulate({ seeds = 200, matches = 600, evolving = false, paddleEffect = 0, cfg = {} } = {}) {
+  const acc = {};
   for (let s = 1; s <= seeds; s++) {
-    const out = runSeed(s * 7919, { matches, paddleEffect, evolving, cfg });
-    for (const sys of SYSTEMS) for (const [k, v] of Object.entries(out[sys])) (acc[sys][k] ||= []).push(v);
+    const out = runSeed(s * 7919, { matches, evolving, paddleEffect, cfg });
+    for (const sys of SYSTEMS) for (const [k, v] of Object.entries(out[sys])) ((acc[sys] ||= {})[k] ||= []).push(v);
   }
   const m = {};
   for (const sys of SYSTEMS) { m[sys] = {}; for (const k of Object.keys(acc[sys])) m[sys][k] = mean(acc[sys][k]); }
-  const better = { logloss: -1, brier: -1, spearman: 1, rankErr: -1 };
-  m.winRate = {};
-  for (const k of Object.keys(better)) m.winRate[k] = mean(acc.L[k].map((l, i) => ((acc.W[k][i] - l) * better[k] > 0 ? 1 : 0)));
   return m;
 }
 
 const arg = (n, d) => { const i = process.argv.indexOf(`--${n}`); return i > 0 ? process.argv[i + 1] : d; };
+const flag = (n) => process.argv.includes(`--${n}`);
 if (process.argv[1] && process.argv[1].endsWith('simulate.js')) {
-  const seeds = +arg('seeds', 200), matches = +arg('matches', 600), out = arg('out', null);
   const f = (x, d = 4) => x.toFixed(d);
-  let md = `# Elo simulation: legacy vs new rules\n\n${seeds} seeds x ${matches} matches over 300 days, 16 players, base skill ~ N(1500, 200), singles, rally-by-rally scoring\n(per-rally win prob from the skill gap), ~12% target-21, best-of-1/3/5 mix, 30% of games played with a paid paddle (random, independent of skill),\n0-2 long breaks (25-95 days) per player, opponents chosen mostly from nearby visible rank.\nColumns: legacy = rules before this work; new = current src/rating.js; new, no paddle = same but paddle edge switched off (isolates every other change).\nPrediction metrics skip the first 100 matches. Lower is better for log-loss, Brier, rank error, volatility; higher for Spearman.\nRegenerate: node api/scripts/simulate.js --seeds 200 --out ../penged-qa/elo-sim.md\n\n`;
-  for (const evolving of [false, true]) for (const pe of [0, 50]) {
-    const m = simulate({ seeds, matches, paddleEffect: pe, evolving });
-    md += `## ${evolving ? 'Evolving skills (learning curve +80 over first ~45 games, drift)' : 'Static skills'}; paid paddle truly worth ${pe}\n\n| metric | legacy | new | new, no paddle | new beats legacy (% seeds) |\n|---|---|---|---|---|\n`;
-    const rows = [['log-loss', 'logloss', 4], ['Brier', 'brier', 4], ['Spearman (final rating vs true skill)', 'spearman', 4], ['mean abs rank error (of 16)', 'rankErr', 3], ['volatility: mean abs delta, 2nd half', 'volatility', 2], ['rating spread (std)', 'ratingSpread', 1]];
-    for (const [label, k, d] of rows) md += `| ${label} | ${f(m.L[k], d)} | ${f(m.W[k], d)} | ${f(m.N[k], d)} | ${m.winRate[k] != null ? f(m.winRate[k] * 100, 0) + '%' : '-'} |\n`;
-    md += '\n';
+  if (flag('sweep')) {
+    const seeds = +arg('seeds', 60), matches = +arg('matches', 600);
+    const scales = (arg('scales', '0.3,0.4,0.5,0.6,0.75,1')).split(',').map(Number);
+    const decays = (arg('decays', '12,20,30,45')).split(',').map(Number);
+    for (const evolving of [false, true]) {
+      console.log(`\n## sweep ${evolving ? 'evolving' : 'static'} skills, ${seeds} seeds (G = per-game)`);
+      const ref = simulate({ seeds, matches, evolving, cfg: { scale: 0.5, decay: 30 } });
+      console.log(`reference O(match-level): gameLL ${f(ref.O.gameLL)} matchLL ${f(ref.O.matchLL)} spearman ${f(ref.O.spearman)} early ${f(ref.O.early)} vol ${f(ref.O.volatility, 2)}`);
+      console.log('scale decay | gameLL matchLL spearman early rankErr vol spread');
+      for (const scale of scales) for (const decay of decays) {
+        const g = simulate({ seeds, matches, evolving, cfg: { scale, decay } }).G;
+        console.log(`${scale} ${decay} | ${f(g.gameLL)} ${f(g.matchLL)} ${f(g.spearman)} ${f(g.early)} ${f(g.rankErr, 3)} ${f(g.volatility, 2)} ${f(g.spread, 1)}`);
+      }
+    }
+  } else {
+    const seeds = +arg('seeds', 200), matches = +arg('matches', 600), out = arg('out', null);
+    let md = `# Elo simulation: legacy vs match-level vs per-game rating\n\n${seeds} seeds x ${matches} matches over 300 days, 16 players, base skill ~ N(1500, 200), singles, rally-by-rally scoring\n(per-rally win prob from the skill gap), ~12% target-21, best-of-1/3/5 mix, 30% of games played with a paid paddle (random, independent of skill),\n0-2 long breaks (25-95 days) per player, opponents chosen mostly from nearby visible rank.\nColumns: legacy = original rules (step K, no paddle); match-level = rules shipped before per-game rating (scripts/rating-match-level.js);\nper-game = current src/rating.js (GAME_K_SCALE ${GAME_K_SCALE}, K_DECAY_GAMES ${K_DECAY_GAMES}).\nPrediction metrics skip the first 100 matches. "game log-loss" scores every game's winner using the ratings going into that game\n(match-level systems use the match-start ratings for all its games); "match log-loss" scores the match winner (per-game: best-of-n from the per-game probability).\nEarly Spearman = ordering quality after 150 matches (~19 per player). Lower is better for log-loss, rank error, volatility; higher for Spearman.\nRegenerate: node api/scripts/simulate.js --seeds 200 --out ../penged-qa/elo-sim.md\n\n`;
+    for (const evolving of [false, true]) for (const pe of [0, 50]) {
+      const m = simulate({ seeds, matches, evolving, paddleEffect: pe });
+      md += `## ${evolving ? 'Evolving skills (learning curve +80 over first ~45 games, drift)' : 'Static skills'}; paid paddle truly worth ${pe}\n\n| metric | legacy | match-level | per-game |\n|---|---|---|---|\n`;
+      const rows = [['game log-loss', 'gameLL', 4], ['match log-loss', 'matchLL', 4], ['Spearman (final rating vs true skill)', 'spearman', 4], ['Spearman after 150 matches', 'early', 4], ['mean abs rank error (of 16)', 'rankErr', 3], ['volatility: mean abs match delta, 2nd half', 'volatility', 2], ['rating spread (std)', 'spread', 1]];
+      for (const [label, k, d] of rows) md += `| ${label} | ${f(m.L[k], d)} | ${f(m.O[k], d)} | ${f(m.G[k], d)} |\n`;
+      md += '\n';
+    }
+    if (out) writeFileSync(out, md);
+    console.log(md);
   }
-  if (out) writeFileSync(out, md);
-  console.log(md);
 }

@@ -62,15 +62,15 @@ describe('singles and doubles are separate ladders', () => {
   it('K and provisional certainty use the format\'s own games', async () => {
     const [a, b, c, d] = await four();
     // A is a veteran at singles only.
-    await sql('UPDATE players SET singles_wins = 40, singles_losses = 10 WHERE id = ?', a.player.id);
+    await sql('UPDATE players SET singles_wins = 40, singles_losses = 10, singles_game_wins = 30, singles_game_losses = 20 WHERE id = ?', a.player.id);
     const rc = await double([a, c], [b, d]);
     const ra = rc.find((x) => x.player_id === a.player.id);
-    expect(ra.k).toBeCloseTo(kSmooth(0), 6); // a brand-new doubles player, whatever the singles record
-    expect(ra.k).toBeGreaterThan(kSmooth(50));
+    expect(ra.games[0].k).toBeCloseTo(kSmooth(0), 6); // a brand-new doubles player, whatever the singles record
+    expect(ra.games[0].k).toBeGreaterThan(kSmooth(50));
     // opponent certainty also reads doubles games (all four have 0) and not singles games
-    expect(ra.opp_certainty).toBeCloseTo(0.8, 6);
+    expect(ra.games[0].opp_certainty).toBeCloseTo(0.8, 6);
     const rs = await single(a, b);
-    expect(rs.find((x) => x.player_id === a.player.id).k).toBeCloseTo(kSmooth(50) * 1, 5);
+    expect(rs.find((x) => x.player_id === a.player.id).games[0].k).toBeCloseTo(kSmooth(50) * 1, 5);
   });
 
   it('rust reads the format\'s own last verified match', async () => {

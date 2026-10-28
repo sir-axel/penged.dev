@@ -29,7 +29,10 @@ export function YourSpot({ player, toConfirm = 0 }) {
                     <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
                       {ratingFor(player, fmt)}
                       {" · "}
-                      {formatRecord(player[`${fmt}_wins`], player[`${fmt}_losses`])}
+                      {`Matches ${formatRecord(player[`${fmt}_wins`], player[`${fmt}_losses`])}`}
+                    </p>
+                    <p className="font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+                      {`Games ${formatRecord(player[`${fmt}_game_wins`], player[`${fmt}_game_losses`])}`}
                     </p>
                     <div className="mt-1 flex flex-wrap items-center gap-1.5">
                       <TierBadge rating={ratingFor(player, fmt)} played={(player[`${fmt}_wins`] || 0) + (player[`${fmt}_losses`] || 0)} />

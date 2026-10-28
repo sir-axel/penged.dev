@@ -61,7 +61,7 @@ Future integrations: the API boundary is plain HTTP under `/api` (entities read 
 ## How it works
 - Entities `Player`, `Match`, `Challenge` are publicly readable (`GET /api/entities/:Entity?filter=<json>&sort=-created_date&limit=`), with Mongo-lite filters (`$gte/$lte/$gt/$lt/$ne/$in`, array containment for `all_player_ids` etc.). All writes go through the nine functions: `createPlayer, updatePlayer, submitMatch, respondMatch, createChallenge, respondChallenge, resolveChallenge, syncLadder, deleteAccount` (`POST /api/functions/:name`).
 - D1 has no interactive transactions, so each mutation computes all its writes and applies them in one `DB.batch()` guarded by version counters (see `api/src/db.js`); conflicts retry or return 409.
-- Rating rules live in the pure module `api/src/rating.js` (Elo with paddle edge, smooth K, rust, opponent certainty, match-length evidence, recency-weighted rematches, doubles team averages + partner split, challenge stakes, ±80 cap, floor 700, XP/level, active rating-derived ranks). `api/scripts/simulate.js` compares it against the legacy rules.
+- Rating rules live in the pure module `api/src/rating.js` (Elo with paddle edge, smooth K, rust, opponent certainty, target-21 weight, every game rated on its own in order, recency-weighted rematches, doubles team averages + partner split, challenge stakes, ±80 cap, floor 700, XP/level, active rating-derived ranks). `api/scripts/simulate.js` compares it against the legacy rules.
 
 ## Security notes
 - Passwords: PBKDF2-SHA256 via WebCrypto (20k iterations, versioned hash format) to stay inside the free Workers 10 ms CPU limit.
