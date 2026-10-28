@@ -206,7 +206,7 @@ export function NewMatch() {
                       type="button"
                       aria-label={`Remove game ${t + 1}`}
                       onClick={() => setGames((e) => e.filter((e, n) => n !== t))}
-                      className="-mr-1.5 rounded-sm p-2 text-muted-foreground transition-colors hover:text-destructive"
+                      className="-mr-2.5 rounded-sm p-3 text-muted-foreground transition-colors hover:text-destructive sm:-mr-1.5 sm:p-2"
                     >
                       <Trash2 className="h-4 w-4" aria-hidden="true" />
                     </button>

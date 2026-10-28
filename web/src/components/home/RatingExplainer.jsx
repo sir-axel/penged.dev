@@ -28,8 +28,8 @@ export function RatingExplainer() {
           Elo, like chess ratings. Your rating moves only once everyone who played has confirmed the
           result, so nobody can award themselves a win.
         </p>
-        <div className="mt-6 grid gap-3 lg:grid-cols-2">
-          <article className="border border-foreground bg-card p-5">
+        <div className="mt-6 grid grid-cols-1 gap-3 lg:grid-cols-2">
+          <article className="min-w-0 border border-foreground bg-card p-5">
             <h3 className="font-heading text-base font-semibold">The short version</h3>
             <ul className="mt-3 space-y-2">
               {RATING_POINTS.map((e) => (
@@ -43,8 +43,8 @@ export function RatingExplainer() {
               ))}
             </ul>
           </article>
-          <div className="space-y-3">
-            <article className="border border-foreground bg-card p-5">
+          <div className="min-w-0 space-y-3">
+            <article className="min-w-0 border border-foreground bg-card p-5">
               <h3 className="font-display text-[0.55rem] uppercase tracking-[0.18em] text-muted-foreground">
                 The maths
               </h3>
@@ -85,7 +85,7 @@ export function RatingExplainer() {
           </p>
           <Link
             to="/rules"
-            className="mt-3 inline-flex font-display text-[0.55rem] uppercase tracking-[0.16em] text-brand hover:underline"
+            className="mt-1 inline-flex py-2 font-display text-[0.55rem] uppercase tracking-[0.16em] text-brand hover:underline"
           >
             Full house rules
           </Link>

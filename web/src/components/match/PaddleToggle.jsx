@@ -12,7 +12,7 @@ export function PaddleToggle({ value = "default", onChange: onChange, label = "P
             type="button"
             aria-pressed={r}
             onClick={() => onChange(n)}
-            className={`min-h-[30px] px-2 font-mono text-[10px] uppercase tracking-[0.08em] transition-colors ${r ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground hover:text-foreground"}`}
+            className={`min-h-10 px-3 font-mono text-[10px] sm:min-h-[30px] sm:px-2 uppercase tracking-[0.08em] transition-colors ${r ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground hover:text-foreground"}`}
             key={n}
           >
             {n}

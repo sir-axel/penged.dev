@@ -48,7 +48,7 @@ export function Layout() {
           {isAuthenticated ? (
             <Link
               to="/profile"
-              className="inline-flex items-center gap-1.5 border border-foreground bg-card px-2.5 py-1.5 font-display text-[0.55rem] uppercase tracking-[0.12em] hover:bg-secondary"
+              className="inline-flex min-h-10 items-center gap-1.5 border border-foreground bg-card px-3 py-1.5 font-display sm:min-h-0 sm:px-2.5 text-[0.55rem] uppercase tracking-[0.12em] hover:bg-secondary"
             >
               <User className="h-3.5 w-3.5" aria-hidden="true" />
               My profile
@@ -56,7 +56,7 @@ export function Layout() {
           ) : (
             <Link
               to="/login"
-              className="inline-flex items-center gap-1.5 border border-foreground bg-card px-2.5 py-1.5 font-display text-[0.55rem] uppercase tracking-[0.12em] hover:bg-secondary"
+              className="inline-flex min-h-10 items-center gap-1.5 border border-foreground bg-card px-3 py-1.5 font-display sm:min-h-0 sm:px-2.5 text-[0.55rem] uppercase tracking-[0.12em] hover:bg-secondary"
             >
               <LogIn className="h-3.5 w-3.5" aria-hidden="true" />
               Sign in

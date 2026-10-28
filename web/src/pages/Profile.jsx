@@ -152,7 +152,7 @@ export function Profile() {
               rows={3}
               maxLength={280}
               placeholder="Paddle of choice, signature shot, trash talk."
-              className="w-full rounded-sm border border-input bg-card px-3 py-2 text-sm outline-none focus:border-foreground/40"
+              className="w-full rounded-sm border border-input bg-card px-3 py-2 text-base outline-none focus:border-foreground/40 sm:text-sm"
             />
           </div>
           {error && (

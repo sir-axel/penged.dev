@@ -257,7 +257,7 @@ export function Challenges() {
                   rows={2}
                   maxLength={200}
                   placeholder="Add a note (optional) — e.g. 'Court at 4pm?'"
-                  className="w-full rounded-sm border border-input bg-card px-3 py-2 text-sm outline-none focus:border-foreground/40"
+                  className="w-full rounded-sm border border-input bg-card px-3 py-2 text-base outline-none focus:border-foreground/40 sm:text-sm"
                 />
                 <Button
                   onClick={async () => {
