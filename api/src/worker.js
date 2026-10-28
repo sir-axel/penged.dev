@@ -10,6 +10,7 @@ export default {
       url.hostname = 'penged.dev';
       return Response.redirect(url.toString(), 301);
     }
+    if (!url.pathname.startsWith('/api/') && env.ASSETS) return env.ASSETS.fetch(request);
     return app.fetch(request, env, ctx);
   },
   // Cron trigger (see wrangler.toml): same expiry/cleanup as the syncLadder function, no session needed.

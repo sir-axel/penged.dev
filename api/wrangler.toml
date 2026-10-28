@@ -11,12 +11,13 @@ routes = [
   { pattern = "www.penged.dev", custom_domain = true },
 ]
 
-# One Worker serves the built web app (static assets) and the API. Only /api/* runs Worker code.
+# One Worker serves the built web app (static assets) and the API. The Worker runs first for every
+# request so it can 301 www to the apex; non-/api paths are then handed to the ASSETS binding.
 [assets]
 directory = "../web/dist"
 binding = "ASSETS"
 not_found_handling = "single-page-application"
-run_worker_first = ["/api/*"]
+run_worker_first = true
 
 [[d1_databases]]
 binding = "DB"
