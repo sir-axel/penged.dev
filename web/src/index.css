@@ -18,13 +18,13 @@
     --muted-foreground: 0 0% 34%;
     --accent: 0 0% 86%;
     --accent-foreground: 0 0% 5%;
-    --destructive: 4 66% 39%;
+    --destructive: 16 76% 35%;
     --destructive-foreground: 0 0% 100%;
     --border: 0 0% 74%;
     --input: 0 0% 66%;
-    --ring: 148 46% 26%;
-    --brand: 148 46% 26%;
-    --brand-soft: 148 38% 92%;
+    --ring: 356 72% 42%;
+    --brand: 356 72% 42%;
+    --brand-soft: 356 70% 94%;
     --success: 148 46% 26%;
     --warning: 32 78% 31%;
     --radius: 0.25rem;
@@ -48,13 +48,14 @@
     --muted-foreground: 0 0% 64%;
     --accent: 0 0% 18%;
     --accent-foreground: 0 0% 96%;
-    --destructive: 0 62.8% 30.6%;
+    --destructive: 16 66% 34%;
     --destructive-foreground: 0 0% 96%;
     --border: 0 0% 26%;
     --input: 0 0% 26%;
-    --ring: 148 40% 52%;
-    --brand: 148 40% 52%;
-    --brand-soft: 148 30% 16%;
+    --ring: 356 78% 62%;
+    --brand: 356 78% 62%;
+    --brand-soft: 356 40% 16%;
+    --success: 148 40% 52%;
   }
   * {
     border-color: hsl(var(--border));
