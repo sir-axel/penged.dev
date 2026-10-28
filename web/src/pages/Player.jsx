@@ -28,9 +28,12 @@ function FormatBlock({ player, format }) {
           <p className="font-heading text-2xl font-bold leading-none">{rank ? `#${rank}` : "—"}</p>
         </div>
         <div>
-          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">W–L</p>
+          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Matches</p>
           <p className="font-heading text-2xl font-bold leading-none">
             {formatRecord(player[`${format}_wins`], player[`${format}_losses`])}
+          </p>
+          <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+            {`Games ${formatRecord(player[`${format}_game_wins`], player[`${format}_game_losses`])}`}
           </p>
         </div>
       </div>

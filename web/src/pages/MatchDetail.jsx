@@ -1,9 +1,9 @@
 import { BackButton } from "@/components/BackButton";
-import { describeChange } from "@/lib/ratingFactors";
+import { describeChange, describeGames } from "@/lib/ratingFactors";
 import { useState, useEffect } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Check, LoaderCircle, TriangleAlert, X } from "lucide-react";
+import { Check, ChevronDown, LoaderCircle, TriangleAlert, X } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
@@ -247,7 +247,7 @@ export function MatchDetail() {
                       {Math.abs(e.delta)}
                     </span>
                   </div>
-                  {e.mov != null && <FactorLines change={e} />}
+                  {(e.games || []).length > 0 ? <GameLines change={e} /> : e.mov != null && <FactorLines change={e} />}
                   {(e.xp_parts || []).length > 0 && (
                     <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.08em] text-brand">
                       {e.xp_parts.map((x) => `+${x.xp} ${x.label}`).join(" · ")}
@@ -264,14 +264,52 @@ export function MatchDetail() {
   );
 }
 
-function FactorLines({ change }) {
+/** Per-game rating: every game is its own rating event. One compact line, expandable into each game's factors. */
+function GameLines({ change }) {
+  const games = describeGames(change);
+  return (
+    <details className="group mt-1">
+      <summary className="flex min-h-8 cursor-pointer list-none items-start gap-1 font-mono text-[10px] uppercase leading-relaxed tracking-[0.08em] text-muted-foreground [&::-webkit-details-marker]:hidden">
+        <span className="min-w-0 flex-1">
+          {games.map((g, i) => (
+            <span key={g.key} className="whitespace-nowrap">
+              {i > 0 && <span className="mx-1">·</span>}
+              {`${g.label} ${g.score} `}
+              <span className={g.delta >= 0 ? "text-success" : "text-destructive"}>{`${g.delta >= 0 ? "+" : "−"}${Math.abs(g.delta)}`}</span>
+            </span>
+          ))}
+        </span>
+        <ChevronDown className="mt-px h-3.5 w-3.5 shrink-0 text-brand transition-transform group-open:rotate-180" aria-label="Show each game" />
+      </summary>
+      <ol className="mt-1 space-y-2 border-l-2 border-border pl-3">
+        {games.map((g) => (
+          <li key={g.key}>
+            <div className="flex items-baseline justify-between gap-2 font-mono text-[11px] text-foreground">
+              <span>{`Game ${g.key} · ${g.score} · ${g.won ? "won" : "lost"}`}</span>
+              <span className="tabular-nums text-muted-foreground">
+                {`${g.change.before} → ${g.change.after}`}
+                <span className={`ml-2 ${g.delta >= 0 ? "text-success" : "text-destructive"}`}>{`${g.delta >= 0 ? "+" : "−"}${Math.abs(g.delta)}`}</span>
+              </span>
+            </div>
+            <FactorLines change={g.change} compactOnly />
+          </li>
+        ))}
+        <p className="font-mono text-[10px] text-muted-foreground">
+          each game: ½ × K × (result − expected) × the factors above, rounded, at most 40 a game; the match total never exceeds 80
+        </p>
+      </ol>
+    </details>
+  );
+}
+
+function FactorLines({ change, compactOnly = false }) {
   const { compact, detail } = describeChange(change);
   return (
     <>
       <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.08em] leading-relaxed text-muted-foreground">
         {compact.join(" · ")}
       </p>
-      {detail.length > 2 && (
+      {!compactOnly && detail.length > 2 && (
         <details className="mt-1 group">
           <summary className="inline-flex min-h-8 cursor-pointer items-center font-mono text-[10px] uppercase tracking-[0.08em] text-brand">
             How this was calculated

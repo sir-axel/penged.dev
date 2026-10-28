@@ -1,7 +1,24 @@
 // Turns one rating_changes entry into display lines. Old matches only stored margin / upset; newer ones store every factor.
+// Matches verified since per-game rating carry entry.games = [{ game, score: [mine, theirs], before, after, delta, ...factors }]
+// (every game is its own rating event); older entries have no games array and render as one flat change.
 const r2 = (x) => Math.round(x * 100) / 100;
 const off = (x) => x == null || r2(x) === 1;
 const times = (x) => `×${x.toFixed(2)}`;
+
+const signed = (n) => `${n >= 0 ? "+" : "−"}${Math.abs(n)}`;
+/** Per-game summary for one rating_changes entry: [] for matches rated before per-game rating. */
+export function describeGames(e) {
+  return (e?.games || []).map((g) => ({
+    key: g.game,
+    label: `G${g.game}`,
+    score: Array.isArray(g.score) ? `${g.score[0]}-${g.score[1]}` : "",
+    won: g.won,
+    delta: g.delta,
+    text: `G${g.game} ${Array.isArray(g.score) ? `${g.score[0]}-${g.score[1]}` : ""} ${signed(g.delta)}`.replace("  ", " "),
+    change: g,
+  }));
+}
+export const gamesLine = (e) => describeGames(e).map((g) => g.text).join(" · ");
 
 export function describeChange(e) {
   const compact = [];
@@ -20,13 +37,16 @@ export function describeChange(e) {
         : `your paddle counted +${n} rating in your favour when working out who was expected to win`,
     });
   }
+  if (e.score && e.expected != null) compact.push(`expected ${Math.round(e.expected * 100)}%`);
   if (e.k != null) detail.push({ label: "K", value: e.k.toFixed(1), note: "how far one result can move you; shrinks as you play" });
   const rows = [
     ["mov", "margin", "bigger wins move more", e.mov],
     ["ac", e.ac >= 1 ? "upset" : "favourite", e.ac >= 1 ? "beat or lost to someone who was ahead on paper" : "favourites are damped", e.ac],
     ["rust", "rust", "back after a long break: K is higher", e.rust],
     ["opp_certainty", "new opponent", "opponent has few matches, so their rating is less certain", e.opp_certainty],
-    ["evidence", "match length", "more games (or a 21 target) is a more reliable result", e.evidence],
+    e.games
+      ? ["evidence", "to 21", "a game to 21 is a more reliable result than one to 11", e.evidence]
+      : ["evidence", "match length", "more games (or a 21 target) is a more reliable result", e.evidence],
     ["repeat", "rematch", "earlier meetings with this opponent shrink the swing", e.repeat],
     ["teammate", "partner", "doubles: a stronger partner gains less and loses more", e.teammate],
     ["challenge", "challenge", "playing an accepted challenge counts extra", e.challenge],
