@@ -26,25 +26,6 @@ export function ThemeProvider({ children }) {
     apply(accountTheme);
   }, [accountTheme, isLoadingAuth, user?.id, apply]);
 
-  // No stored choice: follow the device preference live.
-  useEffect(() => {
-    if (user || storedTheme()) return;
-    let mq;
-    try {
-      mq = window.matchMedia("(prefers-color-scheme: dark)");
-    } catch {
-      return;
-    }
-    const on = () => {
-      if (storedTheme()) return;
-      const t = systemTheme();
-      paintTheme(t);
-      setThemeState(t);
-    };
-    mq.addEventListener?.("change", on);
-    return () => mq.removeEventListener?.("change", on);
-  }, [user, theme]);
-
   // Another tab changed it.
   useEffect(() => {
     const on = (e) => {

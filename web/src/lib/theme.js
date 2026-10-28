@@ -14,12 +14,9 @@ export function storedTheme() {
   }
 }
 
+/** Theme when nothing is saved: light (the device's dark preference is deliberately ignored). */
 export function systemTheme() {
-  try {
-    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-  } catch {
-    return "light";
-  }
+  return "light";
 }
 
 /** What the page is showing right now (set before first paint by the inline script). */
