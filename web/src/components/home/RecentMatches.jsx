@@ -16,10 +16,10 @@ export function RecentMatches({ matches = [] }) {
             </p>
           </div>
           <Link
-            to="/matches"
+            to="/feed"
             className="inline-flex min-h-10 shrink-0 items-center gap-1 rounded-sm py-2 text-sm font-medium text-brand hover:underline"
           >
-            All matches
+            All results
             <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
           </Link>
         </div>

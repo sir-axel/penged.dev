@@ -6,6 +6,7 @@ import {
 import { getUser } from './auth.js';
 import { HttpError, bad } from './errors.js';
 import { submitFeedback, listFeedback, updateFeedback, myFeedback, myFeedbackUnread, markFeedbackSeen, replyFeedback } from './feedback.js';
+import { myQueueCount } from './queue.js';
 import { avatarOwner, removeAvatar } from './uploads.js';
 import { tierChange, PROVISIONAL } from './tiers.js';
 import { decodeInternal, pub } from './schema.js';
@@ -620,6 +621,7 @@ fns.submitFeedback = submitFeedback;
 fns.listFeedback = listFeedback;
 fns.updateFeedback = updateFeedback;
 fns.myFeedback = myFeedback;
+fns.myQueueCount = myQueueCount;
 fns.myFeedbackUnread = myFeedbackUnread;
 fns.markFeedbackSeen = markFeedbackSeen;
 fns.replyFeedback = replyFeedback;

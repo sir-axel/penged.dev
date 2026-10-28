@@ -55,7 +55,7 @@ export function YourSpot({ player, toConfirm = 0 }) {
           <div className="flex gap-2">
             {toConfirm > 0 && (
               <Link
-                to="/matches"
+                to="/confirm"
                 className="flex-1 rounded-sm border border-warning/40 bg-warning/10 px-3 py-3 text-center text-xs font-medium sm:py-2 text-warning sm:flex-none"
               >
                 {toConfirm}

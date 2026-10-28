@@ -1,4 +1,6 @@
+import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { useQueueCount } from "@/hooks/useQueueCount";
 import { useAuth } from "@/context/AuthContext";
 import { useMyPlayer } from "@/hooks/useMyPlayer";
 import { Hero } from "@/components/home/Hero";
@@ -83,8 +85,27 @@ export function Home() {
           ).items || []
         ).filter((t) => !(t.accepted_user_ids || []).includes(user.id)).length,
     });
+  const queueCount = useQueueCount();
   return (
     <>
+      {player && queueCount > 0 && (
+        <div className="border-b-2 border-warning/50 bg-warning/10">
+          <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
+            <p className="text-sm font-medium" data-testid="queue-banner">
+              <span className="mr-2 inline-flex min-w-6 items-center justify-center bg-brand px-1.5 py-0.5 font-mono text-xs font-bold text-white">
+                {queueCount}
+              </span>
+              {queueCount === 1 ? "result is waiting for you" : "results are waiting for you"}
+            </p>
+            <Link
+              to="/confirm"
+              className="inline-flex min-h-[44px] shrink-0 items-center rounded-sm bg-primary px-4 text-sm font-medium text-primary-foreground"
+            >
+              Review
+            </Link>
+          </div>
+        </div>
+      )}
       <Hero
         players={home.players}
         verified={home.verified}
