@@ -30,11 +30,20 @@ Feedback: `/feedback` is public (signed-out visitors may send a note; honeypot +
 
 Chat: `/chat` is an open forum (General / Disputes / Looking for a game; public read, sign-in to post), private 1:1 messages (`/chat/dm/:id`, polled every 5 s while visible) and `@[Name](player:id)` mentions (migration 0013). Chat tables are never in the entity endpoints; everything goes through the chat functions in `api/src/chat.js`. Admins moderate at `/admin/reports`.
 
-Sign-up deviation: the original asked for an emailed verification code after registering. With no email service this step is skipped: registering signs you in immediately and sends you to `/welcome` to claim your username.
+Sign-up deviation: the original asked for an emailed verification code after registering. Here registering signs you in immediately and sends you to `/welcome`; a verification link is emailed in the background (see Email below) but is not required.
 
 Tests: `npm test` (rating math + game validator unit tests, and integration tests that drive the real Hono app against local D1/R2 via wrangler's platform proxy).
 
-Password reset: not available. There is no email service, so "forgot password" and "change password" are removed rather than shipped half-working. Add them back once an email provider (e.g. Resend's free tier) is wired in.
+## Email (password reset + email verification)
+
+Transactional email goes through [Resend](https://resend.com) (free plan: 100/day, 3,000/month) using plain `fetch` (`api/src/email.js`).
+
+- Sending domain `mail.penged.dev` must be verified in Resend (MX/SPF/DKIM records in Cloudflare DNS, DNS only).
+- Secret: `npx wrangler secret put RESEND_API_KEY` (a "Sending access" key limited to the domain). Never commit it.
+- Optional vars: `EMAIL_FROM` (default `Penged.dev <no-reply@mail.penged.dev>`), `EMAIL_REPLY_TO`.
+- **No `RESEND_API_KEY` (local dev, tests): nothing is sent.** The subject and link are logged to the console (`[email:not-sent] ...`); copy the link from the `wrangler dev` output. `EMAIL_LOG=off` silences that.
+- Flows: `/forgot-password` -> emailed link (1 hour, single use, revokes all sessions on use) -> `/reset-password`. Sign-up and the profile "Resend email" button send a verification link (24 hours) that lands on `/verify-email`. Verification is encouraged (banner on the profile) but NOT required to sign in.
+- Limits protecting the free cap: 3 requests/hour per IP on `/request-password-reset` and `/send-verification-email`; at most 3 emails per kind per address per hour; a global cap of 90 emails per UTC day, after which nothing is sent (logged as `daily cap`). Counters live in the Better Auth `verification` table (identifier `email-guard`), no extra migration. The reset response is identical for known and unknown addresses.
 
 ## Deploy (free) — step by step
 
@@ -70,4 +79,4 @@ Future integrations: the API boundary is plain HTTP under `/api` (entities read 
 - Better Auth rate limiting is on (database storage, keyed on `cf-connecting-ip`); `RATE_LIMIT=off` in `.dev.vars` disables it locally only.
 - State-changing requests to `/api/functions/*` and `/api/uploads` must come from the app origin (or `TRUSTED_ORIGINS`).
 - A cron trigger (every 15 min) expires overdue challenges/matches; `syncLadder` does the same on demand.
-- Not done: real password-reset email (link is logged), Google sign-in, anonymising deleted players' history.
+- Not done: Google sign-in, anonymising deleted players' history.

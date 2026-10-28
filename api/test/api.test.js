@@ -723,24 +723,6 @@ describe('review fixes', () => {
     expect((await flagsStmt(env).run()).meta.changes).toBe(0);
   });
 
-  it('password reset is disabled (no email service) and leaks no token', async () => {
-    await signUp('rs@x.test', 'rs');
-    const logs = [];
-    const orig = console.log;
-    console.log = (...x) => logs.push(x.join(' '));
-    let r;
-    try {
-      r = await app.request('/api/auth/request-password-reset', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:8787' }, body: JSON.stringify({ email: 'rs@x.test', redirectTo: 'http://localhost:8787/reset-password' }) });
-      await new Promise((res) => setTimeout(res, 50));
-    } finally {
-      console.log = orig;
-    }
-    expect(r.status).toBeGreaterThanOrEqual(400);
-    expect(logs.join('\n')).not.toMatch(/reset-password\//);
-    const rr = await app.request('/api/auth/reset-password', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:8787' }, body: JSON.stringify({ newPassword: 'brandnewpass1', token: 'x' }) });
-    expect(rr.status).toBeGreaterThanOrEqual(400);
-  });
-
   it('L3: cross-origin POSTs to functions and uploads are rejected', async () => {
     const u = await signUp('csrf@x.test', 'csrf');
     const bad = await app.request('/api/functions/syncLadder', { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: u.cookie, Origin: 'http://evil.example' }, body: '{}' });

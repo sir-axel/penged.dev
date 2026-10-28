@@ -14,6 +14,9 @@ const authClient = createAuthClient({
   basePath: `${apiUrl.pathname.replace(/\/$/, "")}/auth`,
 });
 
+// Where Better Auth sends people after they click the emailed verification link (?error=... on failure).
+const VERIFY_CALLBACK = "/verify-email?done=1";
+
 export class ApiError extends Error {
   constructor(message, status, data) {
     super(message);
@@ -94,8 +97,29 @@ export const api = {
       if (error) throw authError(error, "Invalid email or password");
     },
     async register({ email, password, username }) {
-      const { error } = await authClient.signUp.email({ email, password, name: username });
+      const { error } = await authClient.signUp.email({
+        email,
+        password,
+        name: username,
+        callbackURL: VERIFY_CALLBACK,
+      });
       if (error) throw authError(error, "Registration failed");
+    },
+    // The server answers the same whether or not the address has an account (no enumeration).
+    async forgotPassword(email) {
+      const { error } = await authClient.requestPasswordReset({
+        email,
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      if (error) throw authError(error, "Could not send the reset link.");
+    },
+    async resetPassword({ token, newPassword }) {
+      const { error } = await authClient.resetPassword({ token, newPassword });
+      if (error) throw authError(error, "Failed to reset password");
+    },
+    async sendVerificationEmail(email) {
+      const { error } = await authClient.sendVerificationEmail({ email, callbackURL: VERIFY_CALLBACK });
+      if (error) throw authError(error, "Could not send the verification email.");
     },
     async logout() {
       await authClient.signOut().catch(() => {});

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { LogOut, Trash2 } from "lucide-react";
+import { BadgeCheck, KeyRound, LoaderCircle, LogOut, Trash2 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import {
   AlertDialog,
@@ -16,7 +16,11 @@ import { Button } from "@/components/ui/button";
 import { api } from "@/api/client";
 
 export function AccountPanel({ email }) {
-  let { logout } = useAuth(),
+  let { logout, user } = useAuth(),
+    [sendingReset, setSendingReset] = useState(false),
+    [notice, setNotice] = useState(""),
+    [sendingVerify, setSendingVerify] = useState(false),
+    [verifySent, setVerifySent] = useState(false),
     [deleting, setDeleting] = useState(false),
     [error, setError] = useState("");
   return (
@@ -25,8 +29,71 @@ export function AccountPanel({ email }) {
         <h2 className="font-display text-[0.55rem] uppercase tracking-[0.16em] text-muted-foreground">
           Account
         </h2>
-        <p className="mt-2 break-all font-mono text-[11px] text-muted-foreground">{email}</p>
+        <p className="mt-2 break-all font-mono text-[11px] text-muted-foreground">
+          {email}
+          {user?.emailVerified && (
+            <span className="ml-2 inline-flex items-center gap-1 text-success">
+              <BadgeCheck className="h-3.5 w-3.5" aria-hidden="true" />
+              Verified
+            </span>
+          )}
+        </p>
+        {user && !user.emailVerified && (
+          <div
+            data-testid="verify-banner"
+            className="mt-3 flex flex-wrap items-center justify-between gap-2 border border-border bg-secondary px-3 py-2"
+          >
+            <p className="text-[13px] text-foreground">
+              {verifySent
+                ? "Check your inbox for the verification link."
+                : "Verify your email so you can recover your account."}
+            </p>
+            {!verifySent && (
+              <button
+                type="button"
+                onClick={async () => {
+                  (setSendingVerify(true), setError(""));
+                  try {
+                    await api.auth.sendVerificationEmail(email);
+                    setVerifySent(true);
+                  } catch (e) {
+                    setError(e.message || "Could not send the verification email.");
+                  } finally {
+                    setSendingVerify(false);
+                  }
+                }}
+                disabled={sendingVerify}
+                className="inline-flex min-h-10 items-center border border-border bg-card px-3 text-sm font-medium hover:border-foreground/50 disabled:opacity-60"
+              >
+                {sendingVerify ? "Sending…" : "Resend email"}
+              </button>
+            )}
+          </div>
+        )}
         <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={async () => {
+              (setSendingReset(true), setError(""), setNotice(""));
+              try {
+                await api.auth.forgotPassword(email);
+                setNotice("Check your inbox for a link to change your password.");
+              } catch (e) {
+                setError(e.message || "Could not send the reset link.");
+              } finally {
+                setSendingReset(false);
+              }
+            }}
+            disabled={sendingReset}
+            className="inline-flex min-h-10 items-center gap-1.5 border border-border bg-card px-3 py-2 text-sm font-medium hover:border-foreground/50 disabled:opacity-60"
+          >
+            {sendingReset ? (
+              <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <KeyRound className="h-4 w-4" aria-hidden="true" />
+            )}
+            Change password
+          </button>
           <button
             type="button"
             onClick={() => logout(true)}
@@ -36,6 +103,11 @@ export function AccountPanel({ email }) {
             Sign out
           </button>
         </div>
+        {notice && (
+          <p role="status" className="mt-3 text-xs text-success">
+            {notice}
+          </p>
+        )}
       </section>
       <section className="border border-destructive/40 bg-destructive/5 p-4">
         <h2 className="font-display text-[0.55rem] uppercase tracking-[0.16em] text-destructive">

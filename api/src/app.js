@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { getAuth } from './auth.js';
 import { trustedOrigins } from './config.js';
+import { withCtx } from './email.js';
 import { HttpError } from './errors.js';
 import { entities } from './entities.js';
 import { functions } from './functions.js';
@@ -26,7 +27,15 @@ export function createApp() {
   app.use('/uploads', originGuard);
 
   app.get('/health', (c) => c.json({ ok: true }));
-  app.on(['GET', 'POST'], '/auth/*', (c) => getAuth(c.env, new URL(c.req.url).origin).handler(c.req.raw));
+  app.on(['GET', 'POST'], '/auth/*', (c) => {
+    let ctx;
+    try {
+      ctx = c.executionCtx;
+    } catch {
+      /* no ExecutionContext (tests): emails are awaited instead */
+    }
+    return withCtx(ctx, () => getAuth(c.env, new URL(c.req.url).origin).handler(c.req.raw));
+  });
   app.route('/entities', entities);
   app.route('/functions', functions);
   app.route('/uploads', uploads);

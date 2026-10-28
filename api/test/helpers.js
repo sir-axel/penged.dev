@@ -10,6 +10,7 @@ export const env = {
   BETTER_AUTH_URL: 'http://localhost:8787',
   TRUSTED_ORIGINS: 'http://localhost:8787,http://localhost:5173',
   RATE_LIMIT: 'off',
+  EMAIL_LOG: 'off', // no RESEND_API_KEY here, so emails are only logged; keep test output quiet
 };
 export const dispose = () => proxy.dispose();
 

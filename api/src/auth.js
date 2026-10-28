@@ -1,6 +1,7 @@
 import { betterAuth } from 'better-auth';
 import { authUrl, trustedOrigins } from './config.js';
 
+import { defer, guardedSend, passwordReset, verifyEmail } from './email.js';
 import { hashPassword, verifyPassword } from './password.js';
 
 // One instance per (env, request origin): the base URL may be derived from the request (see config.js).
@@ -23,8 +24,22 @@ export function getAuth(env, origin) {
       enabled: true,
       minPasswordLength: 8,
       autoSignIn: true,
+      // Existing accounts are unverified, so verification is encouraged in the UI, not required to sign in.
       requireEmailVerification: false,
+      resetPasswordTokenExpiresIn: 3600,
+      revokeSessionsOnPasswordReset: true,
       password: { hash: hashPassword, verify: verifyPassword },
+      // Only called for real accounts; runs in the background so timing doesn't reveal whether an address exists.
+      sendResetPassword: ({ user, url }) =>
+        defer(guardedSend(env, 'reset', { to: user.email, ...passwordReset({ url, name: user.name }) })),
+    },
+    emailVerification: {
+      sendOnSignUp: true,
+      sendOnSignIn: false,
+      autoSignInAfterVerification: true,
+      expiresIn: 86400,
+      sendVerificationEmail: ({ user, url }) =>
+        defer(guardedSend(env, 'verify', { to: user.email, ...verifyEmail({ url, name: user.name }) })),
     },
     user: {
       additionalFields: { role: { type: 'string', required: false, defaultValue: 'user', input: false } },
@@ -41,6 +56,9 @@ export function getAuth(env, origin) {
       customRules: {
         '/sign-in/email': { window: 60, max: 8 },
         '/sign-up/email': { window: 3600, max: 20 }, // shared office IPs sign up in bursts
+        // Resend's free plan is 100 emails/day: keep each IP well under it (per-address + daily caps are in email.js).
+        '/request-password-reset': { window: 3600, max: 3 },
+        '/send-verification-email': { window: 3600, max: 3 },
       },
     },
   });

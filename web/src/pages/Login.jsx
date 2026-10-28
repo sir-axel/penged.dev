@@ -31,6 +31,11 @@ export function Login() {
         </>
       }
     >
+      {new URLSearchParams(window.location.search).get("reset") === "1" && !error && (
+        <div role="status" className="mb-4 p-3 rounded-lg bg-success/10 text-success text-sm">
+          Password updated. Log in with your new password.
+        </div>
+      )}
       {error && (
         <div className="mb-4 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
           {error}
@@ -71,7 +76,15 @@ export function Login() {
           </div>
         </div>
         <div className="space-y-2">
-          <Label htmlFor="password">Password</Label>
+          <div className="flex items-center justify-between">
+            <Label htmlFor="password">Password</Label>
+            <Link
+              to="/forgot-password"
+              className="inline-flex min-h-10 items-center text-sm text-primary underline-offset-2 hover:underline"
+            >
+              Forgot password?
+            </Link>
+          </div>
           <div className="relative">
             <Lock
               className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground"
