@@ -126,26 +126,34 @@ export function Layout() {
       <main className="flex-1 pb-[calc(6rem+env(safe-area-inset-bottom))] md:pb-0">
         <Outlet />
       </main>
-      <footer className="border-t border-border px-4 py-8 sm:px-6">
-        <div className="mx-auto flex max-w-5xl flex-col gap-2 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+      {/* Dark band so the footer reads as a footer; links stacked one per row. Extra bottom padding on
+          phones keeps the last row clear of the fixed bottom nav. */}
+      <footer className="border-t-2 border-foreground bg-foreground px-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))] pt-8 text-background sm:px-6 md:pb-10">
+        <div className="mx-auto flex max-w-5xl flex-col gap-4">
           <Logo showWordmark />
-          <p className="flex flex-wrap items-center gap-x-4 font-mono uppercase tracking-[0.14em]">
-            <Link
-              to={feedbackHref(location.pathname + location.search)}
-              className="inline-flex min-h-10 items-center underline underline-offset-4 hover:text-foreground"
-            >
-              Feedback
-              <UnreadDot n={unreadReplies} className="ml-1.5" />
-            </Link>
-            <a
-              href="https://github.com/sir-axel/penged.dev"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex min-h-10 items-center underline underline-offset-4 hover:text-foreground"
-            >
-              Open source · contribute on GitHub
-            </a>
-            <span>penged.dev — verified match play</span>
+          <ul className="flex flex-col font-mono text-xs uppercase tracking-[0.14em]">
+            <li>
+              <Link
+                to={feedbackHref(location.pathname + location.search)}
+                className="inline-flex min-h-10 items-center text-background/80 underline underline-offset-4 hover:text-background"
+              >
+                Feedback
+                <UnreadDot n={unreadReplies} className="ml-1.5" />
+              </Link>
+            </li>
+            <li>
+              <a
+                href="https://github.com/sir-axel/penged.dev"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex min-h-10 items-center text-background/80 underline underline-offset-4 hover:text-background"
+              >
+                Open source · contribute on GitHub
+              </a>
+            </li>
+          </ul>
+          <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-background/60">
+            penged.dev — verified match play
           </p>
         </div>
       </footer>
