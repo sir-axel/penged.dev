@@ -92,7 +92,7 @@ export function Home() {
         <div className="border-b-2 border-warning/50 bg-warning/10">
           <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
             <p className="text-sm font-medium" data-testid="queue-banner">
-              <span className="mr-2 inline-flex min-w-6 items-center justify-center bg-brand px-1.5 py-0.5 font-mono text-xs font-bold text-white">
+              <span className="mr-2 inline-flex min-w-6 items-center justify-center bg-brand px-1.5 py-0.5 font-mono text-xs font-bold text-brand-foreground">
                 {queueCount}
               </span>
               {queueCount === 1 ? "result is waiting for you" : "results are waiting for you"}

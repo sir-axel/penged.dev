@@ -32,7 +32,7 @@ export default {
         border: c("border"),
         input: c("input"),
         ring: c("ring"),
-        brand: { DEFAULT: c("brand"), soft: c("brand-soft") },
+        brand: { DEFAULT: c("brand"), foreground: c("brand-foreground"), soft: c("brand-soft") },
         success: c("success"),
         warning: c("warning"),
       },

@@ -19,8 +19,8 @@ const TABS = [
   { key: "all", label: "All" },
 ];
 const KIND_STYLE = {
-  bug: "bg-destructive text-white",
-  idea: "bg-brand text-white",
+  bug: "bg-destructive text-destructive-foreground",
+  idea: "bg-brand text-brand-foreground",
   other: "bg-foreground text-background",
 };
 const when = (iso) => {
@@ -47,7 +47,7 @@ function Item({ item, onChange, onReply, busy }) {
           </span>
         )}
         {item.needs_reply && (
-          <span className="bg-destructive px-1.5 py-0.5 font-display text-[0.5rem] uppercase tracking-[0.14em] text-white">New reply</span>
+          <span className="bg-destructive px-1.5 py-0.5 font-display text-[0.5rem] uppercase tracking-[0.14em] text-destructive-foreground">New reply</span>
         )}
         <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">{when(item.created_date)}</span>
       </div>

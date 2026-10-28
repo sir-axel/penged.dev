@@ -77,7 +77,7 @@ function ConfirmCard({ match, busy, onRespond }) {
                 Keep it
               </Button>
               <Button
-                className="h-11 rounded-sm bg-destructive text-white hover:bg-destructive/90"
+                className="h-11 rounded-sm bg-destructive text-destructive-foreground hover:bg-destructive/90"
                 onClick={() => onRespond(match.id, pending)}
                 disabled={!!busy}
               >

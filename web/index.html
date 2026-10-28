@@ -8,6 +8,20 @@
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#f0f0f0" />
+    <!-- Paint the saved (or device) theme before first render so a dark user never sees a light flash. -->
+    <script>
+      (function () {
+        try {
+          var t = null;
+          try { t = localStorage.getItem("penged-theme"); } catch (e) {}
+          if (t !== "light" && t !== "dark") t = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+          var r = document.documentElement;
+          if (t === "dark") r.classList.add("dark");
+          r.style.colorScheme = t;
+          document.querySelector('meta[name="theme-color"]').setAttribute("content", t === "dark" ? "#141414" : "#f0f0f0");
+        } catch (e) {}
+      })();
+    </script>
     <title>Penged.dev — Verified workplace ping-pong</title>
     <meta
       name="description"

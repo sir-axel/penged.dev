@@ -186,6 +186,14 @@ const fmtUtc = (iso) => {
 // ---------- functions ----------
 const fns = {};
 
+// Display theme preference, stored on the account so it follows the person to every device. null clears it.
+fns.setTheme = async ({ env, user }, body) => {
+  const t = body.theme;
+  if (t !== 'light' && t !== 'dark' && t !== null) throw bad('Theme must be "light" or "dark".');
+  await env.DB.prepare('UPDATE "user" SET "theme" = ? WHERE "id" = ?').bind(t, user.id).run();
+  return { theme: t };
+};
+
 fns.createPlayer = ({ env, user }, body) =>
   retrying(async () => {
     const lv = await ladderVersion(env);

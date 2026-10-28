@@ -1,7 +1,8 @@
 import { useEffect } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
-import { Trophy, Plus, Swords, User, LogIn, Rss, ClipboardCheck, MessageSquare } from "lucide-react";
+import { Trophy, Plus, Swords, User, LogIn, Rss, ClipboardCheck, MessageSquare, Sun, Moon } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { useTheme } from "@/context/ThemeContext";
 import { Logo } from "@/components/Logo";
 import { CountBadge, UnreadDot, useNewFeedbackCount, useUnreadReplyCount } from "@/hooks/useFeedbackCount";
 import { useQueueCount } from "@/hooks/useQueueCount";
@@ -47,6 +48,8 @@ const DESKTOP_NAV = [...NAV_ITEMS, { to: "/chat", label: "Chat", short: "Chat", 
 export function Layout() {
   let { isAuthenticated } = useAuth();
   const location = useLocation();
+  const { theme, toggleTheme } = useTheme();
+  const dark = theme === "dark";
   const queueCount = useQueueCount();
   const chatUnread = useChatUnread();
   const chatCount = chatUnread.dms + chatUnread.mentions;
@@ -93,6 +96,15 @@ export function Layout() {
             ))}
           </nav>
           <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={toggleTheme}
+            aria-label={dark ? "Switch to light mode" : "Switch to dark mode"}
+            aria-pressed={dark}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-sm border border-border bg-secondary hover:bg-accent"
+          >
+            {dark ? <Sun className="h-4 w-4" aria-hidden="true" /> : <Moon className="h-4 w-4" aria-hidden="true" />}
+          </button>
           <Link
             to="/chat"
             aria-label={chatCount > 0 ? `Chat, ${chatCount} new` : "Chat"}

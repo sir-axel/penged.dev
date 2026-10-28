@@ -10,8 +10,8 @@ import { errMsg } from "@/hooks/useChat";
 export const CATEGORY_LABEL = { general: "General", disputes: "Disputes", lfg: "Looking for a game" };
 export const CATEGORY_STYLE = {
   general: "bg-foreground text-background",
-  disputes: "bg-destructive text-white",
-  lfg: "bg-brand text-white",
+  disputes: "bg-destructive text-destructive-foreground",
+  lfg: "bg-brand text-brand-foreground",
 };
 
 export function CategoryChip({ category }) {

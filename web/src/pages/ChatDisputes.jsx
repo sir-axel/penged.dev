@@ -30,7 +30,7 @@ export function ChatDisputes() {
       <ChatBar back="/chat" backTo="/chat" />
       <div className="mx-auto max-w-2xl px-4 py-5 sm:px-6">
         <div className="mb-4 flex items-start gap-3">
-          <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center bg-brand text-white"><ShieldAlert className="h-5 w-5" aria-hidden="true" /></span>
+          <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center bg-brand text-brand-foreground"><ShieldAlert className="h-5 w-5" aria-hidden="true" /></span>
           <div>
             <h1 className="font-heading text-xl font-bold leading-none">Disputes</h1>
             <p className="mt-1.5 text-sm text-muted-foreground">
@@ -52,7 +52,7 @@ export function ChatDisputes() {
                 <Link to={`/chat/t/${t.id}`} className="block min-h-11">
                   <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
                     {t.match && (
-                      <span className={`px-1.5 py-0.5 font-display text-[0.5rem] uppercase tracking-[0.14em] ${t.match.open ? "bg-brand text-white" : "bg-secondary text-muted-foreground"}`}>
+                      <span className={`px-1.5 py-0.5 font-display text-[0.5rem] uppercase tracking-[0.14em] ${t.match.open ? "bg-brand text-brand-foreground" : "bg-secondary text-muted-foreground"}`}>
                         {t.match.open ? "Open" : STATUS[t.match.status] || "Closed"}
                       </span>
                     )}

@@ -32,8 +32,8 @@ function referrerPath() {
 export const feedbackHref = (from) => (from && from !== "/feedback" ? `/feedback?from=${encodeURIComponent(from)}` : "/feedback");
 
 const KIND_STYLE = {
-  bug: "bg-destructive text-white",
-  idea: "bg-brand text-white",
+  bug: "bg-destructive text-destructive-foreground",
+  idea: "bg-brand text-brand-foreground",
   other: "bg-foreground text-background",
 };
 const STATUS_LABEL = { new: "Sent", read: "Seen", done: "Resolved" };
@@ -61,7 +61,7 @@ function MyItem({ item, onSeen, onReply }) {
               {STATUS_LABEL[item.status] || item.status}
             </span>
             {unread && (
-              <span className="bg-destructive px-1.5 py-0.5 font-display text-[0.5rem] uppercase tracking-[0.14em] text-white">New reply</span>
+              <span className="bg-destructive px-1.5 py-0.5 font-display text-[0.5rem] uppercase tracking-[0.14em] text-destructive-foreground">New reply</span>
             )}
             <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">{whenShort(item.created_date)}</span>
             {item.reply_count > 0 && (

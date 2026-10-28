@@ -42,7 +42,11 @@ export function getAuth(env, origin) {
         defer(guardedSend(env, 'verify', { to: user.email, ...verifyEmail({ url, name: user.name }) })),
     },
     user: {
-      additionalFields: { role: { type: 'string', required: false, defaultValue: 'user', input: false } },
+      additionalFields: {
+        role: { type: 'string', required: false, defaultValue: 'user', input: false },
+        // 'light' | 'dark' | null (no choice yet). Only writable through the setTheme function.
+        theme: { type: 'string', required: false, input: false },
+      },
     },
     // Rate limiting (stored in D1 so it holds across isolates). Client IP comes from Cloudflare's
     // cf-connecting-ip (x-forwarded-for is client-spoofable); with no IP header (plain local dev) BA skips limiting.
@@ -66,7 +70,7 @@ export function getAuth(env, origin) {
   return a;
 }
 
-/** Current session user ({id,email,name,role}) or null. */
+/** Current session user ({id,email,name,role,theme}) or null. */
 export async function getUser(c) {
   const s = await getAuth(c.env, new URL(c.req.url).origin).api.getSession({ headers: c.req.raw.headers });
   if (!s?.user) return null;

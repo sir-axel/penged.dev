@@ -41,7 +41,7 @@ export function CountBadge({ n, className = "" }) {
   return n > 0 ? (
     <span
       aria-label={`${n} new`}
-      className={`inline-flex min-w-5 items-center justify-center bg-brand px-1.5 py-0.5 font-mono text-[10px] font-bold leading-none text-white ${className}`}
+      className={`inline-flex min-w-5 items-center justify-center bg-brand px-1.5 py-0.5 font-mono text-[10px] font-bold leading-none text-brand-foreground ${className}`}
     >
       {n > 99 ? "99+" : n}
     </span>

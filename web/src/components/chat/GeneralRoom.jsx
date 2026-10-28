@@ -24,11 +24,11 @@ function DisputesButton() {
       to="/chat/disputes"
       data-testid="disputes-button"
       aria-label={n > 0 ? `Disputes, ${n} ${signedIn ? "open" : "recent"}` : "Disputes"}
-      className="inline-flex h-11 shrink-0 items-center gap-2 border-2 border-brand bg-brand px-4 font-display text-[0.6rem] uppercase tracking-[0.14em] text-white shadow-[3px_3px_0_0_hsl(var(--foreground)/0.8)] hover:brightness-110 active:translate-x-[1px] active:translate-y-[1px] active:shadow-[2px_2px_0_0_hsl(var(--foreground)/0.8)]"
+      className="inline-flex h-11 shrink-0 items-center gap-2 border-2 border-brand bg-brand px-4 font-display text-[0.6rem] uppercase tracking-[0.14em] text-brand-foreground shadow-[3px_3px_0_0_hsl(var(--foreground)/0.8)] hover:brightness-110 active:translate-x-[1px] active:translate-y-[1px] active:shadow-[2px_2px_0_0_hsl(var(--foreground)/0.8)]"
     >
       <ShieldAlert className="h-4 w-4" aria-hidden="true" />
       Disputes
-      {n > 0 && <span className="min-w-5 bg-white px-1.5 py-0.5 text-center font-mono text-[10px] font-bold leading-none text-brand">{n > 99 ? "99+" : n}</span>}
+      {n > 0 && <span className="min-w-5 bg-brand-foreground px-1.5 py-0.5 text-center font-mono text-[10px] font-bold leading-none text-brand">{n > 99 ? "99+" : n}</span>}
     </Link>
   );
 }
@@ -283,7 +283,7 @@ export function GeneralRoom() {
             type="button"
             onClick={toEnd}
             data-testid="new-messages-pill"
-            className="absolute bottom-full left-1/2 z-10 mb-3 inline-flex h-9 -translate-x-1/2 items-center gap-1.5 rounded-full border-2 border-foreground/80 bg-brand px-4 font-display text-[0.55rem] uppercase tracking-[0.12em] text-white shadow-lg"
+            className="absolute bottom-full left-1/2 z-10 mb-3 inline-flex h-9 -translate-x-1/2 items-center gap-1.5 rounded-full border-2 border-foreground/80 bg-brand px-4 font-display text-[0.55rem] uppercase tracking-[0.12em] text-brand-foreground shadow-lg"
           >
             New messages <ArrowDown className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
