@@ -1,3 +1,4 @@
+import { paddleLabel } from "@/components/match/PaddleToggle";
 import { Link } from "react-router-dom";
 import { Avatar } from "@/components/Avatar";
 
@@ -27,7 +28,7 @@ export function SideCard({ side, gamesWon: gamesWon, winner: winner, label: labe
               {e.display_name || e.username}
             </Link>
             <span className="shrink-0 rounded-sm border border-border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.08em] text-muted-foreground">
-              {e.paddle || "default"}
+              {paddleLabel(e.paddle)}
             </span>
           </li>
         ))}
