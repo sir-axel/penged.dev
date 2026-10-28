@@ -6,7 +6,8 @@ import { ScrollToTop } from "@/components/ScrollToTop";
 import { RequireAuth, RequirePlayer } from "@/components/guards";
 import { Home } from "@/pages/Home";
 import { Leaderboard } from "@/pages/Leaderboard";
-import { Matches } from "@/pages/Matches";
+import { Feed } from "@/pages/Feed";
+import { Confirm } from "@/pages/Confirm";
 import { MatchDetail } from "@/pages/MatchDetail";
 import { PlayerProfile } from "@/pages/Player";
 import { Rules } from "@/pages/Rules";
@@ -31,7 +32,8 @@ function AppRoutes() {
       <Route element={<Layout />}>
         <Route path="/" element={<Home />} />
         <Route path="/leaderboard" element={<Leaderboard />} />
-        <Route path="/matches" element={<Matches />} />
+        <Route path="/feed" element={<Feed />} />
+        <Route path="/matches" element={<Navigate to="/feed" replace />} />
         <Route path="/matches/:id" element={<MatchDetail />} />
         <Route path="/players/:username" element={<PlayerProfile />} />
         <Route path="/rules" element={<Rules />} />
@@ -40,6 +42,7 @@ function AppRoutes() {
           <Route path="/welcome" element={<Welcome />} />
           <Route element={<RequirePlayer />}>
             <Route path="/matches/new" element={<NewMatch />} />
+            <Route path="/confirm" element={<Confirm />} />
             <Route path="/challenges" element={<Challenges />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/admin/reviews" element={<AdminReviews />} />

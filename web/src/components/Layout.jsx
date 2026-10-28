@@ -1,9 +1,10 @@
 import { useEffect } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
-import { Trophy, Plus, Swords, User, LogIn } from "lucide-react";
+import { Trophy, Plus, Swords, User, LogIn, Rss, ClipboardCheck } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { Logo } from "@/components/Logo";
 import { CountBadge, UnreadDot, useNewFeedbackCount, useUnreadReplyCount } from "@/hooks/useFeedbackCount";
+import { useQueueCount } from "@/hooks/useQueueCount";
 import { feedbackHref } from "@/pages/Feedback";
 
 export const NAV_ITEMS = [
@@ -14,10 +15,23 @@ export const NAV_ITEMS = [
     icon: Trophy,
   },
   {
+    to: "/feed",
+    label: "Feed",
+    short: "Feed",
+    icon: Rss,
+  },
+  {
     to: "/matches/new",
     label: "Record a match",
     short: "Record",
     icon: Plus,
+  },
+  {
+    to: "/confirm",
+    label: "To confirm",
+    short: "Confirm",
+    icon: ClipboardCheck,
+    badge: true,
   },
   {
     to: "/challenges",
@@ -29,6 +43,7 @@ export const NAV_ITEMS = [
 export function Layout() {
   let { isAuthenticated } = useAuth();
   const location = useLocation();
+  const queueCount = useQueueCount();
   const newFeedback = useNewFeedbackCount();
   const unreadReplies = useUnreadReplyCount();
   // While a text field is focused the on-screen keyboard is (probably) open: drop the bottom nav and
@@ -57,15 +72,16 @@ export function Layout() {
             <Logo />
           </Link>
           <nav aria-label="Main" className="hidden items-center gap-1 md:flex">
-            {NAV_ITEMS.map(({ to: e, label: t }) => (
+            {NAV_ITEMS.map(({ to: e, label: t, badge }) => (
               <NavLink
                 to={e}
                 className={({ isActive: e }) =>
-                  `px-3 py-2 font-display text-[0.58rem] uppercase tracking-[0.14em] transition-colors ${e ? "text-foreground" : "text-muted-foreground hover:text-foreground"}`
+                  `inline-flex items-center px-3 py-2 font-display text-[0.58rem] uppercase tracking-[0.14em] transition-colors ${e ? "text-foreground" : "text-muted-foreground hover:text-foreground"}`
                 }
                 key={e}
               >
                 {t}
+                {badge && <CountBadge n={queueCount} className="ml-1.5" />}
               </NavLink>
             ))}
           </nav>
@@ -112,16 +128,19 @@ export function Layout() {
         aria-label="Primary"
         className="kb-hide fixed inset-x-0 bottom-0 z-30 border-t-2 border-foreground/80 bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
       >
-        <ul className="grid grid-cols-3">
-          {NAV_ITEMS.map(({ to, short, icon: Icon }) => (
+        <ul className="grid grid-cols-5">
+          {NAV_ITEMS.map(({ to, short, icon: Icon, badge }) => (
             <li key={to}>
               <NavLink
                 to={to}
                 className={({ isActive }) =>
-                  `flex min-h-[58px] flex-col items-center justify-center gap-1 font-display text-[0.5rem] uppercase tracking-[0.12em] ${isActive ? "text-brand" : "text-muted-foreground"}`
+                  `flex min-h-[58px] flex-col items-center justify-center gap-1 font-display text-[0.45rem] uppercase tracking-[0.06em] ${isActive ? "text-brand" : "text-muted-foreground"}`
                 }
               >
-                <Icon className="h-5 w-5" aria-hidden="true" />
+                <span className="relative">
+                  <Icon className="h-5 w-5" aria-hidden="true" />
+                  {badge && <CountBadge n={queueCount} className="absolute -right-3 -top-2" />}
+                </span>
                 {short}
               </NavLink>
             </li>

@@ -33,7 +33,7 @@ export function outcomeText(t, asChallenger) {
     : `Declined · ${minus(pen)} rating${rankMoved ? ` · #${t.penalty_rank_before} → #${t.penalty_rank_after}` : ""}${halved}`;
 }
 
-function DeclineButton({ challenge, busy, onDecline }) {
+export function DeclineButton({ challenge, busy, onDecline }) {
   const { data } = useQuery({
     queryKey: ["penalty-preview", challenge.id],
     queryFn: async () => (await api.functions.invoke("challengePenaltyPreview", { challenge_id: challenge.id })).data,
