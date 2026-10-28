@@ -18,6 +18,10 @@ import { Profile } from "@/pages/Profile";
 import { Feedback } from "@/pages/Feedback";
 import { AdminFeedback } from "@/pages/AdminFeedback";
 import { AdminReviews } from "@/pages/AdminReviews";
+import { AdminReports } from "@/pages/AdminReports";
+import { Chat } from "@/pages/Chat";
+import { ChatTopic } from "@/pages/ChatTopic";
+import { ChatDm } from "@/pages/ChatDm";
 import { Login } from "@/pages/Login";
 import { Register } from "@/pages/Register";
 import { NotFound } from "@/pages/NotFound";
@@ -38,6 +42,8 @@ function AppRoutes() {
         <Route path="/players/:username" element={<PlayerProfile />} />
         <Route path="/rules" element={<Rules />} />
         <Route path="/feedback" element={<Feedback />} />
+        <Route path="/chat" element={<Chat />} />
+        <Route path="/chat/t/:id" element={<ChatTopic />} />
         <Route element={<RequireAuth />}>
           <Route path="/welcome" element={<Welcome />} />
           <Route element={<RequirePlayer />}>
@@ -47,6 +53,8 @@ function AppRoutes() {
             <Route path="/profile" element={<Profile />} />
             <Route path="/admin/reviews" element={<AdminReviews />} />
             <Route path="/admin/feedback" element={<AdminFeedback />} />
+            <Route path="/admin/reports" element={<AdminReports />} />
+            <Route path="/chat/dm/:threadId" element={<ChatDm />} />
           </Route>
         </Route>
       </Route>

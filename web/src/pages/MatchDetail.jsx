@@ -1,9 +1,9 @@
 import { BackButton } from "@/components/BackButton";
 import { describeChange, describeGames } from "@/lib/ratingFactors";
 import { useState, useEffect } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Check, ChevronDown, LoaderCircle, TriangleAlert, X } from "lucide-react";
+import { Check, ChevronDown, LoaderCircle, MessageSquare, TriangleAlert, X } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
@@ -14,7 +14,60 @@ import { Button } from "@/components/ui/button";
 import { TierBadge } from "@/components/TierBadge";
 import { tierChips } from "@/lib/feedChips";
 import { tierFor } from "@/lib/tiers";
+import { Composer } from "@/components/chat/Composer";
 import { api } from "@/api/client";
+
+const sideLabel = (side) => (side || []).map((e) => e.display_name || e.username || "A player").join(" & ");
+
+/** Link to the match's dispute topic, or (pending/disputed, participants only) a way to start one. */
+function DiscussSection({ match, isParticipant }) {
+  const nav = useNavigate();
+  const [composing, setComposing] = useState(false);
+  const { data: topic } = useQuery({
+    queryKey: ["match-topic", match.id],
+    staleTime: 30000,
+    queryFn: async () => (await api.functions.invoke("listTopics", { match_id: match.id })).data.items[0] || null,
+  });
+  const open = ["pending", "disputed"].includes(match.status);
+  if (!topic && !(open && isParticipant)) return null;
+  const date = new Date(match.created_date).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  const title = `Dispute: ${sideLabel(match.side_a)} vs ${sideLabel(match.side_b)} · ${date}`.slice(0, 120);
+  const start = async (body) => {
+    const { data } = await api.functions.invoke("createTopic", { category: "disputes", title, body, match_id: match.id });
+    nav(`/chat/t/${data.topic.id}`);
+  };
+  return (
+    <section className="space-y-2" aria-label="Discussion">
+      <h2 className="font-display text-[0.58rem] uppercase tracking-[0.22em] text-muted-foreground">Discussion</h2>
+      {topic ? (
+        <Link
+          to={`/chat/t/${topic.id}`}
+          className="flex min-h-11 items-center gap-2 rounded-sm border border-border bg-card px-3 py-2 text-sm font-medium hover:border-foreground/40"
+        >
+          <MessageSquare className="h-4 w-4" aria-hidden="true" />
+          <span className="flex-1">Open the discussion</span>
+          <span className="font-mono text-[11px] text-muted-foreground">{topic.post_count} {topic.post_count === 1 ? "post" : "posts"}</span>
+        </Link>
+      ) : composing ? (
+        <Composer
+          id="discuss-body"
+          label="Start a discussion"
+          autoFocus
+          rows={4}
+          buttonLabel="Open discussion"
+          initialText={`Let's sort out this result (${sideLabel(match.side_a)} vs ${sideLabel(match.side_b)}). `}
+          onSend={start}
+          onCancel={() => setComposing(false)}
+        />
+      ) : (
+        <Button variant="outline" onClick={() => setComposing(true)} className="h-11 w-full rounded-sm">
+          <MessageSquare className="mr-2 h-4 w-4" aria-hidden="true" />
+          Discuss
+        </Button>
+      )}
+    </section>
+  );
+}
 
 export function MatchDetail() {
   let { id } = useParams(),
@@ -249,6 +302,7 @@ export function MatchDetail() {
             {error}
           </p>
         )}
+        <DiscussSection match={match} isParticipant={isParticipant} />
         {match.status === "verified" && (match.rating_changes || []).length > 0 && (
           <section>
             <h2 className="font-display text-[0.58rem] uppercase tracking-[0.22em] text-muted-foreground">

@@ -137,3 +137,7 @@
   html[data-kb] .kb-hide { display: none; }
   html[data-kb] .kb-bar { bottom: 0; padding-bottom: calc(0.75rem + env(safe-area-inset-bottom)); }
 }
+
+@media (max-width: 767px) {
+  html[data-kb] .chat-composer { bottom: 0; padding-bottom: calc(0.75rem + env(safe-area-inset-bottom)); }
+}

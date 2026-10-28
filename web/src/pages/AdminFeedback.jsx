@@ -7,6 +7,8 @@ import { useAuth } from "@/context/AuthContext";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { Button } from "@/components/ui/button";
+import { CountBadge } from "@/hooks/useFeedbackCount";
+import { useChatUnread } from "@/hooks/useChat";
 import { api } from "@/api/client";
 import { ReplyBox, ReplyList } from "@/components/FeedbackThread";
 
@@ -127,6 +129,7 @@ function Item({ item, onChange, onReply, busy }) {
 
 export function AdminFeedback() {
   const { user } = useAuth();
+  const chatReports = useChatUnread().reports;
   const queryClient = useQueryClient();
   const [tab, setTab] = useState("new");
   const [busy, setBusy] = useState("");
@@ -185,12 +188,15 @@ export function AdminFeedback() {
         title="Feedback"
         description="Bugs, ideas and notes from players and visitors, newest first."
         action={
-          <Link
-            to="/admin/reviews"
-            className="inline-flex min-h-10 items-center border border-foreground bg-card px-3 py-1.5 font-display text-[0.55rem] uppercase tracking-[0.12em] hover:bg-secondary"
-          >
-            Challenge penalties
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link to="/admin/reviews" className="inline-flex min-h-10 items-center gap-2 border border-foreground bg-card px-3 py-1.5 font-display text-[0.55rem] uppercase tracking-[0.12em] hover:bg-secondary">
+              Challenge penalties
+            </Link>
+            <Link to="/admin/reports" className="inline-flex min-h-10 items-center gap-2 border border-foreground bg-card px-3 py-1.5 font-display text-[0.55rem] uppercase tracking-[0.12em] hover:bg-secondary">
+              Chat reports
+              <CountBadge n={chatReports} />
+            </Link>
+          </div>
         }
       />
       <div className="mx-auto max-w-2xl space-y-3 px-4 py-6 sm:px-6">

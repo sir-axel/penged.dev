@@ -15,11 +15,13 @@ import { Button } from "@/components/ui/button";
 import { AccountPanel } from "@/components/AccountPanel";
 import { CountBadge, useNewFeedbackCount } from "@/hooks/useFeedbackCount";
 import { feedbackHref } from "@/pages/Feedback";
+import { useChatUnread } from "@/hooks/useChat";
 import { api } from "@/api/client";
 
 export function Profile() {
   let { user } = useAuth(),
     newFeedback = useNewFeedbackCount(),
+    chatReports = useChatUnread().reports,
     { player, refetch: refetch } = useMyPlayer(),
     queryClient = useQueryClient(),
     [form, setForm] = useState({
@@ -197,6 +199,15 @@ export function Profile() {
               >
                 Feedback inbox
                 <CountBadge n={newFeedback} />
+              </Link>
+            )}
+            {user?.role === "admin" && (
+              <Link
+                to="/admin/reports"
+                className="inline-flex items-center gap-1.5 rounded-sm border border-border bg-card px-3 py-2 text-sm font-medium hover:border-foreground/40"
+              >
+                Chat reports
+                <CountBadge n={chatReports} />
               </Link>
             )}
             <Link

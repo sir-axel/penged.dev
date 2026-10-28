@@ -7,6 +7,7 @@ import { getUser } from './auth.js';
 import { HttpError, bad } from './errors.js';
 import { submitFeedback, listFeedback, updateFeedback, myFeedback, myFeedbackUnread, markFeedbackSeen, replyFeedback } from './feedback.js';
 import { myQueueCount } from './queue.js';
+import * as chat from './chat.js';
 import { avatarOwner, removeAvatar } from './uploads.js';
 import { tierChange, PROVISIONAL } from './tiers.js';
 import { decodeInternal, pub } from './schema.js';
@@ -611,6 +612,7 @@ fns.deleteAccount = ({ env, user }, body) =>
       stmt(env, `DELETE FROM challenges WHERE status IN ('open','accepted') AND (challenger_user_id = ? OR defender_user_id = ?)`, user.id, user.id),
       stmt(env, `DELETE FROM matches WHERE status = 'pending' AND EXISTS (SELECT 1 FROM json_each(all_user_ids) WHERE value = ?)`, user.id),
       stmt(env, 'DELETE FROM players WHERE user_id = ?', user.id),
+      ...chat.chatErasureStmts(env, user.id),
       ...rankStmts(env),
       flagsStmt(env),
       stmt(env, 'DELETE FROM "session" WHERE "userId" = ?', user.id),
@@ -630,8 +632,13 @@ fns.myFeedbackUnread = myFeedbackUnread;
 fns.markFeedbackSeen = markFeedbackSeen;
 fns.replyFeedback = replyFeedback;
 
+for (const n of [
+  'listTopics', 'getTopic', 'createTopic', 'createPost', 'editPost', 'deletePost', 'adminTopic', 'dmStart', 'dmList', 'dmMessages', 'dmSend',
+  'dmMarkRead', 'mentionsList', 'mentionsMarkRead', 'chatUnread', 'playerSearch', 'block', 'unblock', 'report', 'adminReports', 'adminResolveReport',
+]) fns[n] = chat[n];
+
 // The only functions callable without a session (they get user = null).
-const PUBLIC_FNS = new Set(['submitFeedback']);
+const PUBLIC_FNS = new Set(['submitFeedback', 'listTopics', 'getTopic', 'playerSearch']);
 
 export const functions = new Hono();
 functions.post('/:name', async (c) => {

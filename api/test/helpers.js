@@ -18,7 +18,7 @@ export const app = { request: (path, init) => worker.request(path, init, env) };
 const ORIGIN = 'http://localhost:8787';
 
 export async function reset() {
-  for (const t of ['players', 'matches', 'challenges', '_guard', 'session', 'account', 'verification', 'avatars', 'feedback', '"user"']) {
+  for (const t of ['players', 'matches', 'challenges', '_guard', 'session', 'account', 'verification', 'avatars', 'feedback', 'forum_topics', 'dm_threads', 'mentions', 'blocks', 'reports', '"user"']) {
     await env.DB.prepare(`DELETE FROM ${t}`).run();
   }
 }

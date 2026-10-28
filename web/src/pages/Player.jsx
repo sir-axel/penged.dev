@@ -1,5 +1,8 @@
-import { useEffect } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { MessageSquare } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
+import { useMyPlayer } from "@/hooks/useMyPlayer";
 import { useQuery } from "@tanstack/react-query";
 import { BackButton } from "@/components/BackButton";
 import { EmptyState } from "@/components/EmptyState";
@@ -33,6 +36,40 @@ function TierProgress({ player, format }) {
           <div className="h-full" style={{ width: `${Math.round(tierProgress(rating) * 100)}%`, backgroundColor: TIER_STYLE[tierFor(rating).key].bd }} />
         </div>
       )}
+    </div>
+  );
+}
+
+function MessageButton({ player }) {
+  const nav = useNavigate();
+  const { isAuthenticated } = useAuth();
+  const { player: me } = useMyPlayer();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  if (!isAuthenticated || !me || me.id === player.id) return null;
+  const start = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      const { data } = await api.functions.invoke("dmStart", { player_id: player.id });
+      nav(`/chat/dm/${data.thread.id}`);
+    } catch (e) {
+      setError(e.response?.data?.error || e.message || "Could not start a conversation.");
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="mt-3">
+      <button
+        type="button"
+        onClick={start}
+        disabled={busy}
+        className="inline-flex min-h-11 items-center gap-2 border border-foreground bg-card px-4 py-2 font-display text-[0.55rem] uppercase tracking-[0.12em] hover:bg-secondary disabled:opacity-50"
+      >
+        <MessageSquare className="h-4 w-4" aria-hidden="true" />
+        Message
+      </button>
+      {error && <p role="alert" className="mt-1 text-sm text-destructive">{error}</p>}
     </div>
   );
 }
@@ -173,6 +210,7 @@ export function PlayerProfile() {
             )}
           </div>
         </div>
+        <MessageButton player={player} />
         <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
           {["singles", "doubles"].map((fmt) => (
             <FormatBlock player={player} format={fmt} key={fmt} />

@@ -1,10 +1,11 @@
 import { useEffect } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
-import { Trophy, Plus, Swords, User, LogIn, Rss, ClipboardCheck } from "lucide-react";
+import { Trophy, Plus, Swords, User, LogIn, Rss, ClipboardCheck, MessageSquare } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { Logo } from "@/components/Logo";
 import { CountBadge, UnreadDot, useNewFeedbackCount, useUnreadReplyCount } from "@/hooks/useFeedbackCount";
 import { useQueueCount } from "@/hooks/useQueueCount";
+import { useChatUnread } from "@/hooks/useChat";
 import { feedbackHref } from "@/pages/Feedback";
 
 export const NAV_ITEMS = [
@@ -40,10 +41,15 @@ export const NAV_ITEMS = [
     icon: Swords,
   },
 ];
+// Desktop header only: the mobile bottom nav keeps exactly the five items above (chat lives in the mobile header).
+const DESKTOP_NAV = [...NAV_ITEMS, { to: "/chat", label: "Chat", chat: true }];
+
 export function Layout() {
   let { isAuthenticated } = useAuth();
   const location = useLocation();
   const queueCount = useQueueCount();
+  const chatUnread = useChatUnread();
+  const chatCount = chatUnread.dms + chatUnread.mentions;
   const newFeedback = useNewFeedbackCount();
   const unreadReplies = useUnreadReplyCount();
   // While a text field is focused the on-screen keyboard is (probably) open: drop the bottom nav and
@@ -72,7 +78,7 @@ export function Layout() {
             <Logo />
           </Link>
           <nav aria-label="Main" className="hidden items-center gap-1 md:flex">
-            {NAV_ITEMS.map(({ to: e, label: t, badge }) => (
+            {DESKTOP_NAV.map(({ to: e, label: t, badge, chat }) => (
               <NavLink
                 to={e}
                 className={({ isActive: e }) =>
@@ -82,9 +88,19 @@ export function Layout() {
               >
                 {t}
                 {badge && <CountBadge n={queueCount} className="ml-1.5" />}
+                {chat && <CountBadge n={chatCount} className="ml-1.5" />}
               </NavLink>
             ))}
           </nav>
+          <div className="flex items-center gap-2">
+          <Link
+            to="/chat"
+            aria-label={chatCount > 0 ? `Chat, ${chatCount} new` : "Chat"}
+            className="relative inline-flex h-10 w-10 items-center justify-center border border-foreground bg-card hover:bg-secondary md:hidden"
+          >
+            <MessageSquare className="h-4 w-4" aria-hidden="true" />
+            <CountBadge n={chatCount} className="absolute -right-2 -top-2" />
+          </Link>
           {isAuthenticated ? (
             <Link
               to="/profile"
@@ -104,6 +120,7 @@ export function Layout() {
               Sign in
             </Link>
           )}
+          </div>
         </div>
       </header>
       <main className="flex-1 pb-[calc(6rem+env(safe-area-inset-bottom))] md:pb-0">

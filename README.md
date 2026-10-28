@@ -28,6 +28,8 @@ Admins (forfeit review at `/admin/reviews`) are granted only by a command, never
 
 Feedback: `/feedback` is public (signed-out visitors may send a note; honeypot + 5/hour per hashed IP + 20/day per user). Notes live in the `feedback` table (migration 0009), never in the entity endpoints; admins read them at `/admin/feedback` via the `listFeedback` / `updateFeedback` functions.
 
+Chat: `/chat` is an open forum (General / Disputes / Looking for a game; public read, sign-in to post), private 1:1 messages (`/chat/dm/:id`, polled every 5 s while visible) and `@[Name](player:id)` mentions (migration 0013). Chat tables are never in the entity endpoints; everything goes through the chat functions in `api/src/chat.js`. Admins moderate at `/admin/reports`.
+
 Sign-up deviation: the original asked for an emailed verification code after registering. With no email service this step is skipped: registering signs you in immediately and sends you to `/welcome` to claim your username.
 
 Tests: `npm test` (rating math + game validator unit tests, and integration tests that drive the real Hono app against local D1/R2 via wrangler's platform proxy).
