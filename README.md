@@ -30,7 +30,7 @@ Sign-up deviation: the original asked for an emailed verification code after reg
 
 Tests: `npm test` (rating math + game validator unit tests, and integration tests that drive the real Hono app against local D1/R2 via wrangler's platform proxy).
 
-Password reset: there is no email service. The reset link is written to the Worker log: `wrangler tail` in production, the `wrangler dev` console locally (`[password reset] you@example.com: https://…`).
+Password reset: not available. There is no email service, so "forgot password" and "change password" are removed rather than shipped half-working. Add them back once an email provider (e.g. Resend's free tier) is wired in.
 
 ## Deploy (free) — step by step
 

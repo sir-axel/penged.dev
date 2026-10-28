@@ -362,19 +362,6 @@ describe('base URL derived from the request when BETTER_AUTH_URL is unset', () =
     expect(evil.headers.get('access-control-allow-origin')).toBeNull();
     const extra = await a.request('http://my.site.example/api/health', { headers: { Origin: 'http://other.example' } });
     expect(extra.headers.get('access-control-allow-origin')).toBe('http://other.example');
-    const logs = [];
-    const orig = console.log;
-    console.log = (...x) => logs.push(x.join(' '));
-    try {
-      await a.request('http://my.site.example/api/auth/request-password-reset', {
-        method: 'POST', headers: hdr('http://my.site.example'),
-        body: JSON.stringify({ email: 'o@x.test', redirectTo: 'http://my.site.example/reset-password' }),
-      });
-      await new Promise((r) => setTimeout(r, 50));
-    } finally {
-      console.log = orig;
-    }
-    expect(logs.join('\n')).toMatch(/\[password reset\] o@x\.test: http:\/\/my\.site\.example\/api\/auth\/reset-password\//);
   });
 });
 
@@ -490,22 +477,22 @@ describe('review fixes', () => {
     expect((await flagsStmt(env).run()).meta.changes).toBe(0);
   });
 
-  it('M1: password reset revokes existing sessions', async () => {
-    const u = await signUp('rs@x.test', 'rs');
-    expect((await get('/api/auth/get-session', u)).body).not.toBeNull();
+  it('password reset is disabled (no email service) and leaks no token', async () => {
+    await signUp('rs@x.test', 'rs');
     const logs = [];
     const orig = console.log;
     console.log = (...x) => logs.push(x.join(' '));
+    let r;
     try {
-      await app.request('/api/auth/request-password-reset', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:8787' }, body: JSON.stringify({ email: 'rs@x.test', redirectTo: 'http://localhost:8787/reset-password' }) });
-      await new Promise((r) => setTimeout(r, 50));
+      r = await app.request('/api/auth/request-password-reset', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:8787' }, body: JSON.stringify({ email: 'rs@x.test', redirectTo: 'http://localhost:8787/reset-password' }) });
+      await new Promise((res) => setTimeout(res, 50));
     } finally {
       console.log = orig;
     }
-    const token = /reset-password\/([A-Za-z0-9]+)\?/.exec(logs.join('\n'))[1];
-    const rr = await app.request('/api/auth/reset-password', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:8787' }, body: JSON.stringify({ newPassword: 'brandnewpass1', token }) });
-    expect(rr.status).toBe(200);
-    expect((await get('/api/auth/get-session', u)).body).toBeNull();
+    expect(r.status).toBeGreaterThanOrEqual(400);
+    expect(logs.join('\n')).not.toMatch(/reset-password\//);
+    const rr = await app.request('/api/auth/reset-password', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:8787' }, body: JSON.stringify({ newPassword: 'brandnewpass1', token: 'x' }) });
+    expect(rr.status).toBeGreaterThanOrEqual(400);
   });
 
   it('L3: cross-origin POSTs to functions and uploads are rejected', async () => {

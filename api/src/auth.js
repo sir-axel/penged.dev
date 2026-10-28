@@ -24,12 +24,7 @@ export function getAuth(env, origin) {
       minPasswordLength: 8,
       autoSignIn: true,
       requireEmailVerification: false,
-      revokeSessionsOnPasswordReset: true,
       password: { hash: hashPassword, verify: verifyPassword },
-      sendResetPassword: async ({ user, url }) => {
-        // No mail service: the link is visible with `wrangler tail` / the dev console.
-        console.log(`[password reset] ${user.email}: ${url}`);
-      },
     },
     user: {
       additionalFields: { role: { type: 'string', required: false, defaultValue: 'user', input: false } },
@@ -46,8 +41,6 @@ export function getAuth(env, origin) {
       customRules: {
         '/sign-in/email': { window: 60, max: 8 },
         '/sign-up/email': { window: 3600, max: 20 }, // shared office IPs sign up in bursts
-        '/request-password-reset': { window: 3600, max: 5 },
-        '/reset-password': { window: 3600, max: 10 },
       },
     },
   });

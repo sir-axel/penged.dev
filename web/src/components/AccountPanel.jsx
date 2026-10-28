@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { KeyRound, LoaderCircle, LogOut, Trash2 } from "lucide-react";
+import { LogOut, Trash2 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import {
   AlertDialog,
@@ -17,9 +17,7 @@ import { api } from "@/api/client";
 
 export function AccountPanel({ email }) {
   let { logout } = useAuth(),
-    [sendingReset, setSendingReset] = useState(false),
     [deleting, setDeleting] = useState(false),
-    [notice, setNotice] = useState(""),
     [error, setError] = useState("");
   return (
     <div className="space-y-3">
@@ -31,29 +29,6 @@ export function AccountPanel({ email }) {
         <div className="mt-3 flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={async () => {
-              (setSendingReset(true), setError(""), setNotice(""));
-              try {
-                (await api.auth.forgotPassword(email),
-                  setNotice(`Password reset link sent to ${email}.`));
-              } catch (e) {
-                setError(e.message || "Could not send the reset link.");
-              } finally {
-                setSendingReset(false);
-              }
-            }}
-            disabled={sendingReset}
-            className="inline-flex items-center gap-1.5 border border-border bg-card px-3 py-2 text-sm font-medium hover:border-foreground/50 disabled:opacity-60"
-          >
-            {sendingReset ? (
-              <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" />
-            ) : (
-              <KeyRound className="h-4 w-4" aria-hidden="true" />
-            )}
-            Change password
-          </button>
-          <button
-            type="button"
             onClick={() => logout(true)}
             className="inline-flex items-center gap-1.5 border border-border bg-card px-3 py-2 text-sm font-medium hover:border-foreground/50"
           >
@@ -61,7 +36,6 @@ export function AccountPanel({ email }) {
             Sign out
           </button>
         </div>
-        {notice && <p className="mt-3 text-xs text-success">{notice}</p>}
       </section>
       <section className="border border-destructive/40 bg-destructive/5 p-4">
         <h2 className="font-display text-[0.55rem] uppercase tracking-[0.16em] text-destructive">

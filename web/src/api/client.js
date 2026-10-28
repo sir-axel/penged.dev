@@ -1,7 +1,7 @@
 // Thin API client. Keeps the surface the pages were written against:
 //   api.entities.{Player,Match,Challenge}.{list,filter,get,count}
 //   api.functions.invoke(name, payload) -> { data }
-//   api.auth.{me,login,register,logout,forgotPassword,resetPassword}
+//   api.auth.{me,login,register,logout}
 //   api.uploadPublicFile(file) -> { file_url }
 // The API location is configurable: VITE_API_URL (default "/api", same-origin).
 import { createAuthClient } from "better-auth/react";
@@ -99,17 +99,6 @@ export const api = {
     },
     async logout() {
       await authClient.signOut().catch(() => {});
-    },
-    async forgotPassword(email) {
-      const { error } = await authClient.requestPasswordReset({
-        email,
-        redirectTo: `${window.location.origin}/reset-password`,
-      });
-      if (error) throw authError(error, "Could not send the reset link.");
-    },
-    async resetPassword({ token, newPassword }) {
-      const { error } = await authClient.resetPassword({ token, newPassword });
-      if (error) throw authError(error, "Failed to reset password");
     },
   },
   async uploadPublicFile(file) {
