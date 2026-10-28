@@ -32,6 +32,7 @@ export const RULE_SECTIONS = [
     items: [
       "Rank is your place in the rating order. New players start at 1400 and slot in by rating.",
       "Win and your rating rises, so you pass everyone you now out-rate. Ties go to whoever has played more, then whoever joined first.",
+      "Stay active: with no verified singles match in 30 days you move to the Inactive list, keeping your rating, and are ranked again when you next play. Under 5 matches is marked provisional.",
       "Beating someone far below you earns little rating, so it barely moves you.",
       "Doubles is ranked the same way, by doubles rating.",
       "Overall blends both ratings, weighted by how many matches you have played in each.",

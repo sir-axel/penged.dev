@@ -8,10 +8,11 @@ export const RATING_POINTS = [
   "K-factor: 48 for your first 10 matches, 32 until 30, then 24 for good.",
   "One result moves you at most 80 points.",
   "Rematches are worth less. Each earlier meeting with the same opponent in the last 180 days scales the swing by 1 / (1 + 0.75 × meetings). After six, neither of you moves.",
+  "Paddles count. A paid paddle is treated as +50 rating when working out who was expected to win: win with one and you gain a little less, beat one and you gain a little more.",
   "Doubles uses each team's average rating.",
 ];
 export const RATING_FORMULA =
-  "expected  = 1 / (1 + 10 ^ ((opponent - you) / 400))\ndominance = (winnerPoints - loserPoints) / (winnerPoints + loserPoints)\nmargin    = 0.75 + 1.25 * sqrt(dominance)         (0.75 to 2.0)\nupset     = 2.2 / (2.2 + 0.001 * (winner - loser))  (0.6 to 1.6)\nchange    = K * (result - expected) * repeat * margin * upset   (max 80)\n\nresult = 1 for a win, 0 for a loss (the loser gets the same margin and upset factors)\nK      = 48 (first 10) / 32 (next 20) / 24 (after)\nrepeat = 1 / (1 + 0.75 * earlier meetings)";
+  "edge      = 50 * share of paid paddles on your side  (0, 25 or 50)\nexpected  = 1 / (1 + 10 ^ (((opponent + their edge) - (you + your edge)) / 400))\ndominance = (winnerPoints - loserPoints) / (winnerPoints + loserPoints)\nmargin    = 0.75 + 1.25 * sqrt(dominance)         (0.75 to 2.0)\nupset     = 2.2 / (2.2 + 0.001 * (winner - loser))  (0.6 to 1.6, edges included)\nchange    = K * (result - expected) * repeat * margin * upset   (max 80)\n\nresult = 1 for a win, 0 for a loss (the loser gets the same margin and upset factors)\nK      = 48 (first 10) / 32 (next 20) / 24 (after)\nrepeat = 1 / (1 + 0.75 * earlier meetings)";
 export const XP_POINTS = [
   "+25 xp for playing, +25 for winning",
   "+5 xp per game you take (five games max)",
@@ -95,9 +96,12 @@ export function RatingExplainer() {
             Worked example
           </h3>
           <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
-            First match: 1400 beats 1600, expected score 0.24. A 3-0 blowout (11-2, 11-3, 11-1) is
-            margin ×1.79 and upset ×1.10, so the winner gains 72 and the loser drops 72. The same
-            win, narrowly (11-9, 9-11, 12-10), is margin ×0.97: +39 and −39. Rank simply follows rating.
+            Two regulars (10 matches each, free paddles): 1400 beats 1600, expected score 0.24. A 3-0
+            blowout (11-2, 11-3, 11-1) is margin ×1.79 and upset ×1.10, so the winner gains 58 and the
+            loser drops 58. The same win, narrowly (11-9, 9-11, 12-10), is margin ×0.97: +32 and −32.
+            If the winner played with a paid paddle the blowout is +53 and −53; if the loser did, +64
+            and −64. If the winner had been away for 81 days, they gain 80 (the cap) while the loser
+            still drops 58. Rank simply follows rating.
           </p>
           <Link
             to="/rules"

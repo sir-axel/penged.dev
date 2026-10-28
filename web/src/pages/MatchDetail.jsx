@@ -1,3 +1,4 @@
+import { describeChange } from "@/lib/ratingFactors";
 import { useState, useEffect } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -252,11 +253,7 @@ export function MatchDetail() {
                       {Math.abs(e.delta)}
                     </span>
                   </div>
-                  {e.mov != null && (
-                    <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
-                      {`margin ×${e.mov.toFixed(2)} · ${e.ac >= 1 ? "upset" : "favourite"} ×${e.ac.toFixed(2)}`}
-                    </p>
-                  )}
+                  {e.mov != null && <FactorLines change={e} />}
                   {(e.xp_parts || []).length > 0 && (
                     <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.08em] text-brand">
                       {e.xp_parts.map((x) => `+${x.xp} ${x.label}`).join(" · ")}
@@ -269,6 +266,38 @@ export function MatchDetail() {
           </section>
         )}
       </div>
+    </>
+  );
+}
+
+function FactorLines({ change }) {
+  const { compact, detail } = describeChange(change);
+  return (
+    <>
+      <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.08em] leading-relaxed text-muted-foreground">
+        {compact.join(" · ")}
+      </p>
+      {detail.length > 2 && (
+        <details className="mt-1 group">
+          <summary className="inline-flex min-h-8 cursor-pointer items-center font-mono text-[10px] uppercase tracking-[0.08em] text-brand">
+            How this was calculated
+          </summary>
+          <dl className="mt-1 space-y-1.5 border-l-2 border-border pl-3">
+            {detail.map((d) => (
+              <div key={d.label}>
+                <dt className="flex justify-between gap-3 font-mono text-[11px] text-foreground">
+                  <span>{d.label}</span>
+                  <span className="tabular-nums">{d.value}</span>
+                </dt>
+                <dd className="text-[11px] leading-snug text-muted-foreground">{d.note}</dd>
+              </div>
+            ))}
+            <p className="font-mono text-[10px] text-muted-foreground">
+              change = K × (result − expected) × the factors above, rounded, never more than 80
+            </p>
+          </dl>
+        </details>
+      )}
     </>
   );
 }

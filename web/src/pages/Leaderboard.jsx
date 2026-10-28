@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useMyPlayer } from "@/hooks/useMyPlayer";
-import { matchesPlayed, overallRating } from "@/lib/ladder";
+import { matchesPlayed, overallRating, PROVISIONAL_MATCHES, ACTIVE_DAYS, isInactive } from "@/lib/ladder";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { LadderRow } from "@/components/LadderRow";
@@ -34,6 +34,20 @@ export function Leaderboard() {
           })
         ).items || [],
     }),
+    inactiveRows = useMemo(
+      () =>
+        players
+          .filter(isInactive)
+          .sort((a, b) => (b.singles_rating || 1400) - (a.singles_rating || 1400))
+          .map((e) => ({
+            player: e,
+            rank: 0,
+            rating: e.singles_rating || 1400,
+            wins: e.singles_wins || 0,
+            losses: e.singles_losses || 0,
+          })),
+      [players],
+    ),
     rows = useMemo(() => {
       let t = [...players];
       return view === "singles"
@@ -123,14 +137,29 @@ export function Leaderboard() {
             </div>
             <ul>
               {rows.map((e) => (
-                <LadderRow {...e} key={e.player.id} />
+                <LadderRow {...e} provisional={e.wins + e.losses < PROVISIONAL_MATCHES} key={e.player.id} />
               ))}
             </ul>
           </div>
         )}
+        {view === "singles" && inactiveRows.length > 0 && (
+          <section className="mt-6" aria-label="Inactive players">
+            <h2 className="font-display text-[0.58rem] uppercase tracking-[0.22em] text-muted-foreground">
+              Inactive
+            </h2>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              {`No verified singles match in ${ACTIVE_DAYS} days, so off the ranked ladder. Play one and you are back, with your rating intact.`}
+            </p>
+            <ul className="mt-2 overflow-hidden rounded-sm border border-border bg-card opacity-80">
+              {inactiveRows.map((e) => (
+                <LadderRow {...e} inactive provisional={e.wins + e.losses < PROVISIONAL_MATCHES} key={e.player.id} />
+              ))}
+            </ul>
+          </section>
+        )}
         <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
           {view === "singles"
-            ? "Singles rank is rating order. Ties go to whoever has played more."
+            ? "Singles rank is rating order for active players (a verified match in the last 30 days). Ties go to whoever has played more."
             : view === "doubles"
               ? "Doubles rating is a separate pool — it only moves on verified doubles results."
               : "Overall weights your singles and doubles ratings by how much you have played each."}{" "}

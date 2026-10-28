@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import { Avatar } from "@/components/Avatar";
 import { playerName } from "@/lib/ladder";
 
-export function LadderRow({ rank, player, rating: rating, wins = 0, losses = 0 }) {
+export function LadderRow({ rank, player, rating: rating, wins = 0, losses = 0, provisional = false, inactive = false }) {
   return (
     <li className="border-b border-border last:border-0">
       <Link
@@ -10,7 +10,7 @@ export function LadderRow({ rank, player, rating: rating, wins = 0, losses = 0 }
         className="flex min-h-[52px] items-center gap-3 px-3 py-2.5 transition-colors hover:bg-secondary/60"
       >
         <span className="w-7 shrink-0 font-mono text-xs tabular-nums text-muted-foreground">
-          {String(rank).padStart(2, "0")}
+          {inactive ? "—" : String(rank).padStart(2, "0")}
         </span>
         <Avatar name={playerName(player)} src={player.avatar_url} size={30} />
         <span className="min-w-0 flex-1">
@@ -18,6 +18,11 @@ export function LadderRow({ rank, player, rating: rating, wins = 0, losses = 0 }
             <span className="truncate font-heading text-sm font-semibold">
               {playerName(player)}
             </span>
+            {provisional && (
+              <span className="shrink-0 rounded-sm border border-brand/50 px-1 font-display text-[0.5rem] uppercase tracking-[0.12em] text-brand">
+                provisional
+              </span>
+            )}
             {player.under_review && (
               <span className="shrink-0 rounded-sm border border-destructive/40 px-1 font-mono text-[9px] uppercase tracking-[0.08em] text-destructive">
                 review

@@ -9,7 +9,7 @@ import { avatarOwner, removeAvatar } from './uploads.js';
 import { decodeInternal, pub } from './schema.js';
 import {
   START_RATING, REPEAT_WINDOW_DAYS, rateMatch, xpForMatch, levelForXp, validateGames, summarizeGames,
-  RANK_SQL, rankPlayers, RATING_FLOOR, challengePenalty, WALKOVER_XP, COOLDOWN_DAYS, WAIVER_DAYS, FATIGUE_DAYS,
+  RANK_SQL, rankPlayers, ACTIVE_DAYS, REPEAT_RECENT_DAYS, meetingWeight, RATING_FLOOR, challengePenalty, WALKOVER_XP, COOLDOWN_DAYS, WAIVER_DAYS, FATIGUE_DAYS,
 } from './rating.js';
 
 const MATCH_EXPIRY_MS = 7 * 86400000;
@@ -68,9 +68,10 @@ const touch = (env, playerId, now) =>
   stmt(env, 'UPDATE players SET last_active_at = ?, updated_date = ? WHERE id = ?', now, now, playerId);
 
 /** Recompute singles_rank for everyone from ratings (put AFTER every rating / membership change in a batch), then bump the ladder version. */
-const rankStmts = (env) => [stmt(env, RANK_SQL), bumpLadder(env)];
+const activeCut = () => daysAgoIso(ACTIVE_DAYS);
+const rankStmts = (env) => [stmt(env, RANK_SQL, activeCut()), bumpLadder(env)];
 const rankRows = (env) =>
-  all(env, 'SELECT id, singles_rating AS rating, singles_wins + singles_losses AS played, created_date FROM players');
+  all(env, 'SELECT id, singles_rating AS rating, singles_wins + singles_losses AS played, created_date, singles_last_verified_at AS last_verified_at FROM players');
 /**
  * unanswered_challenges = expired challenges the player was defender of (forfeited/dismissed ones leave the count).
  * under_review = unanswered >= 2 OR (inactive 30+ days AND in an open 'disputed' match). Derived data: unguarded.
@@ -117,7 +118,7 @@ const penaltyOf = (kind, def, chal, rankGap, facts) =>
 async function penaltyPlan(env, challenges, kind, now, lv) {
   const roster = await rankRows(env);
   const byId = Object.fromEntries(roster.map((r) => [r.id, r]));
-  const ranksNow = () => rankPlayers(roster);
+  const ranksNow = () => rankPlayers(roster, activeCut());
   const pl = {};
   const dirty = new Set();
   const guards = [guardLadder(env, lv)];
@@ -313,26 +314,45 @@ async function verifyPlan(env, m, now) {
 
   // Earlier VERIFIED same-format meetings in the last 180 days. For player P, a meeting is an earlier match
   // where P was opposite at least one of P's opponents in this match (singles: the same opponent).
+  // Each counts 1 if within REPEAT_RECENT_DAYS, else 0.5 (meetingWeight).
   const prevRows = await all(env,
-    `SELECT side_a, side_b FROM matches WHERE status = 'verified' AND format = ? AND id <> ? AND verified_at > ?
+    `SELECT side_a, side_b, verified_at FROM matches WHERE status = 'verified' AND format = ? AND id <> ? AND verified_at > ?
        AND EXISTS (SELECT 1 FROM json_each(all_player_ids) WHERE value IN (${placeholders(ids.length)}))`,
     fmt, m.id, daysAgoIso(REPEAT_WINDOW_DAYS), ...ids);
-  const prev = prevRows.map((r) => ({ A: JSON.parse(r.side_a).map((e) => e.player_id), B: JSON.parse(r.side_b).map((e) => e.player_id) }));
+  const prev = prevRows.map((r) => ({
+    A: JSON.parse(r.side_a).map((e) => e.player_id), B: JSON.parse(r.side_b).map((e) => e.player_id),
+    w: meetingWeight((Date.parse(now) - Date.parse(r.verified_at)) / 86400000),
+  }));
   const earlier = (pid) => {
     const opps = sides[sideOf(pid) === 'a' ? 'b' : 'a'];
     let n = 0;
-    for (const { A, B } of prev) {
+    for (const { A, B, w } of prev) {
       const mine = A.includes(pid) ? A : B.includes(pid) ? B : null;
       if (!mine) continue;
       const theirs = mine === A ? B : A;
-      if (opps.some((o) => theirs.includes(o))) n++;
+      if (opps.some((o) => theirs.includes(o))) n += w;
     }
     return n;
   };
 
-  const rc = `${fmt}_rating`, wc = `${fmt}_wins`, lc = `${fmt}_losses`;
-  const parts = players.map((p) => ({ id: p.id, side: sideOf(p.id), rating: p[rc], matchesPlayed: p[wc] + p[lc], earlierMeetings: earlier(p.id) }));
-  const results = rateMatch(parts, m.winner_side, m.games);
+  // An accepted challenge between these two players, accepted before this result was submitted, is played by this match.
+  let ch = null;
+  if (fmt === 'singles') {
+    const winner = sides[m.winner_side][0];
+    const loser = sides[m.winner_side === 'a' ? 'b' : 'a'][0];
+    ch = await first(env,
+      `SELECT * FROM challenges WHERE status = 'accepted' AND responded_at <= ? AND (expires_at IS NULL OR expires_at > ?)
+         AND ((challenger_player_id = ? AND defender_player_id = ?) OR (challenger_player_id = ? AND defender_player_id = ?)) LIMIT 1`,
+      m.created_date, now, winner, loser, loser, winner);
+  }
+
+  const rc = `${fmt}_rating`, wc = `${fmt}_wins`, lc = `${fmt}_losses`, vc = `${fmt}_last_verified_at`;
+  const paddleOf = (id) => [...m.side_a, ...m.side_b].find((e) => e.player_id === id)?.paddle;
+  const parts = players.map((p) => ({
+    id: p.id, side: sideOf(p.id), paddle: paddleOf(p.id), rating: p[rc], matchesPlayed: p[wc] + p[lc], earlierMeetings: earlier(p.id),
+    daysSinceLast: p[vc] ? Math.max(0, (Date.parse(now) - Date.parse(p[vc])) / 86400000) : null,
+  }));
+  const results = rateMatch(parts, m.winner_side, m.games, { target: m.target, challenge: !!ch });
   const sideAvg = (s) => sides[s].reduce((t, id) => t + players.find((x) => x.id === id)[rc], 0) / sides[s].length;
   const today = now.slice(0, 10);
   const changes = [];
@@ -360,23 +380,18 @@ async function verifyPlan(env, m, now) {
     stmts.push(guardRow(env, 'players', p.id, p.version));
     stmts.push(stmt(env,
       `UPDATE players SET ${rc} = ?, ${won ? wc : lc} = ${won ? wc : lc} + 1, xp = ?, level = ?, last_active_at = ?,
-         win_streak = ?, best_streak = ?, last_match_day = ?, updated_date = ?, version = version + 1 WHERE id = ?`,
-      res.after, xp, levelForXp(xp), now, streak, best, today, now, p.id));
+         win_streak = ?, best_streak = ?, last_match_day = ?, ${vc} = ?, updated_date = ?, version = version + 1 WHERE id = ?`,
+      res.after, xp, levelForXp(xp), now, streak, best, today, now, now, p.id));
     changes.push({
       player_id: p.id, name: nameOf(p), before: res.before, after: res.after, delta: res.delta,
-      expected: res.expected, mov: res.mov, ac: res.ac, dominance: res.dominance,
+      expected: res.expected, mov: res.mov, ac: res.ac, dominance: res.dominance, paddle_edge: res.paddle_edge,
+      k: res.k, rust: res.rust, opp_certainty: res.opp_certainty, evidence: res.evidence, repeat: res.repeat,
+      teammate: res.teammate, challenge: res.challenge,
       xp_gained: xpGain, xp_parts: xpRes.parts, win_streak: streak,
     });
   }
   if (fmt === 'singles') {
-    const winner = sides[m.winner_side][0];
-    const loser = sides[m.winner_side === 'a' ? 'b' : 'a'][0];
     stmts.push(...rankStmts(env));
-    // An accepted challenge between these two players, accepted before this result was submitted, is now played.
-    const ch = await first(env,
-      `SELECT * FROM challenges WHERE status = 'accepted' AND responded_at <= ? AND (expires_at IS NULL OR expires_at > ?)
-         AND ((challenger_player_id = ? AND defender_player_id = ?) OR (challenger_player_id = ? AND defender_player_id = ?)) LIMIT 1`,
-      m.created_date, now, winner, loser, loser, winner);
     if (ch) {
       stmts.push(guardRow(env, 'challenges', ch.id, ch.version, 'accepted'));
       stmts.push(stmt(env, `UPDATE challenges SET status = 'completed', updated_date = ?, version = version + 1 WHERE id = ?`, now, ch.id));
@@ -499,7 +514,7 @@ fns.challengePenaltyPreview = async ({ env, user }, body) => {
   if (!def || !chal) throw new HttpError(404, 'Player not found.');
   const facts = await penaltyFacts(env, c);
   const roster = await rankRows(env);
-  const ranks = rankPlayers(roster);
+  const ranks = rankPlayers(roster, activeCut());
   const gap = ranks[def.id] != null && ranks[chal.id] != null ? Math.abs(ranks[chal.id] - ranks[def.id]) : 1;
   const out = {};
   for (const kind of ['declined', 'expired']) {
@@ -507,7 +522,7 @@ fns.challengePenaltyPreview = async ({ env, user }, body) => {
     const gain = r.walkover ? r.penalty : 0;
     const after = rankPlayers(roster.map((p) => ({
       ...p, rating: p.rating - (p.id === def.id ? r.penalty : 0) + (p.id === chal.id ? gain : 0),
-    })))[def.id];
+    })), activeCut())[def.id];
     out[kind === 'declined' ? 'decline' : 'expire'] = {
       penalty: r.penalty, reason: r.reason, drops_rank: after > ranks[def.id], rank_after: after,
       challenger_gain: gain,
@@ -570,7 +585,7 @@ export const runSyncLadder = ({ env }) =>
     const stmts = [...plan.guards, ...plan.stmts];
     const iC = stmts.push(stmt(env, `UPDATE challenges SET status = 'expired', updated_date = ?, version = version + 1 WHERE status IN ('open','accepted') AND expires_at < ?`, now, now)) - 1;
     const iM = stmts.push(stmt(env, `UPDATE matches SET status = 'expired', updated_date = ?, version = version + 1 WHERE status = 'pending' AND expires_at < ?`, now, now)) - 1;
-    stmts.push(flagsStmt(env), stmt(env, RANK_SQL)); // ranks are derived from ratings; idempotent
+    stmts.push(flagsStmt(env), stmt(env, RANK_SQL, activeCut())); // ranks are derived from ratings; idempotent
     const res = await commit(env, stmts);
     return { ok: true, expired_challenges: plan.changed + res[iC].meta.changes, expired_matches: res[iM].meta.changes };
   });

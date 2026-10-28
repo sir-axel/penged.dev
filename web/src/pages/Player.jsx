@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
-import { formatRecord, playerName } from "@/lib/ladder";
+import { formatRecord, playerName, isInactive, isProvisional } from "@/lib/ladder";
 import { Avatar } from "@/components/Avatar";
 import { LevelBar } from "@/components/LevelBar";
 import { Stat } from "@/components/Stat";
@@ -98,6 +98,16 @@ export function PlayerProfile() {
               {(player.win_streak || 0) >= 2 && (
                 <p className="mt-1 font-display text-[0.55rem] uppercase tracking-[0.16em] text-brand">
                   {player.win_streak}W STREAK
+                </p>
+              )}
+              {isInactive(player) && (
+                <p className="mt-1 font-mono text-[10px] leading-snug text-muted-foreground">
+                  Inactive: no singles match in 30 days. Play one to be ranked again.
+                </p>
+              )}
+              {isProvisional(player, "singles") && (
+                <p className="mt-1 inline-flex rounded-sm border border-brand/50 px-1.5 py-0.5 font-display text-[0.5rem] uppercase tracking-[0.12em] text-brand">
+                  provisional
                 </p>
               )}
               {player.under_review && (

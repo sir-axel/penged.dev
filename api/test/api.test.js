@@ -11,7 +11,7 @@ const sql = (q, ...p) => env.DB.prepare(q).bind(...p).run();
 const games = [{ a: 11, b: 5 }, { a: 11, b: 7 }];
 const submit = (u, p, q, extra = {}) =>
   call(u, 'submitMatch', {
-    format: 'singles', target: 11, side_a: [{ player_id: p.id }], side_b: [{ player_id: q.id, paddle: 'modded' }], games, ...extra,
+    format: 'singles', target: 11, side_a: [{ player_id: p.id }], side_b: [{ player_id: q.id }], games, ...extra,
   });
 
 describe('auth + health', () => {
@@ -75,12 +75,12 @@ describe('match flow', () => {
     expect(acc.status).toBe(200);
     expect(acc.body.match.status).toBe('verified');
     const rc = acc.body.match.rating_changes;
-    expect(rc.find((x) => x.player_id === b.player.id)).toMatchObject({ before: 1400, after: 1434, delta: 34, xp_gained: 25 + 25 + 10 + 10 });
-    expect(rc.find((x) => x.player_id === a.player.id)).toMatchObject({ delta: -34, xp_gained: 25 + 10 });
+    expect(rc.find((x) => x.player_id === b.player.id)).toMatchObject({ before: 1400, after: 1427, delta: 27, xp_gained: 25 + 25 + 10 + 10 });
+    expect(rc.find((x) => x.player_id === a.player.id)).toMatchObject({ delta: -27, xp_gained: 25 + 10 });
     const players = (await get('/api/entities/Player?sort=singles_rank')).body.items;
     expect(players.map((p) => [p.username, p.singles_rank])).toEqual([['Bobby', 1], ['Carol', 2], ['Alice', 3]]);
-    expect(players[0]).toMatchObject({ singles_wins: 1, xp: 70, level: 2, singles_rating: 1434, win_streak: 1, best_streak: 1 });
-    expect(players[2]).toMatchObject({ singles_losses: 1, xp: 35, singles_rating: 1366, win_streak: 0 });
+    expect(players[0]).toMatchObject({ singles_wins: 1, xp: 70, level: 2, singles_rating: 1427, win_streak: 1, best_streak: 1 });
+    expect(players[2]).toMatchObject({ singles_losses: 1, xp: 35, singles_rating: 1373, win_streak: 0 });
     // second response after verification is rejected
     expect((await call(a, 'respondMatch', { match_id: m.id, decision: 'accept' })).status).toBe(400);
   });
@@ -95,7 +95,7 @@ describe('match flow', () => {
     const first = await play();
     const second = await play();
     const d = (rc, id) => rc.find((x) => x.player_id === id).delta;
-    expect(d(first, a.player.id)).toBe(34);
+    expect(d(first, a.player.id)).toBe(27);
     expect(d(second, a.player.id)).toBeLessThan(d(first, a.player.id));
   });
 
@@ -128,7 +128,7 @@ describe('match flow', () => {
     expect(last.body.match.status).toBe('verified');
     const ps = (await get('/api/entities/Player?sort=singles_rank')).body.items;
     expect(ps.map((p) => p.username)).toEqual(['Aa1', 'Bb2', 'Cc3', 'Dd4']);
-    expect(ps.find((p) => p.username === 'Dd4')).toMatchObject({ doubles_wins: 1, doubles_rating: 1430, singles_rating: 1400 });
+    expect(ps.find((p) => p.username === 'Dd4')).toMatchObject({ doubles_wins: 1, doubles_rating: 1421, singles_rating: 1400 });
   });
 });
 
@@ -315,8 +315,8 @@ describe('rating-derived ranks', () => {
 
   it('a win moves you past everyone you now out-rate, not just the opponent', async () => {
     const a = await mkPlayer('Aa1'); const b = await mkPlayer('Bb2'); const c = await mkPlayer('Cc3');
-    await win(c, a); // c 1434, a 1366, b 1400
-    expect(await ranks()).toEqual([['Cc3', 1, 1434], ['Bb2', 2, 1400], ['Aa1', 3, 1366]]);
+    await win(c, a); // c 1427, a 1373, b 1400
+    expect(await ranks()).toEqual([['Cc3', 1, 1427], ['Bb2', 2, 1400], ['Aa1', 3, 1373]]);
     void b;
   });
 
@@ -333,12 +333,12 @@ describe('rating-derived ranks', () => {
 
   it('new players join at 1400 in the right position; deleting leaves no gaps', async () => {
     const a = await mkPlayer('Aa1'); const b = await mkPlayer('Bb2');
-    await win(a, b); // a 1434, b 1366
+    await win(a, b); // a 1427, b 1373
     const c = await mkPlayer('Cc3'); // 1400 -> between them
-    expect(await ranks()).toEqual([['Aa1', 1, 1434], ['Cc3', 2, 1400], ['Bb2', 3, 1366]]);
+    expect(await ranks()).toEqual([['Aa1', 1, 1427], ['Cc3', 2, 1400], ['Bb2', 3, 1373]]);
     expect(c.player.singles_rank).toBe(2); // derived in the same batch as the insert
     await call(c, 'deleteAccount', { confirm: 'DELETE' });
-    expect(await ranks()).toEqual([['Aa1', 1, 1434], ['Bb2', 2, 1366]]);
+    expect(await ranks()).toEqual([['Aa1', 1, 1427], ['Bb2', 2, 1373]]);
   });
 
   it('ties are deterministic: more games played first, then earlier joiner', async () => {
@@ -793,5 +793,82 @@ describe('review fixes', () => {
     await call(u, 'deleteAccount', { confirm: 'DELETE' });
     expect(await exists(mine2)).toBe(false);
     expect(await exists(theirs)).toBe(true);
+  });
+});
+
+describe('rating factors wired through verification', () => {
+  const play = async (w, l, extra = {}) => {
+    const s = await submit(w, w.player, l.player, extra);
+    return (await call(l, 'respondMatch', { match_id: s.body.match.id, decision: 'accept' })).body.match;
+  };
+  const player = async (p) => (await get('/api/entities/Player/' + p.player.id)).body;
+
+  it('stores every factor, paddle edge, and stamps last verified time', async () => {
+    const a = await mkPlayer('Aa1'); const b = await mkPlayer('Bb2');
+    expect((await player(a)).singles_last_verified_at).toBeNull();
+    const m = await play(a, b, { side_a: [{ player_id: a.player.id, paddle: 'modded' }] });
+    const w = m.rating_changes.find((x) => x.player_id === a.player.id);
+    expect(w).toMatchObject({ paddle_edge: -50, rust: 1, challenge: 1, teammate: 1, opp_certainty: 0.8, evidence: 1 });
+    expect(w.k).toBe(48);
+    expect(typeof w.repeat).toBe('number');
+    expect((await player(a)).singles_last_verified_at).toBeTruthy();
+    // second match: K shrinks, certainty grows
+    const m2 = await play(a, b);
+    const w2 = m2.rating_changes.find((x) => x.player_id === a.player.id);
+    expect(w2.k).toBeLessThan(48);
+    expect(w2.opp_certainty).toBeGreaterThan(0.8);
+  });
+
+  it('rust: a long-absent player gets a larger K', async () => {
+    const a = await mkPlayer('Aa1'); const b = await mkPlayer('Bb2');
+    await play(a, b);
+    await sql('UPDATE players SET singles_last_verified_at = ? WHERE id = ?', new Date(Date.now() - 80 * 86400e3).toISOString(), a.player.id);
+    const m = await play(a, b);
+    expect(m.rating_changes.find((x) => x.player_id === a.player.id).rust).toBeGreaterThan(1.4);
+    expect(m.rating_changes.find((x) => x.player_id === b.player.id).rust).toBe(1);
+  });
+
+  it('players idle more than 30 days drop off the ranked ladder and re-rank when they play', async () => {
+    const a = await mkPlayer('Aa1'); const b = await mkPlayer('Bb2'); const c = await mkPlayer('Cc3');
+    await play(a, b);
+    await sql('UPDATE players SET singles_last_verified_at = ? WHERE id = ?', new Date(Date.now() - 40 * 86400e3).toISOString(), b.player.id);
+    await call(a, 'syncLadder');
+    const rows = (await get('/api/entities/Player?sort=singles_rank')).body.items;
+    const rk = Object.fromEntries(rows.map((p) => [p.username, p.singles_rank]));
+    expect(rk.Bb2).toBeNull();
+    expect(rk.Aa1).toBe(1);
+    expect(rk.Cc3).toBe(2); // never played: stays ranked
+    expect((await call(c, 'createChallenge', { defender_player_id: b.player.id })).status).toBe(400); // not ranked
+    await play(b, a);
+    const rows2 = (await get('/api/entities/Player?sort=singles_rank')).body.items;
+    expect(rows2.find((p) => p.username === 'Bb2').singles_rank).toBeGreaterThan(0);
+  });
+
+  it('a match that plays an accepted challenge counts x1.25', async () => {
+    const [a, b, c] = [await mkPlayer('Aa1'), await mkPlayer('Bb2'), await mkPlayer('Cc3')];
+    const ch = (await call(c, 'createChallenge', { defender_player_id: b.player.id })).body.challenge;
+    await call(b, 'respondChallenge', { challenge_id: ch.id, decision: 'accept' });
+    await new Promise((r) => setTimeout(r, 5));
+    const m = await play(c, b);
+    expect(m.rating_changes.find((x) => x.player_id === c.player.id).challenge).toBe(1.25);
+    const plain = await play(a, b);
+    expect(plain.rating_changes.find((x) => x.player_id === a.player.id).challenge).toBe(1);
+  });
+
+  it('doubles stores the teammate factor and uses doubles history', async () => {
+    const [a, b, c, d] = [await mkPlayer('Aa1'), await mkPlayer('Bb2'), await mkPlayer('Cc3'), await mkPlayer('Dd4')];
+    await sql('UPDATE players SET doubles_rating = 1500 WHERE id = ?', a.player.id);
+    const s = await call(a, 'submitMatch', {
+      format: 'doubles', target: 11, side_a: [{ player_id: a.player.id }, { player_id: b.player.id }],
+      side_b: [{ player_id: c.player.id }, { player_id: d.player.id }], games,
+    });
+    let m;
+    for (const u of [b, c, d]) m = (await call(u, 'respondMatch', { match_id: s.body.match.id, decision: 'accept' })).body.match;
+    const ra = m.rating_changes.find((x) => x.player_id === a.player.id);
+    const rb = m.rating_changes.find((x) => x.player_id === b.player.id);
+    expect(ra.teammate).toBeLessThan(1);
+    expect(rb.teammate).toBeGreaterThan(1);
+    expect((await player(a)).doubles_last_verified_at).toBeTruthy();
+    expect((await player(a)).singles_last_verified_at).toBeNull();
   });
 });
