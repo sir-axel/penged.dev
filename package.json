@@ -2,7 +2,7 @@
   "name": "penged",
   "private": true,
   "version": "1.0.0",
-  "description": "Penged.dev — verified workplace ping-pong ladder (Cloudflare Worker + D1 + R2, React SPA)",
+  "description": "Penged.dev \u2014 verified workplace ping-pong ladder (Cloudflare Worker + D1 + R2, React SPA)",
   "scripts": {
     "install:all": "npm --prefix web install && npm --prefix api install",
     "build": "npm --prefix web run build",
@@ -10,5 +10,6 @@
     "dev:web": "npm --prefix web run dev",
     "test": "npm --prefix api test",
     "deploy": "npm run build && npm --prefix api run deploy"
-  }
+  },
+  "license": "MIT"
 }

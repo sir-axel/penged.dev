@@ -80,3 +80,11 @@ Future integrations: the API boundary is plain HTTP under `/api` (entities read 
 - State-changing requests to `/api/functions/*` and `/api/uploads` must come from the app origin (or `TRUSTED_ORIGINS`).
 - A cron trigger (every 15 min) expires overdue challenges/matches; `syncLadder` does the same on demand.
 - Not done: Google sign-in, anonymising deleted players' history.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Pull requests welcome.
+
+## License
+
+[MIT](LICENSE)
