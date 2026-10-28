@@ -1,3 +1,7 @@
+import { Link } from "react-router-dom";
+import { ArrowLeft } from "lucide-react";
+import { Logo } from "@/components/Logo";
+
 export function AuthShell({
   icon: Icon,
   title,
@@ -6,7 +10,21 @@ export function AuthShell({
   children,
 }) {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-4">
+    <div className="relative min-h-screen flex items-center justify-center bg-background px-4 py-20">
+      <div className="absolute inset-x-0 top-0 border-b border-border">
+        <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4 sm:px-6">
+          <Link to="/" aria-label="Penged.dev home" className="rounded-none py-1">
+            <Logo />
+          </Link>
+          <Link
+            to="/"
+            className="inline-flex items-center gap-1.5 font-display text-[0.55rem] uppercase tracking-[0.16em] text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
+            Back to the board
+          </Link>
+        </div>
+      </div>
       <div className="w-full max-w-md">
         <div className="text-center mb-10">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary mb-4">
