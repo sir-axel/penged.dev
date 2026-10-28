@@ -14,7 +14,7 @@ run_worker_first = ["/api/*"]
 [[d1_databases]]
 binding = "DB"
 database_name = "penged"
-database_id = "00000000-0000-0000-0000-000000000000" # placeholder; set after `wrangler d1 create penged`
+database_id = "00000000-0000-0000-0000-000000000000" # local test DB only (never remote)
 migrations_dir = "migrations"
 
 # Avatars: stored in D1 (200KB cap) by default. To store them in R2 instead (2MB cap; R2 may need a payment
@@ -33,4 +33,4 @@ enabled = true
 # [vars] (all optional)
 #   BETTER_AUTH_URL  public site origin; when unset it is derived from each request's origin
 #   TRUSTED_ORIGINS  comma-separated extra origins allowed for auth/CORS (the base URL is always trusted)
-# Secrets (`wrangler secret put`, or api/.dev.vars locally): BETTER_AUTH_SECRET, ADMIN_EMAILS
+# Secrets (`wrangler secret put`, or api/.dev.vars locally): BETTER_AUTH_SECRET

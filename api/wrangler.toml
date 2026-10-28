@@ -2,6 +2,14 @@ name = "penged"
 main = "src/worker.js"
 compatibility_date = "2026-06-01"
 compatibility_flags = ["nodejs_compat"]
+workers_dev = false
+
+# Public site: penged.dev (and www, which the Worker 301s to the apex) are Worker custom domains;
+# Cloudflare manages their DNS + TLS. The auth base URL is derived from the request origin.
+routes = [
+  { pattern = "penged.dev", custom_domain = true },
+  { pattern = "www.penged.dev", custom_domain = true },
+]
 
 # One Worker serves the built web app (static assets) and the API. Only /api/* runs Worker code.
 [assets]
@@ -13,7 +21,7 @@ run_worker_first = ["/api/*"]
 [[d1_databases]]
 binding = "DB"
 database_name = "penged"
-database_id = "00000000-0000-0000-0000-000000000000" # placeholder; set after `wrangler d1 create penged`
+database_id = "e2170c5a-75a9-4968-ab64-28d2529121c0"
 migrations_dir = "migrations"
 
 # Avatars: stored in D1 (200KB cap) by default. To store them in R2 instead (2MB cap; R2 may need a payment
