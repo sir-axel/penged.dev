@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { Avatar } from "@/components/Avatar";
 import { playerName } from "@/lib/ladder";
+import { TierBadge } from "@/components/TierBadge";
 
 export function LadderRow({ rank, player, rating: rating, wins = 0, losses = 0, provisional = false, inactive = false, streak = 0 }) {
   return (
@@ -18,11 +19,7 @@ export function LadderRow({ rank, player, rating: rating, wins = 0, losses = 0, 
             <span className="truncate font-heading text-sm font-semibold">
               {playerName(player)}
             </span>
-            {provisional && (
-              <span className="shrink-0 rounded-sm border border-brand/50 px-1 font-display text-[0.5rem] uppercase tracking-[0.12em] text-brand">
-                provisional
-              </span>
-            )}
+            <TierBadge rating={rating} played={wins + losses} />
             {player.under_review && (
               <span className="shrink-0 rounded-sm border border-destructive/40 px-1 font-mono text-[9px] uppercase tracking-[0.08em] text-destructive">
                 review

@@ -11,6 +11,9 @@ import { formatShortDate } from "@/lib/ladder";
 import { StatusBadge } from "@/components/StatusBadge";
 import { SideCard } from "@/components/SideCard";
 import { Button } from "@/components/ui/button";
+import { TierBadge } from "@/components/TierBadge";
+import { tierChips } from "@/lib/feedChips";
+import { tierFor } from "@/lib/tiers";
 import { api } from "@/api/client";
 
 export function MatchDetail() {
@@ -74,6 +77,11 @@ export function MatchDetail() {
     hasAccepted = user ? accepted.includes(user.id) : false,
     waitingOn = participants.filter((e) => !accepted.includes(e)),
     sideEntries = [...(match.side_a || []), ...(match.side_b || [])],
+    tiersAfter =
+      match.status === "verified"
+        ? Object.fromEntries((match.rating_changes || []).map((c) => [c.player_id, c.tier_after || tierFor(c.after).key]))
+        : {},
+    promoChips = tierChips(match),
     nameFor = (e) => {
       let t = sideEntries.find((t) => t.user_id === e);
       return t?.display_name || t?.username || "A player";
@@ -94,14 +102,30 @@ export function MatchDetail() {
             gamesWon={match.games_a}
             winner={match.winner_side === "a"}
             label="Side A"
+            tiers={tiersAfter}
           />
           <SideCard
             side={match.side_b}
             gamesWon={match.games_b}
             winner={match.winner_side === "b"}
             label="Side B"
+            tiers={tiersAfter}
           />
         </div>
+        {promoChips.length > 0 && (
+          <ul className="flex flex-wrap gap-2" aria-label="Tier changes" data-testid="tier-chips">
+            {promoChips.map((c) => (
+              <li
+                key={c.id}
+                className={`inline-flex items-center gap-1.5 rounded-sm border px-2 py-1 font-heading text-xs font-semibold ${c.kind === "promotion" ? "border-success/40 bg-success/10 text-success" : "border-destructive/40 bg-destructive/10 text-destructive"}`}
+              >
+                <span>{c.kind === "promotion" ? "▲" : "▼"}</span>
+                <span>{`${c.name}: ${c.label}`}</span>
+                <TierBadge tier={c.tier} />
+              </li>
+            ))}
+          </ul>
+        )}
         <section>
           <h2 className="font-display text-[0.58rem] uppercase tracking-[0.22em] text-muted-foreground">
             Games

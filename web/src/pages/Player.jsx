@@ -6,10 +6,36 @@ import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
 import { formatRecord, playerName, isInactive, isProvisional, overallRating, rankFor, ratingFor, streakFor, bestStreakFor } from "@/lib/ladder";
 import { Avatar } from "@/components/Avatar";
+import { TierBadge, TIER_STYLE } from "@/components/TierBadge";
+import { tierFor, nextTier, tierProgress } from "@/lib/tiers";
 import { LevelBar } from "@/components/LevelBar";
 import { Stat } from "@/components/Stat";
 import { MatchRow } from "@/components/MatchRow";
 import { api } from "@/api/client";
+
+function TierProgress({ player, format }) {
+  const rating = ratingFor(player, format);
+  const played = (player[`${format}_wins`] || 0) + (player[`${format}_losses`] || 0);
+  const next = nextTier(rating);
+  const placing = isProvisional(player, format);
+  return (
+    <div className="mt-3" data-testid={`tier-${format}`}>
+      <div className="flex flex-wrap items-center gap-2">
+        <TierBadge rating={rating} played={played} size="md" />
+        {!placing && (
+          <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+            {next ? `${tierFor(rating).name} · ${next.pointsToGo} to ${next.tier.name}` : `${tierFor(rating).name} · top tier`}
+          </span>
+        )}
+      </div>
+      {!placing && (
+        <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-sm bg-secondary" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(tierProgress(rating) * 100)} aria-label={`${format} tier progress`}>
+          <div className="h-full" style={{ width: `${Math.round(tierProgress(rating) * 100)}%`, backgroundColor: TIER_STYLE[tierFor(rating).key].bd }} />
+        </div>
+      )}
+    </div>
+  );
+}
 
 function FormatBlock({ player, format }) {
   const name = format === "doubles" ? "Doubles" : "Singles";
@@ -37,6 +63,7 @@ function FormatBlock({ player, format }) {
       <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
         {`Streak ${streak} · best ${bestStreakFor(player, format)}`}
       </p>
+      <TierProgress player={player} format={format} />
       <div className="mt-1 flex flex-wrap gap-1.5">
         {streak >= 2 && (
           <span className="font-display text-[0.55rem] uppercase tracking-[0.16em] text-brand">{streak}W STREAK</span>

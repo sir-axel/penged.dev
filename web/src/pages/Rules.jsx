@@ -1,6 +1,7 @@
 import { BackButton } from "@/components/BackButton";
 import { Link } from "react-router-dom";
 import { PageHeader } from "@/components/PageHeader";
+import { TIERS } from "@/lib/tiers";
 import { RATING_POINTS, XP_POINTS, CHALLENGE_POINTS } from "@/components/home/RatingExplainer";
 
 export const RULE_SECTIONS = [
@@ -17,6 +18,17 @@ export const RULE_SECTIONS = [
     title: "Rating",
     items: [
       ...RATING_POINTS,
+    ],
+  },
+  {
+    title: "Tiers",
+    items: [
+      ...TIERS.map((t, i) =>
+        i === 0 ? `${t.name}: under ${TIERS[1].min}` : i === TIERS.length - 1 ? `${t.name}: ${t.min} and up` : `${t.name}: ${t.min}–${TIERS[i + 1].min - 1}`,
+      ),
+      "Singles and doubles each have their own tier, from their own rating. The Overall board shows the tier of its blended score, for display only.",
+      "Placement until you've played 5 matches in that format.",
+      "Tiers follow your rating — they go down as well as up.",
     ],
   },
   {

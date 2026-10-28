@@ -7,6 +7,7 @@ import { getUser } from './auth.js';
 import { HttpError, bad } from './errors.js';
 import { submitFeedback, listFeedback, updateFeedback, myFeedback, myFeedbackUnread, markFeedbackSeen, replyFeedback } from './feedback.js';
 import { avatarOwner, removeAvatar } from './uploads.js';
+import { tierChange, PROVISIONAL } from './tiers.js';
 import { decodeInternal, pub } from './schema.js';
 import {
   START_RATING, REPEAT_WINDOW_DAYS, rateMatch, xpForMatch, levelForXp, validateGames, summarizeGames,
@@ -389,6 +390,8 @@ async function verifyPlan(env, m, now) {
       k: res.k, rust: res.rust, opp_certainty: res.opp_certainty, evidence: res.evidence, repeat: res.repeat,
       teammate: res.teammate, challenge: res.challenge,
       xp_gained: xpGain, xp_parts: xpRes.parts, win_streak: streak,
+      // Tier crossing (derived from rating); only once placed (5+ matches in this format before this one).
+      ...(p[wc] + p[lc] >= PROVISIONAL ? tierChange(res.before, res.after) : null),
     });
   }
   stmts.push(...rankStmts(env)); // each format's rank SQL reads only its own columns; the other is a no-op

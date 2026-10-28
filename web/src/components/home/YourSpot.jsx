@@ -1,6 +1,8 @@
 import { Link } from "react-router-dom";
 import { formatRecord, playerName, overallRating, rankFor, ratingFor, streakFor, isProvisional, isInactive } from "@/lib/ladder";
 import { LevelBar } from "@/components/LevelBar";
+import { TierBadge } from "@/components/TierBadge";
+import { nextTier } from "@/lib/tiers";
 
 export function YourSpot({ player, toConfirm = 0 }) {
   return (
@@ -29,6 +31,14 @@ export function YourSpot({ player, toConfirm = 0 }) {
                       {" · "}
                       {formatRecord(player[`${fmt}_wins`], player[`${fmt}_losses`])}
                     </p>
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                      <TierBadge rating={ratingFor(player, fmt)} played={(player[`${fmt}_wins`] || 0) + (player[`${fmt}_losses`] || 0)} />
+                      {!isProvisional(player, fmt) && nextTier(ratingFor(player, fmt)) && (
+                        <span className="font-mono text-[10px] text-muted-foreground">
+                          {`${nextTier(ratingFor(player, fmt)).pointsToGo} to ${nextTier(ratingFor(player, fmt)).tier.name}`}
+                        </span>
+                      )}
+                    </div>
                     <p className="font-display text-[0.55rem] uppercase tracking-[0.16em] text-brand">
                       {streak >= 2 && `${streak}W STREAK `}
                       {isProvisional(player, fmt) && "provisional "}
