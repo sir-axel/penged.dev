@@ -26,7 +26,7 @@ export const ENTITIES = {
       ...common, challenger_user_id: 'text', challenger_player_id: 'text', challenger_name: 'text',
       challenger_rank: 'int', defender_user_id: 'text', defender_player_id: 'text', defender_name: 'text',
       defender_rank: 'int', message: 'text', status: 'text', review_requested: 'bool', expires_at: 'ts',
-      responded_at: 'ts', resolved_by: 'text', penalty_rating: 'int', penalty_rank_before: 'int',
+      responded_at: 'ts', resolved_by: 'text', penalty_rating: 'int', challenger_rating_gain: 'int', penalty_rank_before: 'int',
       penalty_rank_after: 'int', penalty_reason: 'text', penalized_at: 'ts', reversed: 'bool',
     },
   },

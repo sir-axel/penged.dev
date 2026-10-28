@@ -46,7 +46,7 @@ export function AdminReviews() {
       <PageHeader
         eyebrow="Admin"
         title="Challenge penalties"
-        description="Recent declines and no-shows. Reversing a penalty gives the defender back their rating and spot, and takes any walkover xp from the challenger."
+        description="Recent declines and no-shows. Reversing a penalty gives the defender back their rating, and takes the walkover rating and xp from the challenger."
       />
       <div className="mx-auto max-w-2xl space-y-3 px-4 py-6 sm:px-6">
         {error && (

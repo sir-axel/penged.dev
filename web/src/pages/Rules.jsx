@@ -8,7 +8,7 @@ export const RULE_SECTIONS = [
     items: [
       "Every player in a match must confirm the submitted result. Singles needs both players; doubles needs all four.",
       "A result stays pending until the last sign-off arrives. Anyone can decline or dispute it instead.",
-      "Declined and disputed matches never touch ratings, levels, records or ladder positions.",
+      "Declined and disputed matches never touch ratings, levels, records or ranks.",
       "Only verified matches appear in public stats and match history.",
     ],
   },
@@ -28,12 +28,12 @@ export const RULE_SECTIONS = [
     ],
   },
   {
-    title: "The singles ladder",
+    title: "Ranking",
     items: [
-      "Singles is a positional ladder. Everyone has a numbered spot, and new players join at the bottom.",
-      "Beat someone above you and you take their spot; everyone between the two of you slides down one place.",
-      "Beating someone below you never moves your position — it only affects rating.",
-      "Doubles has no positions: it is ranked by doubles rating, so you climb it by beating pairs rated above you.",
+      "Rank is your place in the rating order. New players start at 1400 and slot in by rating.",
+      "Win and your rating rises, so you pass everyone you now out-rate. Ties go to whoever has played more, then whoever joined first.",
+      "Beating someone far below you earns little rating, so it barely moves you.",
+      "Doubles is ranked the same way, by doubles rating.",
       "Overall blends both ratings, weighted by how many matches you have played in each.",
     ],
   },
@@ -51,7 +51,7 @@ export function Rules() {
       <PageHeader
         eyebrow="House rules"
         title="How rating, level and challenges work"
-        description="Short version: only verified results count, rating measures who you beat, level measures how much you play, and rank is a position you have to take."
+        description="Short version: only verified results count, rating measures who you beat, level measures how much you play, and rank is your place in the rating order."
       />
       <div className="mx-auto max-w-3xl space-y-8 px-4 py-8 sm:px-6">
         {RULE_SECTIONS.map((e) => (

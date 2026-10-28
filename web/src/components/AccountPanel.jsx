@@ -42,7 +42,7 @@ export function AccountPanel({ email }) {
           Delete account
         </h2>
         <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
-          Removes your profile, your ladder spot, open challenges and any result still waiting on
+          Removes your profile, your rank, open challenges and any result still waiting on
           your confirmation. Verified match history stays on the board.
         </p>
         <AlertDialog>
@@ -60,7 +60,7 @@ export function AccountPanel({ email }) {
             <AlertDialogHeader>
               <AlertDialogTitle>Delete your account?</AlertDialogTitle>
               <AlertDialogDescription>
-                This cannot be undone. You will lose your rating, level and ladder position.
+                This cannot be undone. You will lose your rating, level and rank.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>

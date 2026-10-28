@@ -55,7 +55,7 @@ describe('players', () => {
 });
 
 describe('match flow', () => {
-  it('submit, accept, verify with ratings, xp and rank swap', async () => {
+  it('submit, accept, verify with ratings, xp and rating-derived ranks', async () => {
     const a = await mkPlayer('Alice'); // rank 1
     const b = await mkPlayer('Bobby'); // rank 2
     // Bob (rank 2) submits and wins; Alice must confirm
@@ -78,9 +78,9 @@ describe('match flow', () => {
     expect(rc.find((x) => x.player_id === b.player.id)).toMatchObject({ before: 1400, after: 1434, delta: 34, xp_gained: 25 + 25 + 10 + 10 });
     expect(rc.find((x) => x.player_id === a.player.id)).toMatchObject({ delta: -34, xp_gained: 25 + 10 });
     const players = (await get('/api/entities/Player?sort=singles_rank')).body.items;
-    expect(players.map((p) => [p.username, p.singles_rank])).toEqual([['Bobby', 1], ['Alice', 2], ['Carol', 3]]);
+    expect(players.map((p) => [p.username, p.singles_rank])).toEqual([['Bobby', 1], ['Carol', 2], ['Alice', 3]]);
     expect(players[0]).toMatchObject({ singles_wins: 1, xp: 70, level: 2, singles_rating: 1434, win_streak: 1, best_streak: 1 });
-    expect(players[1]).toMatchObject({ singles_losses: 1, xp: 35, singles_rating: 1366, win_streak: 0 });
+    expect(players[2]).toMatchObject({ singles_losses: 1, xp: 35, singles_rating: 1366, win_streak: 0 });
     // second response after verification is rejected
     expect((await call(a, 'respondMatch', { match_id: m.id, decision: 'accept' })).status).toBe(400);
   });
@@ -180,7 +180,7 @@ describe('challenge penalties', () => {
     crypto.randomUUID(), format, JSON.stringify([p.player.id, q.player.id]), new Date(Date.now() - ago).toISOString(),
     new Date(Date.now() - ago).toISOString(), new Date(Date.now() - ago).toISOString());
 
-  it('decline: defender loses half the dodge, drops one place, challenger moves up; idempotent', async () => {
+  it('decline: defender loses half the dodge and drops below the equal-rated players; idempotent', async () => {
     const { a, b, c } = await trio();
     const ch = (await call(c, 'createChallenge', { defender_player_id: b.player.id })).body.challenge;
     const pv = await call(b, 'challengePenaltyPreview', { challenge_id: ch.id });
@@ -198,7 +198,7 @@ describe('challenge penalties', () => {
     void a;
   });
 
-  it('expiry: defender loses the full dodge, challenger takes the spot (+15 xp walkover), cron + syncLadder penalise once', async () => {
+  it('expiry: defender loses P, challenger gains P (+15 xp walkover), ranks follow rating, cron + syncLadder penalise once', async () => {
     const { a, c } = await trio();
     const ch = (await call(c, 'createChallenge', { defender_player_id: a.player.id })).body.challenge; // rank gap 2
     await expire(ch.id);
@@ -208,11 +208,11 @@ describe('challenge penalties', () => {
     const sync = await call(c, 'syncLadder');
     expect(sync.body.expired_challenges).toBe(0);
     const row = await ent('Challenge', ch.id);
-    expect(row).toMatchObject({ status: 'expired', penalty_rating: 19, penalty_reason: 'expired', penalty_rank_before: 1, penalty_rank_after: 2 });
+    expect(row).toMatchObject({ status: 'expired', penalty_rating: 19, penalty_reason: 'expired', penalty_rank_before: 1, penalty_rank_after: 3, challenger_rating_gain: 19 });
     expect((await ent('Player', a.player.id)).singles_rating).toBe(1381);
     const chal = await ent('Player', c.player.id);
-    expect(chal).toMatchObject({ singles_rating: 1400, xp: 15, singles_rank: 1 });
-    expect(await order()).toEqual(['Cc3', 'Aa1', 'Bb2']);
+    expect(chal).toMatchObject({ singles_rating: 1419, xp: 15, singles_rank: 1 });
+    expect(await order()).toEqual(['Cc3', 'Bb2', 'Aa1']);
     expect((await ent('Player', a.player.id)).unanswered_challenges).toBe(1);
   });
 
@@ -257,6 +257,8 @@ describe('challenge penalties', () => {
     await call(c, 'syncLadder');
     expect((await ent('Player', b.player.id)).singles_rating).toBe(700);
     expect((await ent('Challenge', ch.id)).penalty_rating).toBe(2);
+    expect((await ent('Player', c.player.id)).singles_rating).toBe(704);
+    expect(await order()).toEqual(['Aa1', 'Cc3', 'Bb2']);
   });
 
   it('admin reverse restores rating, rank and xp; reversing twice and non-admin reversal are rejected', async () => {
@@ -281,12 +283,14 @@ describe('challenge penalties', () => {
     const ch2 = (await call(c, 'createChallenge', { defender_player_id: a.player.id })).body.challenge;
     await expire(ch2.id);
     await call(c, 'syncLadder');
-    expect(await order()).toEqual(['Cc3', 'Aa1', 'Bb2']);
+    expect(await order()).toEqual(['Cc3', 'Bb2', 'Aa1']);
     expect((await ent('Player', c.player.id)).xp).toBe(15);
+    expect((await ent('Player', c.player.id)).singles_rating).toBe(1419);
     await call(admin, 'resolveChallenge', { challenge_id: ch2.id, action: 'reverse' });
     expect((await ent('Player', c.player.id)).xp).toBe(0);
+    expect((await ent('Player', c.player.id)).singles_rating).toBe(1400); // walkover gain removed
     expect((await ent('Player', a.player.id)).singles_rating).toBe(1400);
-    expect(await order()).toEqual(['Aa1', 'Cc3', 'Bb2']); // a restored to #1; others shift down
+    expect(await order()).toEqual(['Aa1', 'Bb2', 'Cc3']); // ratings back, ranks follow
     expect((await ent('Player', a.player.id)).unanswered_challenges).toBe(0);
   });
 
@@ -299,6 +303,88 @@ describe('challenge penalties', () => {
     expect(await ent('Challenge', ch.id)).toMatchObject({ status: 'expired', penalty_reason: null });
     expect((await ent('Player', a.player.id)).singles_rating).toBe(1400);
     expect(await order()).toEqual(['Aa1', 'Bb2', 'Cc3']);
+  });
+});
+
+describe('rating-derived ranks', () => {
+  const ranks = async () => (await get('/api/entities/Player?sort=singles_rank')).body.items.map((p) => [p.username, p.singles_rank, p.singles_rating]);
+  const win = async (w, l) => {
+    const s = await submit(w, w.player, l.player);
+    return call(l, 'respondMatch', { match_id: s.body.match.id, decision: 'accept' });
+  };
+
+  it('a win moves you past everyone you now out-rate, not just the opponent', async () => {
+    const a = await mkPlayer('Aa1'); const b = await mkPlayer('Bb2'); const c = await mkPlayer('Cc3');
+    await win(c, a); // c 1434, a 1366, b 1400
+    expect(await ranks()).toEqual([['Cc3', 1, 1434], ['Bb2', 2, 1400], ['Aa1', 3, 1366]]);
+    void b;
+  });
+
+  it('a lower-rated winner who stays below the loser does not take the loser spot', async () => {
+    const a = await mkPlayer('Aa1'); const b = await mkPlayer('Bb2');
+    await sql('UPDATE players SET singles_rating = 1600 WHERE id = ?', a.player.id);
+    await sql('UPDATE players SET singles_rating = 1400 WHERE id = ?', b.player.id);
+    await call(a, 'syncLadder'); // recompute
+    await win(b, a); // upset worth < 200 points
+    const r = await ranks();
+    expect(r[0][0]).toBe('Aa1');
+    expect(r[0][2]).toBeGreaterThan(r[1][2]);
+  });
+
+  it('new players join at 1400 in the right position; deleting leaves no gaps', async () => {
+    const a = await mkPlayer('Aa1'); const b = await mkPlayer('Bb2');
+    await win(a, b); // a 1434, b 1366
+    const c = await mkPlayer('Cc3'); // 1400 -> between them
+    expect(await ranks()).toEqual([['Aa1', 1, 1434], ['Cc3', 2, 1400], ['Bb2', 3, 1366]]);
+    expect(c.player.singles_rank).toBe(2); // derived in the same batch as the insert
+    await call(c, 'deleteAccount', { confirm: 'DELETE' });
+    expect(await ranks()).toEqual([['Aa1', 1, 1434], ['Bb2', 2, 1366]]);
+  });
+
+  it('ties are deterministic: more games played first, then earlier joiner', async () => {
+    const a = await mkPlayer('Aa1'); const b = await mkPlayer('Bb2'); const c = await mkPlayer('Cc3');
+    expect((await ranks()).map((x) => x[0])).toEqual(['Aa1', 'Bb2', 'Cc3']);
+    await sql('UPDATE players SET singles_wins = 3 WHERE id = ?', c.player.id);
+    await call(a, 'syncLadder');
+    expect((await ranks()).map((x) => x[0])).toEqual(['Cc3', 'Aa1', 'Bb2']);
+    void b;
+  });
+
+  it('challenge eligibility reads the rating order (1-3 places above)', async () => {
+    const a = await mkPlayer('Aa1'); const b = await mkPlayer('Bb2'); const c = await mkPlayer('Cc3');
+    await win(c, a); await call(c, 'syncLadder'); // order: Cc3, Bb2, Aa1
+    expect((await call(c, 'createChallenge', { defender_player_id: a.player.id })).status).toBe(400); // a is below c now
+    const ok = await call(a, 'createChallenge', { defender_player_id: c.player.id }); // 2 above
+    expect(ok.status).toBe(200);
+    expect(ok.body.challenge).toMatchObject({ challenger_rank: 3, defender_rank: 1 });
+    void b;
+  });
+
+  it('ranks swap when an expiry walkover makes the points cross', async () => {
+    const a = await mkPlayer('Aa1'); const b = await mkPlayer('Bb2');
+    await sql('UPDATE players SET singles_rating = 1405 WHERE id = ?', a.player.id);
+    await call(a, 'syncLadder');
+    const ch = (await call(b, 'createChallenge', { defender_player_id: a.player.id })).body.challenge;
+    await sql('UPDATE challenges SET expires_at = ? WHERE id = ?', past(), ch.id);
+    await call(b, 'syncLadder');
+    const row = (await get('/api/entities/Challenge/' + ch.id)).body;
+    expect(row.penalty_rank_before).toBe(1);
+    expect(row.penalty_rank_after).toBe(2);
+    expect(row.challenger_rating_gain).toBe(row.penalty_rating);
+    const r = await ranks();
+    expect(r.map((x) => x[0])).toEqual(['Bb2', 'Aa1']);
+    expect(r[0][2] - 1400).toBe(row.penalty_rating);
+    expect(1405 - r[1][2]).toBe(row.penalty_rating);
+  });
+
+  it('migration/recompute SQL equals the pure helper on a mixed roster', async () => {
+    const ps = [];
+    for (const n of ['Aa1', 'Bb2', 'Cc3', 'Dd4']) ps.push(await mkPlayer(n));
+    await sql('UPDATE players SET singles_rating = 1500 WHERE id = ?', ps[3].player.id);
+    await sql('UPDATE players SET singles_rating = 1300, singles_wins = 2 WHERE id = ?', ps[0].player.id);
+    await sql('UPDATE players SET singles_rating = 1300, singles_wins = 4 WHERE id = ?', ps[1].player.id);
+    await call(ps[0], 'syncLadder');
+    expect((await ranks()).map((x) => x[0])).toEqual(['Dd4', 'Cc3', 'Bb2', 'Aa1']);
   });
 });
 
@@ -474,12 +560,13 @@ describe('atomicity / races (D1 batch guards)', () => {
 
   it('a stale guard rolls back the whole batch', async () => {
     const { guard, stmt, commit, ConflictError } = await import('../src/db.js');
+    const before = (await env.DB.prepare("SELECT value FROM meta WHERE key = 'ladder_version'").first()).value;
     await expect(commit(env, [
       stmt(env, "UPDATE meta SET value = value + 100 WHERE key = 'ladder_version'"),
       guard(env, '0 = 1'),
     ])).rejects.toBeInstanceOf(ConflictError);
     const v = await env.DB.prepare("SELECT value FROM meta WHERE key = 'ladder_version'").first();
-    expect(v.value).toBeLessThan(100);
+    expect(v.value).toBe(before);
   });
 });
 

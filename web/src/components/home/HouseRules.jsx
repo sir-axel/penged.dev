@@ -12,7 +12,7 @@ export const PRINCIPLES = [
   {
     tag: "03",
     title: "Challenges, not shortcuts",
-    body: "You climb by beating the player above you. Ducking one costs rating and a place on the ladder, and ignoring it for 72 hours costs double.",
+    body: "Your rank is your rating order. Ducking a challenge costs rating, and ignoring it for 72 hours costs double and pays the challenger.",
   },
 ];
 export function HouseRules() {

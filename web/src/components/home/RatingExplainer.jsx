@@ -22,14 +22,14 @@ export const XP_POINTS = [
   "First verified match of the day: +10 xp",
 ];
 export const CHALLENGE_POINTS = [
-  "You can challenge a player up to three places above you. One open challenge at a time.",
-  "The defender has 72 hours to accept. Ducking a challenge costs rating and rank.",
-  "Decline: the defender loses rating and drops one place.",
-  "No answer in 72 hours: the defender loses twice as much, the challenger takes their spot on the ladder and earns 15 xp.",
+  "You can challenge a player up to three ranks above you. One open challenge at a time.",
+  "The defender has 72 hours to accept. Ducking a challenge costs rating, and rank follows rating.",
+  "Decline: the defender loses rating.",
+  "No answer in 72 hours: the defender loses twice as much, the challenger gains the same points as a walkover and earns 15 xp.",
   "The cost peaks when you are evenly rated and close in rank. Ducking someone far below you costs little (at least 5 for silence, 3 for a decline). Rematches cost less.",
   "Played that challenger in the last 7 days? Declining is free. Played 3 or more matches this week? A decline costs half.",
   "After a decline or no answer, the same challenger cannot challenge you again for 7 days.",
-  "Penalised unfairly? Ask for a review; an admin can reverse it and give back your rating and spot.",
+  "Penalised unfairly? Ask for a review; an admin can reverse it and give back your rating.",
   "An accepted challenge that never gets played expires with no penalty.",
 ];
 export function RatingExplainer() {
@@ -97,8 +97,7 @@ export function RatingExplainer() {
           <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
             First match: 1400 beats 1600, expected score 0.24. A 3-0 blowout (11-2, 11-3, 11-1) is
             margin ×1.79 and upset ×1.10, so the winner gains 72 and the loser drops 72. The same
-            win, narrowly (11-9, 9-11, 12-10), is margin ×0.97: +39 and −39. The winner also takes
-            the higher spot on the ladder.
+            win, narrowly (11-9, 9-11, 12-10), is margin ×0.97: +39 and −39. Rank simply follows rating.
           </p>
           <Link
             to="/rules"

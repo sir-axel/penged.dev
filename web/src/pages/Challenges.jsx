@@ -24,13 +24,13 @@ export function outcomeText(t, asChallenger) {
   }
   if (t.penalty_reason === "expired") {
     return asChallenger
-      ? `No response · you take #${t.penalty_rank_before} from ${t.defender_name} · +15 xp walkover`
-      : `No response · ${minus(pen)} rating · lost #${t.penalty_rank_before} to ${t.challenger_name}`;
+      ? `No response · walkover over ${t.defender_name} · +${t.challenger_rating_gain || pen} rating · +15 xp`
+      : `No response · ${minus(pen)} rating${rankMoved ? ` · #${t.penalty_rank_before} → #${t.penalty_rank_after}` : ""}`;
   }
   const halved = t.penalty_reason === "fatigue_halved" ? " (halved: busy week)" : "";
   return asChallenger
-    ? `Declined · ${t.defender_name} ${minus(pen)} rating${rankMoved ? ` · dropped to #${t.penalty_rank_after}` : ""}`
-    : `Declined · ${minus(pen)} rating${rankMoved ? ` · dropped to #${t.penalty_rank_after}` : ""}${halved}`;
+    ? `Declined · ${t.defender_name} ${minus(pen)} rating${rankMoved ? ` · #${t.penalty_rank_before} → #${t.penalty_rank_after}` : ""}`
+    : `Declined · ${minus(pen)} rating${rankMoved ? ` · #${t.penalty_rank_before} → #${t.penalty_rank_after}` : ""}${halved}`;
 }
 
 function DeclineButton({ challenge, busy, onDecline }) {
@@ -47,7 +47,7 @@ function DeclineButton({ challenge, busy, onDecline }) {
   const confirmText = !d
     ? "Decline this challenge?"
     : d.penalty > 0
-      ? `Declining costs ${d.penalty} rating${d.drops_rank ? ` and drops you to #${d.rank_after}` : ""}. Staying silent for 72 hours would cost ${data.expire.penalty} and hand over your spot. Decline anyway?`
+      ? `Declining costs ${d.penalty} rating${d.drops_rank ? ` and drops you to #${d.rank_after}` : ""}. Staying silent for 72 hours would cost ${data.expire.penalty} and pay the challenger. Decline anyway?`
       : "Declining is free this time — you played this challenger this week. Decline?";
   return (
     <Button
@@ -146,7 +146,7 @@ export function Challenges() {
       <PageHeader
         eyebrow="Rank duels"
         title="Challenges"
-        description="Challenge up to three places above you. The window is 72 hours — ducking a challenge costs the defender rating and rank."
+        description="Challenge up to three ranks above you. The window is 72 hours — ducking a challenge costs the defender rating."
       />
       <div className="mx-auto max-w-2xl space-y-7 px-4 py-6 sm:px-6">
         {error && (
@@ -375,8 +375,8 @@ export function Challenges() {
           </section>
         )}
         <EmptyState
-          title="How challenges move rank"
-          body="Beating someone above you takes their place. Ducking costs rating and rank: declining drops you a place, and staying silent for 72 hours costs double and hands the challenger your spot."
+          title="How challenges move rating"
+          body="Rank follows rating. Declining costs you rating; staying silent for 72 hours costs double and the challenger gains those points."
           action={
             <Link
               to="/rules"

@@ -10,7 +10,7 @@ export function YourSpot({ player, toConfirm = 0 }) {
           <div className="flex flex-1 items-center gap-4">
             <div>
               <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-                Your spot
+                Your rank
               </p>
               <p className="font-heading text-2xl font-bold leading-none">
                 {player.singles_rank ? `#${player.singles_rank}` : "—"}

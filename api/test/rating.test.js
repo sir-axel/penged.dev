@@ -3,7 +3,7 @@ import {
   expectedScore, kFactor, repeatFactor, computeDelta, rateMatch, xpForMatch, levelForXp, xpForLevel,
   challengePenalty, dodgeBase, closeness, rankFactor, DODGE_RANK_FACTOR, RATING_FLOOR,
   dominance, movMultiplier, autocorrMultiplier, MAX_DELTA, MOV_BASE, MOV_SCALE,
-  validateGames, summarizeGames, applyLadderSwap,
+  validateGames, summarizeGames, rankPlayers,
 } from '../src/rating.js';
 
 describe('elo', () => {
@@ -272,19 +272,19 @@ describe('validateGames', () => {
   });
 });
 
-describe('applyLadderSwap', () => {
-  const ranks = { a: 1, b: 2, c: 3, d: 4, e: 5 };
-  it('lower-ranked winner takes the spot and others shift down', () => {
-    expect(applyLadderSwap(ranks, 'd', 'b')).toEqual({ a: 1, b: 3, c: 4, d: 2, e: 5 });
-    expect(applyLadderSwap(ranks, 'c', 'b')).toEqual({ a: 1, b: 3, c: 2, d: 4, e: 5 });
+describe('rankPlayers', () => {
+  const P = (id, rating, played = 0, created_date = '2026-01-01T00:00:00.000Z') => ({ id, rating, played, created_date });
+  it('orders by rating, highest first, ranks 1..N', () => {
+    expect(rankPlayers([P('a', 1400), P('b', 1500), P('c', 1300)])).toEqual({ b: 1, a: 2, c: 3 });
   });
-  it('no movement when the higher-ranked player wins', () => {
-    expect(applyLadderSwap(ranks, 'a', 'e')).toEqual(ranks);
+  it('ties: more games played, then earlier joined, then id', () => {
+    expect(rankPlayers([P('a', 1400, 1), P('b', 1400, 5)])).toEqual({ b: 1, a: 2 });
+    expect(rankPlayers([P('a', 1400, 2, '2026-02-01'), P('b', 1400, 2, '2026-01-01')])).toEqual({ b: 1, a: 2 });
+    expect(rankPlayers([P('b', 1400), P('a', 1400)])).toEqual({ a: 1, b: 2 });
   });
-  it('does not mutate and ignores unknown ids', () => {
-    const before = { ...ranks };
-    applyLadderSwap(ranks, 'e', 'a');
-    expect(ranks).toEqual(before);
-    expect(applyLadderSwap(ranks, 'zz', 'a')).toEqual(ranks);
+  it('does not mutate its input', () => {
+    const list = [P('a', 1), P('b', 2)];
+    rankPlayers(list);
+    expect(list.map((x) => x.id)).toEqual(['a', 'b']);
   });
 });

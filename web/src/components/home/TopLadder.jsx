@@ -33,7 +33,7 @@ export function TopLadder({ players = [] }) {
           <div className="px-4 py-8 text-center">
             <p className="font-heading text-sm font-semibold">The ladder is empty</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              The first profile created takes spot one.
+              The first profile created takes rank one.
             </p>
             <Link
               to="/register"

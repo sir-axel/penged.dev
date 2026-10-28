@@ -72,7 +72,7 @@ export function Leaderboard() {
       <PageHeader
         eyebrow="Ladder"
         title="Leaderboard"
-        description="Ranked on verified matches only. Singles runs a positional ladder; doubles and overall rank by rating."
+        description="Ranked by rating, on verified matches only."
       />
       <div className="sticky top-14 z-20 border-b border-border bg-background/95 backdrop-blur">
         <div
@@ -130,7 +130,7 @@ export function Leaderboard() {
         )}
         <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
           {view === "singles"
-            ? "Beating someone above you takes their place; everyone in between slides down one."
+            ? "Singles rank is rating order. Ties go to whoever has played more."
             : view === "doubles"
               ? "Doubles rating is a separate pool — it only moves on verified doubles results."
               : "Overall weights your singles and doubles ratings by how much you have played each."}{" "}

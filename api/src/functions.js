@@ -9,7 +9,7 @@ import { avatarOwner, removeAvatar } from './uploads.js';
 import { decodeInternal, pub } from './schema.js';
 import {
   START_RATING, REPEAT_WINDOW_DAYS, rateMatch, xpForMatch, levelForXp, validateGames, summarizeGames,
-  applyLadderSwap, challengePenalty, WALKOVER_XP, COOLDOWN_DAYS, WAIVER_DAYS, FATIGUE_DAYS,
+  RANK_SQL, rankPlayers, RATING_FLOOR, challengePenalty, WALKOVER_XP, COOLDOWN_DAYS, WAIVER_DAYS, FATIGUE_DAYS,
 } from './rating.js';
 
 const MATCH_EXPIRY_MS = 7 * 86400000;
@@ -67,19 +67,10 @@ const getChallenge = (env, id) => first(env, 'SELECT * FROM challenges WHERE id 
 const touch = (env, playerId, now) =>
   stmt(env, 'UPDATE players SET last_active_at = ?, updated_date = ? WHERE id = ?', now, now, playerId);
 
-/** Statements that renumber singles_rank to 1..N (existing order, nulls last, created, id), skipping `exclude`. */
-async function compactPlan(env, exclude) {
-  const rows = await all(env, 'SELECT id, singles_rank, created_date FROM players');
-  const list = rows.filter((r) => r.id !== exclude).sort((a, b) =>
-    (a.singles_rank == null) - (b.singles_rank == null) || (a.singles_rank ?? 0) - (b.singles_rank ?? 0) ||
-    (a.created_date < b.created_date ? -1 : a.created_date > b.created_date ? 1 : a.id < b.id ? -1 : 1));
-  const now = nowIso();
-  const out = [];
-  list.forEach((r, i) => {
-    if (r.singles_rank !== i + 1) out.push(stmt(env, 'UPDATE players SET singles_rank = ?, updated_date = ? WHERE id = ?', i + 1, now, r.id));
-  });
-  return out;
-}
+/** Recompute singles_rank for everyone from ratings (put AFTER every rating / membership change in a batch), then bump the ladder version. */
+const rankStmts = (env) => [stmt(env, RANK_SQL), bumpLadder(env)];
+const rankRows = (env) =>
+  all(env, 'SELECT id, singles_rating AS rating, singles_wins + singles_losses AS played, created_date FROM players');
 /**
  * unanswered_challenges = expired challenges the player was defender of (forfeited/dismissed ones leave the count).
  * under_review = unanswered >= 2 OR (inactive 30+ days AND in an open 'disputed' match). Derived data: unguarded.
@@ -96,16 +87,6 @@ export const flagsStmt = (env) => {
     `UPDATE players SET unanswered_challenges = ${un}, under_review = ${ur}
      WHERE unanswered_challenges IS NOT ${un} OR under_review IS NOT ${ur}`, cut, cut);
 };
-/** Ladder swap statements from a FRESH read of all ranks; caller adds guardLadder(lv) read before this call. */
-async function swapPlan(env, winnerId, loserId) {
-  const rows = await all(env, 'SELECT id, singles_rank FROM players WHERE singles_rank IS NOT NULL');
-  const before = Object.fromEntries(rows.map((x) => [x.id, x.singles_rank]));
-  const after = applyLadderSwap(before, winnerId, loserId);
-  const now = nowIso();
-  return Object.entries(after).filter(([id, r]) => before[id] !== r)
-    .map(([id, r]) => stmt(env, 'UPDATE players SET singles_rank = ?, updated_date = ? WHERE id = ?', r, now, id));
-}
-
 
 // ---------- challenge penalties ----------
 /** Meeting count (180d), recent pair match (7d) and defender fatigue (verified matches in 7d) for a challenge. */
@@ -122,23 +103,24 @@ async function penaltyFacts(env, c) {
        AND EXISTS (SELECT 1 FROM json_each(all_player_ids) WHERE value = ?)`, daysAgoIso(FATIGUE_DAYS), c.defender_player_id)).n;
   return { meetings, recentPairMatch, defRecentMatches };
 }
-const penaltyOf = (kind, def, chal, facts) =>
+const penaltyOf = (kind, def, chal, rankGap, facts) =>
   challengePenalty({
-    kind, rankGap: def.singles_rank != null && chal.singles_rank != null ? Math.abs(chal.singles_rank - def.singles_rank) : 1, defRating: def.singles_rating, defMatches: def.singles_wins + def.singles_losses, chalRating: chal.singles_rating, ...facts,
+    kind, rankGap, defRating: def.singles_rating, defMatches: def.singles_wins + def.singles_losses, chalRating: chal.singles_rating, ...facts,
   });
 
 /**
- * Guarded statements that penalise the defender of each OPEN challenge (kind 'expired' | 'declined') and move the ladder.
- * Returns { guards, stmts, changed }; the caller puts guards first and commits. Each challenge is guarded on
- * status 'open' + version, so a challenge is penalised at most once (cron + syncLadder racing => one wins).
+ * Guarded statements that penalise the defender of each OPEN challenge (kind 'expired' | 'declined').
+ * Penalties act through rating only (expired: defender -P, challenger +P walkover; declined: defender -P);
+ * ranks follow from the recompute appended at the end. Returns { guards, stmts, changed }; the caller puts
+ * guards first and commits. Each challenge is guarded on status 'open' + version, so it is penalised at most once.
  */
 async function penaltyPlan(env, challenges, kind, now, lv) {
-  const rows = await all(env, 'SELECT id, singles_rank FROM players WHERE singles_rank IS NOT NULL');
-  const ranks0 = Object.fromEntries(rows.map((x) => [x.id, x.singles_rank]));
-  let ranks = { ...ranks0 };
+  const roster = await rankRows(env);
+  const byId = Object.fromEntries(roster.map((r) => [r.id, r]));
+  const ranksNow = () => rankPlayers(roster);
   const pl = {};
   const dirty = new Set();
-  const guards = [];
+  const guards = [guardLadder(env, lv)];
   const chStmts = [];
   const load = async (id) => {
     if (!(id in pl)) {
@@ -154,28 +136,28 @@ async function penaltyPlan(env, challenges, kind, now, lv) {
     const chal = await load(c.challenger_player_id);
     if (!def || !chal) continue;
     guards.push(guardRow(env, 'challenges', c.id, c.version, 'open'));
-    def.singles_rank = ranks[def.id] ?? null;
-    chal.singles_rank = ranks[chal.id] ?? null;
-    const res = penaltyOf(kind, def, chal, await penaltyFacts(env, c));
+    const ranks = ranksNow();
     const before = ranks[def.id] ?? null;
-    if (res.dropsRank && before != null) {
-      if (kind === 'expired') ranks = applyLadderSwap(ranks, chal.id, def.id);
-      else {
-        const below = Object.keys(ranks).find((id) => ranks[id] === before + 1);
-        if (below) ranks = applyLadderSwap(ranks, below, def.id);
+    const gap = ranks[def.id] != null && ranks[chal.id] != null ? Math.abs(ranks[chal.id] - ranks[def.id]) : 1;
+    const res = penaltyOf(kind, def, chal, gap, await penaltyFacts(env, c));
+    let gain = 0;
+    if (res.penalty > 0) {
+      def.singles_rating -= res.penalty; dirty.add(def.id); byId[def.id].rating = def.singles_rating;
+      if (res.walkover) {
+        gain = res.penalty;
+        chal.singles_rating += gain; byId[chal.id].rating = chal.singles_rating;
       }
     }
-    const after = ranks[def.id] ?? null;
-    if (res.penalty > 0) { def.singles_rating -= res.penalty; dirty.add(def.id); }
     if (res.walkover) {
       chal.xp += WALKOVER_XP;
       chal.level = levelForXp(chal.xp);
       dirty.add(chal.id);
     }
+    const after = ranksNow()[def.id] ?? null;
     chStmts.push(stmt(env,
-      `UPDATE challenges SET status = ?, responded_at = ?, penalty_rating = ?, penalty_rank_before = ?, penalty_rank_after = ?,
+      `UPDATE challenges SET status = ?, responded_at = ?, penalty_rating = ?, challenger_rating_gain = ?, penalty_rank_before = ?, penalty_rank_after = ?,
          penalty_reason = ?, penalized_at = ?, updated_date = ?, version = version + 1 WHERE id = ?`,
-      kind === 'expired' ? 'expired' : 'declined', kind === 'expired' ? c.responded_at : now, res.penalty, before, after,
+      kind === 'expired' ? 'expired' : 'declined', kind === 'expired' ? c.responded_at : now, res.penalty, gain, before, after,
       res.reason, now, now, c.id));
     changed++;
   }
@@ -186,12 +168,7 @@ async function penaltyPlan(env, challenges, kind, now, lv) {
       'UPDATE players SET singles_rating = ?, xp = ?, level = ?, updated_date = ?, version = version + 1 WHERE id = ?',
       p.singles_rating, p.xp, p.level, now, id));
   }
-  const moved = Object.entries(ranks).filter(([id, r]) => ranks0[id] !== r);
-  if (moved.length) {
-    guards.unshift(guardLadder(env, lv));
-    for (const [id, r] of moved) stmts.push(stmt(env, 'UPDATE players SET singles_rank = ?, updated_date = ? WHERE id = ?', r, now, id));
-    stmts.push(bumpLadder(env));
-  }
+  if (changed) stmts.push(...rankStmts(env));
   return { guards, stmts, changed };
 }
 
@@ -214,7 +191,7 @@ fns.createPlayer = ({ env, user }, body) =>
     if (await first(env, 'SELECT 1 AS x FROM players WHERE username_lower = ?', username.toLowerCase())) {
       throw new HttpError(409, 'That username is already taken.');
     }
-    const rank = (await first(env, 'SELECT coalesce(max(singles_rank), 0) + 1 AS r FROM players')).r;
+    const rank = (await first(env, 'SELECT coalesce(max(singles_rank), 0) + 1 AS r FROM players')).r; // provisional; recomputed below
     const id = uuid();
     const now = nowIso();
     await commit(env, [
@@ -224,7 +201,7 @@ fns.createPlayer = ({ env, user }, body) =>
            singles_rank, last_active_at, created_date, updated_date, created_by_id)
          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         id, user.id, username, username.toLowerCase(), display, avatar, START_RATING, START_RATING, rank, now, now, now, user.id),
-      bumpLadder(env),
+      ...rankStmts(env),
     ]);
     return { player: pub('Player', await first(env, 'SELECT * FROM players WHERE id = ?', id)) };
   });
@@ -326,7 +303,7 @@ fns.submitMatch = ({ env, user }, body) =>
   });
 
 /** Builds the guarded statements that verify a match (ratings, xp, records, ladder). */
-async function verifyPlan(env, m, now, lv) {
+async function verifyPlan(env, m, now) {
   const players = await getPlayers(env, m.all_player_ids);
   if (players.length !== m.all_player_ids.length) throw new HttpError(409, 'A player in this match no longer exists.');
   const fmt = m.format;
@@ -394,8 +371,7 @@ async function verifyPlan(env, m, now, lv) {
   if (fmt === 'singles') {
     const winner = sides[m.winner_side][0];
     const loser = sides[m.winner_side === 'a' ? 'b' : 'a'][0];
-    const swap = await swapPlan(env, winner, loser);
-    if (swap.length) stmts.push(guardLadder(env, lv), ...swap, bumpLadder(env));
+    stmts.push(...rankStmts(env));
     // An accepted challenge between these two players, accepted before this result was submitted, is now played.
     const ch = await first(env,
       `SELECT * FROM challenges WHERE status = 'accepted' AND responded_at <= ? AND (expires_at IS NULL OR expires_at > ?)
@@ -414,7 +390,6 @@ fns.respondMatch = ({ env, user }, body) =>
     const { match_id: id, decision } = body;
     if (!isStr(id)) throw bad('Missing match.');
     if (!['accept', 'decline', 'dispute', 'cancel'].includes(decision)) throw bad('Choose accept, decline, dispute or cancel.');
-    const lv = await ladderVersion(env);
     const m = await getMatch(env, id);
     if (!m) throw new HttpError(404, 'Match not found.');
     if (!m.all_user_ids.includes(user.id)) throw new HttpError(403, 'Only players in this match can respond.');
@@ -428,7 +403,7 @@ fns.respondMatch = ({ env, user }, body) =>
     if (decision === 'accept') {
       const accepted = [...m.accepted_user_ids, user.id];
       if (m.all_user_ids.every((u) => accepted.includes(u))) {
-        const plan = await verifyPlan(env, m, now, lv);
+        const plan = await verifyPlan(env, m, now);
         stmts.push(...plan.stmts, stmt(env,
           `UPDATE matches SET accepted_user_ids = ?, status = 'verified', verified_at = ?, rating_changes = ?,
              updated_date = ?, version = version + 1 WHERE id = ?`,
@@ -523,13 +498,19 @@ fns.challengePenaltyPreview = async ({ env, user }, body) => {
   const [def, chal] = await Promise.all([getPlayers(env, [c.defender_player_id]), getPlayers(env, [c.challenger_player_id])]).then((r) => [r[0][0], r[1][0]]);
   if (!def || !chal) throw new HttpError(404, 'Player not found.');
   const facts = await penaltyFacts(env, c);
+  const roster = await rankRows(env);
+  const ranks = rankPlayers(roster);
+  const gap = ranks[def.id] != null && ranks[chal.id] != null ? Math.abs(ranks[chal.id] - ranks[def.id]) : 1;
   const out = {};
   for (const kind of ['declined', 'expired']) {
-    const r = penaltyOf(kind, def, chal, facts);
-    const rank = def.singles_rank;
+    const r = penaltyOf(kind, def, chal, gap, facts);
+    const gain = r.walkover ? r.penalty : 0;
+    const after = rankPlayers(roster.map((p) => ({
+      ...p, rating: p.rating - (p.id === def.id ? r.penalty : 0) + (p.id === chal.id ? gain : 0),
+    })))[def.id];
     out[kind === 'declined' ? 'decline' : 'expire'] = {
-      penalty: r.penalty, reason: r.reason, drops_rank: r.dropsRank && rank != null,
-      rank_after: r.dropsRank && rank != null ? rank + 1 : rank,
+      penalty: r.penalty, reason: r.reason, drops_rank: after > ranks[def.id], rank_after: after,
+      challenger_gain: gain,
     };
   }
   return out;
@@ -562,25 +543,15 @@ fns.resolveChallenge = ({ env, user }, body) =>
         stmts.push(guardRow(env, 'players', def.id, def.version));
         stmts.push(stmt(env, 'UPDATE players SET singles_rating = singles_rating + ?, updated_date = ?, version = version + 1 WHERE id = ?',
           c.penalty_rating || 0, now, def.id));
-        const rows = await all(env, 'SELECT id, singles_rank FROM players WHERE singles_rank IS NOT NULL');
-        const before = Object.fromEntries(rows.map((x) => [x.id, x.singles_rank]));
-        const target = c.penalty_rank_before;
-        if (target != null && before[def.id] != null && before[def.id] > target) {
-          const after = { ...before };
-          for (const [pid, r] of Object.entries(before)) if (r >= target && r < before[def.id]) after[pid] = r + 1;
-          after[def.id] = target;
-          stmts.push(guardLadder(env, lv));
-          for (const [pid, r] of Object.entries(after)) {
-            if (before[pid] !== r) stmts.push(stmt(env, 'UPDATE players SET singles_rank = ?, updated_date = ? WHERE id = ?', r, now, pid));
-          }
-          stmts.push(bumpLadder(env));
-        }
       }
       if (chal && c.penalty_reason === 'expired') {
         const xp = Math.max(0, chal.xp - WALKOVER_XP);
         stmts.push(guardRow(env, 'players', chal.id, chal.version));
-        stmts.push(stmt(env, 'UPDATE players SET xp = ?, level = ?, updated_date = ?, version = version + 1 WHERE id = ?', xp, levelForXp(xp), now, chal.id));
+        const rating = Math.max(RATING_FLOOR, chal.singles_rating - (c.challenger_rating_gain || 0));
+        stmts.push(stmt(env, 'UPDATE players SET singles_rating = ?, xp = ?, level = ?, updated_date = ?, version = version + 1 WHERE id = ?',
+          rating, xp, levelForXp(xp), now, chal.id));
       }
+      stmts.push(guardLadder(env, lv), ...rankStmts(env));
       stmts.push(stmt(env, 'UPDATE challenges SET reversed = 1, resolved_by = ?, updated_date = ?, version = version + 1 WHERE id = ?', user.id, now, c.id));
       stmts.push(flagsStmt(env));
     }
@@ -588,7 +559,7 @@ fns.resolveChallenge = ({ env, user }, body) =>
     return { challenge: pub('Challenge', await getChallenge(env, id)) };
   });
 
-/** Expire overdue challenges/matches, recompute flags, compact ranks. Session-free (also run by cron). */
+/** Expire overdue challenges/matches, recompute flags and ranks. Session-free (also run by cron). */
 export const runSyncLadder = ({ env }) =>
   retrying(async () => {
     const lv = await ladderVersion(env);
@@ -596,13 +567,10 @@ export const runSyncLadder = ({ env }) =>
     // Unanswered (never responded) challenges that ran out of time cost the defender rating + rank.
     const overdue = await all(env, `SELECT * FROM challenges WHERE status = 'open' AND responded_at IS NULL AND expires_at < ? ORDER BY expires_at, id`, now);
     const plan = overdue.length ? await penaltyPlan(env, overdue, 'expired', now, lv) : { guards: [], stmts: [], changed: 0 };
-    const compact = plan.changed ? [] : await compactPlan(env, null);
     const stmts = [...plan.guards, ...plan.stmts];
-    if (compact.length) stmts.push(guardLadder(env, lv));
     const iC = stmts.push(stmt(env, `UPDATE challenges SET status = 'expired', updated_date = ?, version = version + 1 WHERE status IN ('open','accepted') AND expires_at < ?`, now, now)) - 1;
     const iM = stmts.push(stmt(env, `UPDATE matches SET status = 'expired', updated_date = ?, version = version + 1 WHERE status = 'pending' AND expires_at < ?`, now, now)) - 1;
-    stmts.push(flagsStmt(env), ...compact);
-    if (compact.length) stmts.push(bumpLadder(env));
+    stmts.push(flagsStmt(env), stmt(env, RANK_SQL)); // ranks are derived from ratings; idempotent
     const res = await commit(env, stmts);
     return { ok: true, expired_challenges: plan.changed + res[iC].meta.changes, expired_matches: res[iM].meta.changes };
   });
@@ -614,14 +582,12 @@ fns.deleteAccount = ({ env, user }, body) =>
     if (body.confirm !== 'DELETE') throw bad('Type DELETE to confirm.');
     const lv = await ladderVersion(env);
     const p = await getPlayerByUser(env, user.id);
-    const compact = await compactPlan(env, p?.id ?? null);
     await commit(env, [
       guardLadder(env, lv),
       stmt(env, `DELETE FROM challenges WHERE status IN ('open','accepted') AND (challenger_user_id = ? OR defender_user_id = ?)`, user.id, user.id),
       stmt(env, `DELETE FROM matches WHERE status = 'pending' AND EXISTS (SELECT 1 FROM json_each(all_user_ids) WHERE value = ?)`, user.id),
       stmt(env, 'DELETE FROM players WHERE user_id = ?', user.id),
-      ...compact,
-      bumpLadder(env),
+      ...rankStmts(env),
       flagsStmt(env),
       stmt(env, 'DELETE FROM "session" WHERE "userId" = ?', user.id),
       stmt(env, 'DELETE FROM "account" WHERE "userId" = ?', user.id),

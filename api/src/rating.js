@@ -1,4 +1,4 @@
-// Pure rules module: ratings, XP, game validation, ladder reordering. No DB access.
+// Pure rules module: ratings, XP, game validation, rating-derived ranking. No DB access.
 
 export const START_RATING = 1400;
 export const RATING_FLOOR = 700;
@@ -177,22 +177,27 @@ export function summarizeGames(games) {
   return { games_a: a, games_b: b, winner_side: a > b ? 'a' : 'b' };
 }
 
+// ---------- Ranking (derived from rating) ----------
 /**
- * Pure ladder swap. ranksMap: { playerId: rank }. If the winner is ranked below
- * (numerically greater than) the loser, the winner takes the loser's rank and everyone
- * from the loser's rank through winnerRank-1 moves down one. Returns a NEW map.
+ * Leaderboard order: rating DESC, then games played DESC, then created_date ASC, then id.
+ * `players`: [{ id, rating, played, created_date }]. Returns { id: rank } with ranks 1..N.
+ * Must mirror RANK_SQL below.
  */
-export function applyLadderSwap(ranksMap, winnerId, loserId) {
-  const next = { ...ranksMap };
-  const rw = ranksMap[winnerId];
-  const rl = ranksMap[loserId];
-  if (rw == null || rl == null || rw <= rl) return next;
-  for (const [id, r] of Object.entries(ranksMap)) {
-    if (r != null && r >= rl && r < rw) next[id] = r + 1;
-  }
-  next[winnerId] = rl;
-  return next;
+export function rankPlayers(players) {
+  const sorted = [...players].sort((a, b) =>
+    b.rating - a.rating || b.played - a.played ||
+    (a.created_date < b.created_date ? -1 : a.created_date > b.created_date ? 1 : 0) ||
+    (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const out = {};
+  sorted.forEach((p, i) => { out[p.id] = i + 1; });
+  return out;
 }
+
+/** The single SQL statement that rewrites players.singles_rank from ratings (same order as rankPlayers). */
+export const RANK_SQL = `UPDATE players SET singles_rank = r.rk FROM (
+  SELECT id, ROW_NUMBER() OVER (ORDER BY singles_rating DESC, (singles_wins + singles_losses) DESC, created_date ASC, id ASC) AS rk
+  FROM players) AS r
+  WHERE players.id = r.id AND players.singles_rank IS NOT r.rk`;
 
 // ---------- Challenge penalties (ducking a duel costs the defender) ----------
 export const EXPIRE_MULT = 1.0;
