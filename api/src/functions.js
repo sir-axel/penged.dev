@@ -5,6 +5,7 @@ import {
 } from './db.js';
 import { getUser } from './auth.js';
 import { HttpError, bad } from './errors.js';
+import { submitFeedback, listFeedback, updateFeedback } from './feedback.js';
 import { avatarOwner, removeAvatar } from './uploads.js';
 import { decodeInternal, pub } from './schema.js';
 import {
@@ -612,13 +613,20 @@ fns.deleteAccount = ({ env, user }, body) =>
     return { ok: true };
   });
 
+fns.submitFeedback = submitFeedback;
+fns.listFeedback = listFeedback;
+fns.updateFeedback = updateFeedback;
+
+// The only functions callable without a session (they get user = null).
+const PUBLIC_FNS = new Set(['submitFeedback']);
+
 export const functions = new Hono();
 functions.post('/:name', async (c) => {
   const name = c.req.param('name');
   const fn = Object.hasOwn(fns, name) ? fns[name] : null;
   if (!fn) throw new HttpError(404, 'Unknown function');
   const user = await getUser(c);
-  if (!user) throw new HttpError(401, 'Sign in required');
+  if (!user && !PUBLIC_FNS.has(name)) throw new HttpError(401, 'Sign in required');
   let body = {};
   const text = await c.req.text();
   if (text.trim()) {
@@ -629,5 +637,5 @@ functions.post('/:name', async (c) => {
     }
   }
   if (body === null || typeof body !== 'object' || Array.isArray(body)) throw bad('Request body must be a JSON object.');
-  return c.json(await fn({ env: c.env, user }, body));
+  return c.json(await fn({ env: c.env, user, request: c.req.raw }, body));
 });

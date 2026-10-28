@@ -1,8 +1,10 @@
 import { useEffect } from "react";
-import { Link, NavLink, Outlet } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { Trophy, Plus, Swords, User, LogIn } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { Logo } from "@/components/Logo";
+import { CountBadge, useNewFeedbackCount } from "@/hooks/useFeedbackCount";
+import { feedbackHref } from "@/pages/Feedback";
 
 export const NAV_ITEMS = [
   {
@@ -26,6 +28,8 @@ export const NAV_ITEMS = [
 ];
 export function Layout() {
   let { isAuthenticated } = useAuth();
+  const location = useLocation();
+  const newFeedback = useNewFeedbackCount();
   // While a text field is focused the on-screen keyboard is (probably) open: drop the bottom nav and
   // let the fixed submit bar sit flush at the bottom so neither covers the field being typed in.
   useEffect(() => {
@@ -71,6 +75,7 @@ export function Layout() {
             >
               <User className="h-3.5 w-3.5" aria-hidden="true" />
               My profile
+              <CountBadge n={newFeedback} />
             </Link>
           ) : (
             <Link
@@ -89,7 +94,15 @@ export function Layout() {
       <footer className="border-t border-border px-4 py-8 sm:px-6">
         <div className="mx-auto flex max-w-5xl flex-col gap-2 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
           <Logo showWordmark />
-          <p className="font-mono uppercase tracking-[0.14em]">penged.dev — verified match play</p>
+          <p className="flex flex-wrap items-center gap-x-4 font-mono uppercase tracking-[0.14em]">
+            <Link
+              to={feedbackHref(location.pathname + location.search)}
+              className="inline-flex min-h-10 items-center underline underline-offset-4 hover:text-foreground"
+            >
+              Feedback
+            </Link>
+            <span>penged.dev — verified match play</span>
+          </p>
         </div>
       </footer>
       <nav

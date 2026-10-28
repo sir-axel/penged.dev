@@ -14,6 +14,8 @@ import { Welcome } from "@/pages/Welcome";
 import { NewMatch } from "@/pages/NewMatch";
 import { Challenges } from "@/pages/Challenges";
 import { Profile } from "@/pages/Profile";
+import { Feedback } from "@/pages/Feedback";
+import { AdminFeedback } from "@/pages/AdminFeedback";
 import { AdminReviews } from "@/pages/AdminReviews";
 import { Login } from "@/pages/Login";
 import { Register } from "@/pages/Register";
@@ -33,6 +35,7 @@ function AppRoutes() {
         <Route path="/matches/:id" element={<MatchDetail />} />
         <Route path="/players/:username" element={<PlayerProfile />} />
         <Route path="/rules" element={<Rules />} />
+        <Route path="/feedback" element={<Feedback />} />
         <Route element={<RequireAuth />}>
           <Route path="/welcome" element={<Welcome />} />
           <Route element={<RequirePlayer />}>
@@ -40,6 +43,7 @@ function AppRoutes() {
             <Route path="/challenges" element={<Challenges />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/admin/reviews" element={<AdminReviews />} />
+            <Route path="/admin/feedback" element={<AdminFeedback />} />
           </Route>
         </Route>
       </Route>

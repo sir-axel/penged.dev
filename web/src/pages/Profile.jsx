@@ -12,10 +12,13 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { AccountPanel } from "@/components/AccountPanel";
+import { CountBadge, useNewFeedbackCount } from "@/hooks/useFeedbackCount";
+import { feedbackHref } from "@/pages/Feedback";
 import { api } from "@/api/client";
 
 export function Profile() {
   let { user } = useAuth(),
+    newFeedback = useNewFeedbackCount(),
     { player, refetch: refetch } = useMyPlayer(),
     queryClient = useQueryClient(),
     [form, setForm] = useState({
@@ -187,6 +190,21 @@ export function Profile() {
                 Review queue
               </Link>
             )}
+            {user?.role === "admin" && (
+              <Link
+                to="/admin/feedback"
+                className="inline-flex items-center gap-1.5 rounded-sm border border-border bg-card px-3 py-2 text-sm font-medium hover:border-foreground/40"
+              >
+                Feedback inbox
+                <CountBadge n={newFeedback} />
+              </Link>
+            )}
+            <Link
+              to={feedbackHref("/profile")}
+              className="inline-flex min-h-10 items-center rounded-sm border border-border bg-card px-3 py-2 text-sm font-medium hover:border-foreground/40"
+            >
+              Send feedback
+            </Link>
           </div>
           <AccountPanel email={user?.email} />
           <p className="text-xs text-muted-foreground">

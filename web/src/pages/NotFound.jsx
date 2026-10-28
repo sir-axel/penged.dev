@@ -1,4 +1,5 @@
-import { useLocation } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
+import { feedbackHref } from "@/pages/Feedback";
 
 export function NotFound() {
   const pageName = useLocation().pathname.substring(1);
@@ -33,6 +34,15 @@ export function NotFound() {
               </svg>
               Go Home
             </button>
+            <p className="mt-4 text-sm text-slate-600">
+              Something broken?{" "}
+              <Link
+                to={feedbackHref("/" + pageName)}
+                className="inline-flex min-h-10 items-center font-medium text-slate-700 underline underline-offset-4"
+              >
+                Send feedback
+              </Link>
+            </p>
           </div>
         </div>
       </div>

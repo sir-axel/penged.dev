@@ -26,6 +26,8 @@ Demo data: `npm --prefix api run seed` (add `-- --reset` to wipe and reseed) cre
 
 Admins (forfeit review at `/admin/reviews`) are granted only by a command, never by email: `npm --prefix api run make-admin -- someone@example.com` locally (the user must have signed up; the seed already makes `admin@penged.test` an admin). In production: `npx wrangler d1 execute penged --remote --command "UPDATE \"user\" SET role='admin' WHERE email='someone@example.com'"`.
 
+Feedback: `/feedback` is public (signed-out visitors may send a note; honeypot + 5/hour per hashed IP + 20/day per user). Notes live in the `feedback` table (migration 0009), never in the entity endpoints; admins read them at `/admin/feedback` via the `listFeedback` / `updateFeedback` functions.
+
 Sign-up deviation: the original asked for an emailed verification code after registering. With no email service this step is skipped: registering signs you in immediately and sends you to `/welcome` to claim your username.
 
 Tests: `npm test` (rating math + game validator unit tests, and integration tests that drive the real Hono app against local D1/R2 via wrangler's platform proxy).

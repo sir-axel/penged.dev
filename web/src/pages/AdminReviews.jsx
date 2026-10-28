@@ -7,10 +7,13 @@ import { EmptyState } from "@/components/EmptyState";
 import { formatShortDate } from "@/lib/ladder";
 import { outcomeText } from "@/pages/Challenges";
 import { Button } from "@/components/ui/button";
+import { Link } from "react-router-dom";
+import { CountBadge, useNewFeedbackCount } from "@/hooks/useFeedbackCount";
 import { api } from "@/api/client";
 
 export function AdminReviews() {
   let { user } = useAuth(),
+    newFeedback = useNewFeedbackCount(),
     queryClient = useQueryClient(),
     [busy, setBusy] = useState(""),
     [error, setError] = useState(""),
@@ -47,6 +50,15 @@ export function AdminReviews() {
         eyebrow="Admin"
         title="Challenge penalties"
         description="Recent declines and no-shows. Reversing a penalty gives the defender back their rating, and takes the walkover rating and xp from the challenger."
+        action={
+          <Link
+            to="/admin/feedback"
+            className="inline-flex min-h-10 items-center gap-2 border border-foreground bg-card px-3 py-1.5 font-display text-[0.55rem] uppercase tracking-[0.12em] hover:bg-secondary"
+          >
+            Feedback inbox
+            <CountBadge n={newFeedback} />
+          </Link>
+        }
       />
       <div className="mx-auto max-w-2xl space-y-3 px-4 py-6 sm:px-6">
         {error && (
