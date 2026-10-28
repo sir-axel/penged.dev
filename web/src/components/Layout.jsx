@@ -126,35 +126,30 @@ export function Layout() {
       <main className="flex-1 pb-[calc(6rem+env(safe-area-inset-bottom))] md:pb-0">
         <Outlet />
       </main>
-      {/* Dark band so the footer reads as a footer; links stacked one per row. Extra bottom padding on
-          phones keeps the last row clear of the fixed bottom nav. */}
-      <footer className="border-t-2 border-foreground bg-foreground px-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))] pt-8 text-background sm:px-6 md:pb-10">
-        <div className="mx-auto flex max-w-5xl flex-col gap-4">
-          <Logo showWordmark />
-          <ul className="flex flex-col font-mono text-xs uppercase tracking-[0.14em]">
-            <li>
-              <Link
-                to={feedbackHref(location.pathname + location.search)}
-                className="inline-flex min-h-10 items-center text-background/80 underline underline-offset-4 hover:text-background"
-              >
-                Feedback
-                <UnreadDot n={unreadReplies} className="ml-1.5" />
-              </Link>
-            </li>
-            <li>
-              <a
-                href="https://github.com/sir-axel/penged.dev"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex min-h-10 items-center text-background/80 underline underline-offset-4 hover:text-background"
-              >
-                Open source · contribute on GitHub
-              </a>
-            </li>
-          </ul>
-          <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-background/60">
-            penged.dev — verified match play
-          </p>
+      {/* Grey band (light theme) so the footer reads as a footer: logo on the left, vertically centred;
+          links stacked on the right. Extra bottom padding on phones keeps it clear of the fixed bottom nav. */}
+      <footer className="border-t border-border bg-accent px-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))] pt-6 text-foreground sm:px-6 md:pb-6">
+        <div className="mx-auto flex max-w-5xl items-center justify-between gap-4">
+          <Logo showWordmark className="shrink-0" />
+          <div className="flex min-w-0 flex-col items-end font-mono text-[11px] uppercase tracking-[0.12em] sm:text-xs sm:tracking-[0.14em]">
+            <Link to={feedbackHref(location.pathname + location.search)} className="inline-flex min-h-10 items-center justify-end whitespace-nowrap text-right text-foreground/80 underline underline-offset-4 hover:text-foreground">
+              Feedback
+              <UnreadDot n={unreadReplies} className="ml-1.5" />
+            </Link>
+            <a
+              href="https://github.com/sir-axel/penged.dev"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex min-h-10 items-center justify-end text-right text-foreground/80 underline underline-offset-4 hover:text-foreground"
+            >
+              <span className="sm:hidden">Contribute on GitHub</span>
+              <span className="hidden sm:inline">Open source · contribute on GitHub</span>
+            </a>
+            <p className="mt-1 text-right text-[10px] text-muted-foreground sm:text-[11px]">
+              <span className="sm:hidden">Verified match play</span>
+              <span className="hidden sm:inline">penged.dev — verified match play</span>
+            </p>
+          </div>
         </div>
       </footer>
       <nav
