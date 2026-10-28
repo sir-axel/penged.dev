@@ -42,7 +42,7 @@ export const NAV_ITEMS = [
   },
 ];
 // Desktop header only: the mobile bottom nav keeps exactly the five items above (chat lives in the mobile header).
-const DESKTOP_NAV = [...NAV_ITEMS, { to: "/chat", label: "Chat", chat: true }];
+const DESKTOP_NAV = [...NAV_ITEMS, { to: "/chat", label: "Chat", short: "Chat", chat: true }];
 
 export function Layout() {
   let { isAuthenticated } = useAuth();
@@ -77,18 +77,18 @@ export function Layout() {
           <Link to="/" aria-label="Penged.dev home" className="inline-flex min-h-10 items-center rounded-none py-1">
             <Logo />
           </Link>
-          <nav aria-label="Main" className="hidden items-center gap-1 md:flex">
-            {DESKTOP_NAV.map(({ to: e, label: t, badge, chat }) => (
+          <nav aria-label="Main" className="hidden min-w-0 items-center gap-1.5 md:flex lg:gap-2">
+            {DESKTOP_NAV.map(({ to: e, short: t, badge, chat }) => (
               <NavLink
                 to={e}
                 className={({ isActive: e }) =>
-                  `inline-flex items-center px-3 py-2 font-display text-[0.58rem] uppercase tracking-[0.14em] transition-colors ${e ? "text-foreground" : "text-muted-foreground hover:text-foreground"}`
+                  `relative inline-flex h-9 items-center whitespace-nowrap rounded-sm border px-2.5 font-display text-[0.55rem] uppercase tracking-[0.1em] transition-colors lg:px-3 lg:text-[0.58rem] lg:tracking-[0.12em] ${e ? "border-foreground bg-foreground text-background" : "border-border bg-secondary text-foreground hover:bg-accent"}`
                 }
                 key={e}
               >
                 {t}
-                {badge && <CountBadge n={queueCount} className="ml-1.5" />}
-                {chat && <CountBadge n={chatCount} className="ml-1.5" />}
+                {badge && <CountBadge n={queueCount} className="absolute -right-2 -top-2 rounded-full" />}
+                {chat && <CountBadge n={chatCount} className="absolute -right-2 -top-2 rounded-full" />}
               </NavLink>
             ))}
           </nav>
@@ -96,7 +96,7 @@ export function Layout() {
           <Link
             to="/chat"
             aria-label={chatCount > 0 ? `Chat, ${chatCount} new` : "Chat"}
-            className="relative inline-flex h-10 w-10 items-center justify-center border border-foreground bg-card hover:bg-secondary md:hidden"
+            className="relative inline-flex h-10 w-10 items-center justify-center rounded-sm border border-border bg-secondary hover:bg-accent md:hidden"
           >
             <MessageSquare className="h-4 w-4" aria-hidden="true" />
             <CountBadge n={chatCount} className="absolute -right-2 -top-2" />
@@ -104,7 +104,7 @@ export function Layout() {
           {isAuthenticated ? (
             <Link
               to="/profile"
-              className="inline-flex min-h-10 items-center gap-1.5 border border-foreground bg-card px-3 py-1.5 font-display sm:min-h-0 sm:px-2.5 text-[0.55rem] uppercase tracking-[0.12em] hover:bg-secondary"
+              className="relative inline-flex min-h-10 items-center gap-1.5 whitespace-nowrap rounded-sm border border-border bg-secondary px-3 font-display text-[0.55rem] uppercase tracking-[0.12em] hover:bg-accent md:h-9 md:min-h-0 md:px-2.5 lg:px-3"
             >
               <User className="h-3.5 w-3.5" aria-hidden="true" />
               My profile
@@ -114,7 +114,7 @@ export function Layout() {
           ) : (
             <Link
               to="/login"
-              className="inline-flex min-h-10 items-center gap-1.5 border border-foreground bg-card px-3 py-1.5 font-display sm:min-h-0 sm:px-2.5 text-[0.55rem] uppercase tracking-[0.12em] hover:bg-secondary"
+              className="relative inline-flex min-h-10 items-center gap-1.5 whitespace-nowrap rounded-sm border border-border bg-secondary px-3 font-display text-[0.55rem] uppercase tracking-[0.12em] hover:bg-accent md:h-9 md:min-h-0 md:px-2.5 lg:px-3"
             >
               <LogIn className="h-3.5 w-3.5" aria-hidden="true" />
               Sign in

@@ -4,17 +4,17 @@ import { ArrowLeft } from "lucide-react";
 /**
  * Back one step. If the person navigated inside the app (router location.key is not "default"), go back in
  * history so a chain like ladder -> player -> match -> player unwinds exactly; otherwise (deep link, new tab)
- * go to the sensible parent given in `fallback`.
+ * go to the sensible parent given in `fallback`. `to` always goes to that exact place instead.
  */
-export function BackButton({ fallback = "/", label = "Back", className = "" }) {
+export function BackButton({ fallback = "/", label = "Back", className = "", inline = false, to = null }) {
   const navigate = useNavigate();
   const location = useLocation();
   const onClick = () => {
+    if (to) return navigate(to);
     if (location.key !== "default") navigate(-1);
     else navigate(fallback, { replace: true });
   };
-  return (
-    <div className="mx-auto w-full max-w-5xl px-4 pt-3 sm:px-6">
+  const button = (
       <button
         type="button"
         onClick={onClick}
@@ -24,6 +24,7 @@ export function BackButton({ fallback = "/", label = "Back", className = "" }) {
         <ArrowLeft className="h-4 w-4" aria-hidden="true" />
         {label}
       </button>
-    </div>
   );
+  if (inline) return button;
+  return <div className="mx-auto w-full max-w-5xl px-4 pt-3 sm:px-6">{button}</div>;
 }

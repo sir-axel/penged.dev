@@ -633,12 +633,12 @@ fns.markFeedbackSeen = markFeedbackSeen;
 fns.replyFeedback = replyFeedback;
 
 for (const n of [
-  'listTopics', 'getTopic', 'createTopic', 'createPost', 'editPost', 'deletePost', 'adminTopic', 'dmStart', 'dmList', 'dmMessages', 'dmSend',
+  'listTopics', 'getTopic', 'roomPosts', 'roomAround', 'listDisputes', 'disputeCounts', 'createTopic', 'createPost', 'editPost', 'deletePost', 'adminTopic', 'dmStart', 'dmList', 'dmMessages', 'dmSend',
   'dmMarkRead', 'mentionsList', 'mentionsMarkRead', 'chatUnread', 'playerSearch', 'block', 'unblock', 'report', 'adminReports', 'adminResolveReport',
 ]) fns[n] = chat[n];
 
 // The only functions callable without a session (they get user = null).
-const PUBLIC_FNS = new Set(['submitFeedback', 'listTopics', 'getTopic', 'playerSearch']);
+const PUBLIC_FNS = new Set(['submitFeedback', 'listTopics', 'getTopic', 'roomPosts', 'roomAround', 'listDisputes', 'disputeCounts', 'playerSearch']);
 
 export const functions = new Hono();
 functions.post('/:name', async (c) => {

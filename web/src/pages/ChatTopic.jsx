@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link, useLocation, useParams } from "react-router-dom";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { Flag, Lock, LockOpen, EyeOff, Eye, Pencil, Trash2 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useMyPlayer } from "@/hooks/useMyPlayer";
 import { errMsg } from "@/hooks/useChat";
-import { BackButton } from "@/components/BackButton";
+import { ChatBar } from "@/components/chat/ChatBar";
 import { EmptyState } from "@/components/EmptyState";
 import { Avatar } from "@/components/Avatar";
 import { Button } from "@/components/ui/button";
@@ -18,7 +18,7 @@ import { api } from "@/api/client";
 const call = async (name, body) => (await api.functions.invoke(name, body)).data;
 const EDIT_MS = 24 * 3600e3;
 
-function Post({ post, people, admin, topic, onChanged, setReport }) {
+function Post({ post, people, admin, topic, onChanged, setReport, highlighted }) {
   const [editing, setEditing] = useState(false);
   const [err, setErr] = useState("");
   const author = people[post.author_player_id];
@@ -37,7 +37,7 @@ function Post({ post, people, admin, topic, onChanged, setReport }) {
     act(() => call("deletePost", { id: post.id }));
   };
   return (
-    <li id={`p-${post.id}`} className="flex gap-3 px-3 py-3 target:bg-brand/5" data-testid="post">
+    <li id={`p-${post.id}`} className={`flex gap-3 px-3 py-3 transition-colors duration-700 ${highlighted ? "bg-brand/20 outline outline-2 -outline-offset-2 outline-brand" : ""}`} data-testid="post" data-highlighted={highlighted ? "true" : undefined}>
       {post.removed && !admin ? (
         <span className="mt-0.5 h-9 w-9 shrink-0 rounded-sm border border-dashed border-border" aria-hidden="true" />
       ) : (
@@ -114,7 +114,12 @@ function Post({ post, people, admin, topic, onChanged, setReport }) {
 
 export function ChatTopic() {
   const { id } = useParams();
-  const { hash } = useLocation();
+  const loc = useLocation();
+  const [params] = useSearchParams();
+  const postParam = params.get("post");
+  const [highlight, setHighlight] = useState(null);
+  const doneJump = useRef(null);
+  const anchor = useRef(null);
   const { user, isAuthenticated } = useAuth();
   const { player } = useMyPlayer();
   const qc = useQueryClient();
@@ -122,10 +127,16 @@ export function ChatTopic() {
   const [report, setReport] = useState(null);
   const [reportTopic, setReportTopic] = useState(false);
   const q = useInfiniteQuery({
-    queryKey: ["topic", id, user?.id || null],
+    queryKey: ["topic", id, user?.id || null, postParam, loc.key],
     initialPageParam: null,
-    queryFn: ({ pageParam }) => call("getTopic", { id, cursor: pageParam || undefined }),
-    getNextPageParam: (l) => l.next_cursor || undefined,
+    queryFn: async ({ pageParam }) => {
+      if (pageParam?.before) return call("getTopic", { id, before: pageParam.before });
+      if (pageParam?.after) return call("getTopic", { id, cursor: pageParam.after });
+      if (postParam) return call("getTopic", { id, around: postParam }).catch(() => call("getTopic", { id }));
+      return call("getTopic", { id });
+    },
+    getNextPageParam: (l) => (l.next_cursor ? { after: l.next_cursor } : undefined),
+    getPreviousPageParam: (f) => (f.older_cursor ? { before: f.older_cursor } : undefined),
     retry: (n, e) => e?.status !== 404 && n < 1,
   });
   const pages = q.data?.pages || [];
@@ -134,16 +145,31 @@ export function ChatTopic() {
   const people = useMemo(() => Object.assign({}, ...pages.map((p) => p.people)), [pages]);
   const refresh = () => qc.invalidateQueries({ queryKey: ["topic", id] });
 
+  // Arrived from a mention: scroll to that post and highlight it for 2 s.
   useEffect(() => {
-    if (!hash || !posts.length) return;
-    document.getElementById(hash.slice(1))?.scrollIntoView({ block: "center" });
-  }, [hash, posts.length]);
+    if (!postParam || !posts.length) return;
+    const key = `${loc.key}:${postParam}`;
+    if (doneJump.current === key) return;
+    const el = document.getElementById(`p-${postParam}`);
+    if (!el) return;
+    doneJump.current = key;
+    el.scrollIntoView({ block: "center" });
+    setHighlight(postParam);
+    const t = setTimeout(() => setHighlight(null), 2000);
+    return () => clearTimeout(t);
+  }, [postParam, loc.key, posts.length]);
+  useLayoutEffect(() => {
+    if (!anchor.current) return;
+    const { h, y } = anchor.current;
+    anchor.current = null;
+    window.scrollTo(0, y + (document.documentElement.scrollHeight - h));
+  }, [posts.length]);
 
-  if (q.isLoading) return <><BackButton fallback="/chat" /><Spinner /></>;
+  if (q.isLoading) return <><ChatBar back="/chat/disputes" /><Spinner /></>;
   if (q.isError || !topic)
     return (
       <>
-        <BackButton fallback="/chat" />
+        <ChatBar back="/chat/disputes" />
         <div className="mx-auto max-w-2xl px-4 py-12 sm:px-6"><EmptyState title="Topic not found" body="It may have been removed." /></div>
       </>
     );
@@ -154,7 +180,7 @@ export function ChatTopic() {
   const canPost = isAuthenticated && player && (!topic.locked || admin);
   return (
     <div className="flex min-h-[calc(100svh-3.5rem-70px)] flex-col md:min-h-[calc(100svh-3.5rem)]">
-      <BackButton fallback="/chat" />
+      <ChatBar back="/chat/disputes" />
       <div className="mx-auto w-full max-w-2xl px-4 pb-2 pt-3 sm:px-6">
         <div className="flex flex-wrap items-center gap-2">
           <CategoryChip category={topic.category} />
@@ -186,9 +212,22 @@ export function ChatTopic() {
         </div>
       </div>
       <div className="mx-auto w-full max-w-2xl flex-1 px-4 sm:px-6">
+        {q.hasPreviousPage && (
+          <Button
+            variant="outline"
+            className="mb-3 h-11 w-full rounded-sm"
+            disabled={q.isFetchingPreviousPage}
+            onClick={() => {
+              anchor.current = { h: document.documentElement.scrollHeight, y: window.scrollY };
+              q.fetchPreviousPage();
+            }}
+          >
+            Load earlier
+          </Button>
+        )}
         <ul className="divide-y divide-border overflow-hidden border border-border bg-card" data-testid="posts">
           {posts.map((p) => (
-            <Post key={p.id} post={p} people={people} admin={admin} topic={topic} onChanged={refresh} setReport={setReport} />
+            <Post key={p.id} post={p} people={people} admin={admin} topic={topic} onChanged={refresh} setReport={setReport} highlighted={highlight === p.id} />
           ))}
         </ul>
         {q.hasNextPage && (
@@ -208,7 +247,7 @@ export function ChatTopic() {
             onSend={async (body) => {
               await call("createPost", { topic_id: id, body });
               await qc.invalidateQueries({ queryKey: ["topic", id] });
-              qc.invalidateQueries({ queryKey: ["topics"] });
+              qc.invalidateQueries({ queryKey: ["disputes"] });
               setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" }), 100);
             }}
           />

@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Ban, EllipsisVertical, Flag } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { CHAT_UNREAD_KEY, errMsg } from "@/hooks/useChat";
-import { BackButton } from "@/components/BackButton";
+import { ChatBar } from "@/components/chat/ChatBar";
 import { EmptyState } from "@/components/EmptyState";
 import { Avatar } from "@/components/Avatar";
 import { Button } from "@/components/ui/button";
@@ -12,21 +12,16 @@ import { Composer } from "@/components/chat/Composer";
 import { ReportDialog, Spinner, iconBtn } from "@/components/chat/bits";
 import { RenderBody, nameOf } from "@/lib/chatText";
 import { api } from "@/api/client";
+import { clock, dayKey, dayLabel } from "@/lib/chatTime";
 
 const call = async (name, body) => (await api.functions.invoke(name, body)).data;
-const dayKey = (iso) => new Date(iso).toDateString();
-const dayLabel = (iso) => {
-  const d = new Date(iso);
-  const t = new Date();
-  if (d.toDateString() === t.toDateString()) return "Today";
-  const y = new Date(t.getTime() - 86400e3);
-  if (d.toDateString() === y.toDateString()) return "Yesterday";
-  return d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", year: d.getFullYear() === t.getFullYear() ? undefined : "numeric" });
-};
-const clock = (iso) => new Date(iso).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-
 export function ChatDm() {
   const { threadId } = useParams();
+  const loc = useLocation();
+  const [params] = useSearchParams();
+  const msgParam = params.get("msg");
+  const [highlight, setHighlight] = useState(null);
+  const jump = useRef(null);
   const { user } = useAuth();
   const qc = useQueryClient();
   const [msgs, setMsgs] = useState([]);
@@ -40,8 +35,11 @@ export function ChatDm() {
   const newest = useRef(null);
 
   const head = useQuery({
-    queryKey: ["dm-thread", threadId],
-    queryFn: () => call("dmMessages", { thread_id: threadId }),
+    queryKey: ["dm-thread", threadId, msgParam, loc.key],
+    queryFn: () =>
+      msgParam
+        ? call("dmMessages", { thread_id: threadId, around: msgParam }).catch((e) => (e?.status === 404 ? call("dmMessages", { thread_id: threadId }) : Promise.reject(e)))
+        : call("dmMessages", { thread_id: threadId }),
     retry: (n, e) => e?.status !== 404 && n < 1,
     staleTime: 0,
     gcTime: 0,
@@ -53,8 +51,11 @@ export function ChatDm() {
     setPeople(head.data.people);
     setOlder(head.data.older_cursor);
     newest.current = head.data.items.at(-1)?.created_date || null;
-    stick.current = true;
-  }, [head.data]);
+    if (msgParam && head.data.items.some((m) => m.id === msgParam)) {
+      jump.current = msgParam;
+      stick.current = false;
+    } else stick.current = true;
+  }, [head.data, msgParam]);
 
   const markRead = useCallback(async () => {
     try {
@@ -121,14 +122,27 @@ export function ChatDm() {
   const iBlocked = flags?.i_blocked ?? meta?.i_blocked;
 
   useLayoutEffect(() => {
-    if (stick.current) bottom.current?.scrollIntoView({ block: "end" });
-  }, [msgs.length]);
+    if (jump.current) {
+      const id = jump.current;
+      const el = document.getElementById(`m-${id}`);
+      if (el) {
+        jump.current = null;
+        el.scrollIntoView({ block: "center" });
+        setHighlight(id);
+      }
+    } else if (stick.current) bottom.current?.scrollIntoView({ block: "end" });
+  }, [msgs.length, head.data]);
+  useEffect(() => {
+    if (!highlight) return undefined;
+    const t = setTimeout(() => setHighlight(null), 2000);
+    return () => clearTimeout(t);
+  }, [highlight]);
 
-  if (head.isLoading) return <><BackButton fallback="/chat?tab=messages" /><Spinner /></>;
+  if (head.isLoading) return <><ChatBar back="/chat?tab=messages" /><Spinner /></>;
   if (head.isError || !meta)
     return (
       <>
-        <BackButton fallback="/chat?tab=messages" />
+        <ChatBar back="/chat?tab=messages" />
         <div className="mx-auto max-w-2xl px-4 py-12 sm:px-6"><EmptyState title="Conversation not found" body="It may not exist, or it is not yours." /></div>
       </>
     );
@@ -161,8 +175,8 @@ export function ChatDm() {
   let lastDay = null;
   return (
     <div className="flex min-h-[calc(100svh-3.5rem-70px)] flex-col md:min-h-[calc(100svh-3.5rem)]">
-      <BackButton fallback="/chat?tab=messages" />
-      <div className="sticky top-14 z-20 border-b border-border bg-background/95 backdrop-blur">
+      <ChatBar back="/chat?tab=messages" />
+      <div className="sticky top-[7rem] z-20 border-b border-border bg-background/95 backdrop-blur">
         <div className="mx-auto flex max-w-2xl items-center gap-3 px-4 py-2 sm:px-6">
           {other ? (
             <Link to={`/players/${encodeURIComponent(other.username)}`} className="flex min-w-0 flex-1 items-center gap-3">
@@ -212,13 +226,14 @@ export function ChatDm() {
             const sep = dk !== lastDay;
             lastDay = dk;
             return (
-              <li key={m.id}>
+              <li key={m.id} id={`m-${m.id}`}>
                 {sep && (
                   <p className="my-3 text-center font-display text-[0.5rem] uppercase tracking-[0.18em] text-muted-foreground">{dayLabel(m.created_date)}</p>
                 )}
                 <div className={`flex ${m.mine ? "justify-end" : "justify-start"}`}>
                   <div
-                    className={`max-w-[85%] rounded-sm border px-3 py-2 text-sm leading-relaxed ${m.mine ? "border-foreground bg-foreground text-background" : "border-border bg-card"}`}
+                    data-highlighted={highlight === m.id ? "true" : undefined}
+                    className={`max-w-[85%] rounded-sm border px-3 py-2 text-sm leading-relaxed transition-shadow duration-700 ${highlight === m.id ? "ring-4 ring-brand" : ""} ${m.mine ? "border-foreground bg-foreground text-background" : "border-border bg-card"}`}
                   >
                     {m.removed ? <em className="opacity-70">[removed]</em> : <RenderBody body={m.body} people={people} className={m.mine ? "[&_a]:text-inherit [&_a]:underline" : ""} />}
                     <span className={`mt-0.5 block text-right font-mono text-[10px] ${m.mine ? "text-background/70" : "text-muted-foreground"}`}>{clock(m.created_date)}</span>

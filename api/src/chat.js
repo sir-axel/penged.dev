@@ -159,8 +159,8 @@ function pubPost(p, { admin, userId }) {
 }
 
 export async function listTopics({ env, user }, body) {
-  const where = [];
-  const params = [];
+  const where = ['id <> ?'];
+  const params = [GENERAL_ID]; // the General room is its own screen, not a topic in the list
   if (body.category != null && body.category !== '') {
     if (!CATEGORIES.includes(body.category)) throw bad('Unknown category.');
     where.push('category = ?');
@@ -190,29 +190,119 @@ export async function listTopics({ env, user }, body) {
   };
 }
 
+export const GENERAL_ID = 'general';
+const ROOM_PAGE = 50;
+const ROOM_POLL = 100;
+const AROUND_HALF = 25;
+
+/** The permanent General room row (migration 0014 creates it; this re-creates it if a wipe ever removed it). */
+async function ensureGeneral(env) {
+  let t = await first(env, 'SELECT * FROM forum_topics WHERE id = ?', GENERAL_ID);
+  if (!t) {
+    const iso = '2020-01-01T00:00:00.000Z';
+    await stmt(
+      env,
+      `INSERT OR IGNORE INTO forum_topics (id, created_date, updated_date, category, title, author_user_id, last_post_at, post_count)
+       VALUES ('general', ?1, ?1, 'general', 'General', 'system', ?1, 0)`,
+      iso,
+    ).run();
+    t = await first(env, 'SELECT * FROM forum_topics WHERE id = ?', GENERAL_ID);
+  }
+  return t;
+}
+
+const BEFORE_SQL = '(created_date < ? OR (created_date = ? AND id < ?))';
+const AFTER_SQL = '(created_date > ? OR (created_date = ? AND id > ?))';
+
+/**
+ * Posts of one topic, oldest first. Exactly one mode:
+ *  - around (post id): a window of up to 25 posts before and 25 after that post (the post is included);
+ *  - before (cursor): the page of older posts just above the cursor;
+ *  - after (cursor): the posts just after the cursor (polling / forward paging);
+ *  - none: the first page, or with `tail` the newest page.
+ * Returns {rows, older_cursor (more above the first row), next_cursor (more below the last row)}.
+ */
+async function readPosts(env, topicId, { around = null, before = null, after = null, tail = false, limit = PAGE }) {
+  const desc = (c, n) =>
+    all(env, `SELECT * FROM forum_posts WHERE topic_id = ? AND ${BEFORE_SQL} ORDER BY created_date DESC, id DESC LIMIT ${n}`, topicId, c.d, c.d, c.id);
+  const asc = (c, n) =>
+    all(env, `SELECT * FROM forum_posts WHERE topic_id = ? AND ${AFTER_SQL} ORDER BY created_date, id LIMIT ${n}`, topicId, c.d, c.d, c.id);
+  let rows;
+  let older = false;
+  let newer = false;
+  if (around) {
+    const target = await first(env, 'SELECT * FROM forum_posts WHERE id = ? AND topic_id = ?', around, topicId);
+    if (!target) throw new HttpError(404, 'Post not found.');
+    const up = await desc({ d: target.created_date, id: target.id }, AROUND_HALF + 1);
+    const down = await asc({ d: target.created_date, id: target.id }, AROUND_HALF + 1);
+    older = up.length > AROUND_HALF;
+    newer = down.length > AROUND_HALF;
+    rows = [...up.slice(0, AROUND_HALF).reverse(), target, ...down.slice(0, AROUND_HALF)];
+  } else if (before) {
+    const up = await desc(before, limit + 1);
+    older = up.length > limit;
+    rows = up.slice(0, limit).reverse();
+  } else if (after) {
+    const down = await asc(after, limit + 1);
+    newer = down.length > limit;
+    rows = down.slice(0, limit);
+  } else if (tail) {
+    const up = await all(env, `SELECT * FROM forum_posts WHERE topic_id = ? ORDER BY created_date DESC, id DESC LIMIT ${limit + 1}`, topicId);
+    older = up.length > limit;
+    rows = up.slice(0, limit).reverse();
+  } else {
+    const down = await all(env, `SELECT * FROM forum_posts WHERE topic_id = ? ORDER BY created_date, id LIMIT ${limit + 1}`, topicId);
+    newer = down.length > limit;
+    rows = down.slice(0, limit);
+  }
+  const first_ = rows[0];
+  const last_ = rows[rows.length - 1];
+  return {
+    rows,
+    older_cursor: older && first_ ? cursorOf(first_.created_date, first_.id) : null,
+    next_cursor: newer && last_ ? cursorOf(last_.created_date, last_.id) : null,
+  };
+}
+
+async function postsResponse(env, user, t, r, extraPeople = []) {
+  const admin = isAdmin(user);
+  const posts = r.rows.map((p) => pubPost(p, { admin, userId: user?.id }));
+  const shown = r.rows.filter((p) => !((p.hidden || p.deleted) && !admin));
+  const ids = [...extraPeople, ...shown.map((p) => p.author_player_id), ...shown.flatMap((p) => parseMentionIds(p.body))];
+  return { topic: pubTopic(t), posts, people: await peopleMap(env, ids), older_cursor: r.older_cursor, next_cursor: r.next_cursor };
+}
+
 export async function getTopic({ env, user }, body) {
   const id = cleanId(body.id, 'topic id');
   const admin = isAdmin(user);
   const t = await first(env, 'SELECT * FROM forum_topics WHERE id = ?', id);
   if (!t || (t.hidden && !admin)) throw new HttpError(404, 'Topic not found.');
-  const c = parseCursor(body.cursor);
-  const rows = await all(
-    env,
-    `SELECT * FROM forum_posts WHERE topic_id = ?${c ? ' AND (created_date > ? OR (created_date = ? AND id > ?))' : ''}
-     ORDER BY created_date, id LIMIT ${PAGE + 1}`,
-    ...(c ? [id, c.d, c.d, c.id] : [id]),
-  );
-  const page = rows.slice(0, PAGE);
-  const last = page[page.length - 1];
-  const posts = page.map((p) => pubPost(p, { admin, userId: user?.id }));
-  const shown = page.filter((p) => !((p.hidden || p.deleted) && !admin));
-  const ids = [t.author_player_id, ...shown.map((p) => p.author_player_id), ...shown.flatMap((p) => parseMentionIds(p.body))];
-  return {
-    topic: pubTopic(t),
-    posts,
-    people: await peopleMap(env, ids),
-    next_cursor: rows.length > PAGE && last ? cursorOf(last.created_date, last.id) : null,
-  };
+  const r = await readPosts(env, id, {
+    around: body.around != null && body.around !== '' ? cleanId(body.around, 'post id') : null,
+    before: parseCursor(body.before),
+    after: parseCursor(body.cursor),
+  });
+  return postsResponse(env, user, t, r, [t.author_player_id]);
+}
+
+/**
+ * The General room as one stream. No params: the newest 50 posts (oldest first) + older_cursor. `before` (cursor): older page.
+ * `after` (cursor): only posts newer than that (polling; up to 100, next_cursor says there are more).
+ */
+export async function roomPosts({ env, user }, body) {
+  const t = await ensureGeneral(env);
+  const after = parseCursor(body.after);
+  const before = parseCursor(body.before);
+  const limit = Math.min(Math.max(Number.isInteger(body.limit) ? body.limit : after ? ROOM_POLL : ROOM_PAGE, 1), ROOM_POLL);
+  const r = await readPosts(env, GENERAL_ID, { after, before, tail: !after && !before, limit });
+  return postsResponse(env, user, t, r);
+}
+
+/** A window of the General room around one post (for "go to the message you were mentioned in"). */
+export async function roomAround({ env, user }, body) {
+  const t = await ensureGeneral(env);
+  const r = await readPosts(env, GENERAL_ID, { around: cleanId(body.post_id, 'post id') });
+  return postsResponse(env, user, t, r);
 }
 
 export async function createTopic({ env, user }, body) {
@@ -232,6 +322,8 @@ export async function createTopic({ env, user }, body) {
     category = 'disputes';
   }
   if (!CATEGORIES.includes(category)) throw bad('Choose a category.');
+  // General is the single live room (post there with createPost); disputes only start from a match.
+  if (!match) throw bad(category === 'disputes' ? 'Disputes start from a match: open it and tap Discuss.' : 'There are no new topics: chat in the General room.');
   const day = await first(env, 'SELECT count(*) AS n FROM forum_topics WHERE author_user_id = ? AND created_date > ?', user.id, agoIso(86400e3));
   if (day.n >= TOPICS_PER_DAY) throw new HttpError(429, "You've started plenty of topics today. Please try again tomorrow.");
   await checkMessageRate(env, user);
@@ -266,7 +358,7 @@ export async function createPost({ env, user }, body) {
   const me = await requireMe(env, user);
   const topicId = cleanId(body.topic_id, 'topic id');
   const text = cleanBody(body.body);
-  const t = await first(env, 'SELECT * FROM forum_topics WHERE id = ?', topicId);
+  const t = topicId === GENERAL_ID ? await ensureGeneral(env) : await first(env, 'SELECT * FROM forum_topics WHERE id = ?', topicId);
   if (!t || (t.hidden && !isAdmin(user))) throw new HttpError(404, 'Topic not found.');
   if (t.locked && !isAdmin(user)) throw new HttpError(403, 'This topic is locked.');
   await checkMessageRate(env, user);
@@ -320,6 +412,82 @@ export async function adminTopic({ env, user }, body) {
   const hidden = body.hidden === undefined ? t.hidden : body.hidden ? 1 : 0;
   await stmt(env, 'UPDATE forum_topics SET locked = ?, hidden = ?, updated_date = ? WHERE id = ?', locked, hidden, nowIso(), id).run();
   return { topic: pubTopic(await first(env, 'SELECT * FROM forum_topics WHERE id = ?', id)) };
+}
+
+// ---------- disputes ----------
+const OPEN_MATCH = "m.status IN ('pending','disputed')";
+const involvesMe = (uidParam) => `instr(m.all_user_ids, '"' || ${uidParam} || '"') > 0`;
+const sideNames = (json) => {
+  try {
+    return (JSON.parse(json) || []).map((e) => e.display_name || e.username || 'A player');
+  } catch {
+    return [];
+  }
+};
+
+/** Dispute threads (one per match), newest activity first. `mine: true` keeps those I play in; `open: true` only unresolved matches. */
+export async function listDisputes({ env, user }, body) {
+  const where = ["t.category = 'disputes'"];
+  const params = [];
+  if (!isAdmin(user)) where.push('t.hidden = 0');
+  if (body.mine && user) {
+    where.push(involvesMe('?'));
+    params.push(user.id);
+  }
+  if (body.open) where.push(OPEN_MATCH);
+  const c = parseCursor(body.cursor);
+  if (c) {
+    where.push('(t.last_post_at < ? OR (t.last_post_at = ? AND t.id < ?))');
+    params.push(c.d, c.d, c.id);
+  }
+  const rows = await all(
+    env,
+    `SELECT t.*, m.status AS m_status, m.side_a, m.side_b, m.all_player_ids, m.all_user_ids, m.format, m.created_date AS m_created
+     FROM forum_topics t LEFT JOIN matches m ON m.id = t.match_id
+     WHERE ${where.join(' AND ')} ORDER BY t.last_post_at DESC, t.id DESC LIMIT ${TOPIC_PAGE + 1}`,
+    ...params,
+  );
+  const page = rows.slice(0, TOPIC_PAGE);
+  const items = page.map((r) => {
+    let pids = [];
+    let uids = [];
+    try {
+      pids = JSON.parse(r.all_player_ids || '[]');
+      uids = JSON.parse(r.all_user_ids || '[]');
+    } catch {
+      /* leave empty */
+    }
+    return {
+      ...pubTopic(r),
+      match: r.match_id
+        ? { id: r.match_id, status: r.m_status, format: r.format, created_date: r.m_created, side_a: sideNames(r.side_a), side_b: sideNames(r.side_b), open: ['pending', 'disputed'].includes(r.m_status) }
+        : null,
+      participant_ids: pids,
+      mine: !!user && uids.includes(user.id),
+      replies: Math.max(0, r.post_count - 1),
+    };
+  });
+  const last = page[page.length - 1];
+  return {
+    items,
+    people: await peopleMap(env, items.flatMap((i) => [i.author_player_id, ...i.participant_ids])),
+    next_cursor: rows.length > TOPIC_PAGE && last ? cursorOf(last.last_post_at, last.id) : null,
+  };
+}
+
+/** Numbers for the red Disputes button: open dispute threads I'm in (null when signed out), open overall, active in the last 14 days. */
+export async function disputeCounts({ env, user }) {
+  const hid = isAdmin(user) ? '' : ' AND t.hidden = 0';
+  const base = `FROM forum_topics t LEFT JOIN matches m ON m.id = t.match_id WHERE t.category = 'disputes'${hid}`;
+  const r = await first(
+    env,
+    `SELECT
+       (SELECT count(*) ${base} AND ${OPEN_MATCH}) AS open_total,
+       (SELECT count(*) ${base} AND t.last_post_at > ?1) AS recent,
+       (SELECT count(*) ${base} AND ${OPEN_MATCH} AND ?2 IS NOT NULL AND ${involvesMe('?2')}) AS open_mine`,
+    agoIso(14 * 86400e3), user?.id ?? null,
+  );
+  return { open_mine: user ? r.open_mine || 0 : null, open_total: r.open_total || 0, recent: r.recent || 0 };
 }
 
 // ---------- direct messages ----------
@@ -386,7 +554,17 @@ export async function dmMessages({ env, user }, body) {
   const otherUid = otherUser(t, user);
   let rows;
   let olderCursor = null;
-  if (body.after != null && body.after !== '') {
+  let hasNewer = false;
+  if (body.around != null && body.around !== '') {
+    // Jump to a message: up to 25 before and 25 after it. Polling then continues from the last one with `after`.
+    const target = await first(env, 'SELECT * FROM dm_messages WHERE id = ? AND thread_id = ?', cleanId(body.around, 'message id'), t.id);
+    if (!target) throw new HttpError(404, 'Message not found.');
+    const up = await all(env, `SELECT * FROM dm_messages WHERE thread_id = ? AND (created_date < ? OR (created_date = ? AND id < ?)) ORDER BY created_date DESC, id DESC LIMIT ${AROUND_HALF + 1}`, t.id, target.created_date, target.created_date, target.id);
+    const down = await all(env, `SELECT * FROM dm_messages WHERE thread_id = ? AND (created_date > ? OR (created_date = ? AND id > ?)) ORDER BY created_date, id LIMIT ${AROUND_HALF + 1}`, t.id, target.created_date, target.created_date, target.id);
+    rows = [...up.slice(0, AROUND_HALF).reverse(), target, ...down.slice(0, AROUND_HALF)];
+    hasNewer = down.length > AROUND_HALF;
+    if (up.length > AROUND_HALF) olderCursor = cursorOf(rows[0].created_date, rows[0].id);
+  } else if (body.after != null && body.after !== '') {
     // Polling: everything at or after the newest timestamp the client has (it de-duplicates by id).
     if (!isStr(body.after) || Number.isNaN(Date.parse(body.after))) throw bad('Bad cursor.');
     rows = await all(env, 'SELECT * FROM dm_messages WHERE thread_id = ? AND created_date >= ? ORDER BY created_date, id LIMIT 100', t.id, body.after);
@@ -417,6 +595,7 @@ export async function dmMessages({ env, user }, body) {
     items,
     people,
     older_cursor: olderCursor,
+    has_newer: hasNewer,
     i_blocked: iBlocked,
     can_send: !iBlocked && !blockedMe && !!other,
   };
@@ -462,9 +641,11 @@ export async function mentionsList({ env, user }, body) {
     env,
     `SELECT m.id, m.created_date, m.source_kind, m.source_id, m.topic_id, m.thread_id, m.read_at, m.by_user_id,
        p.author_player_id AS post_author, p.body AS post_body, p.hidden AS post_hidden, p.deleted AS post_deleted, p.topic_id AS post_topic,
-       t.title AS topic_title, t.hidden AS topic_hidden,
+       t.title AS topic_title, t.hidden AS topic_hidden, t.category AS topic_category,
        d.body AS dm_body, d.deleted AS dm_deleted,
-       (SELECT id FROM players WHERE user_id = m.by_user_id) AS by_player_id
+       (SELECT id FROM players WHERE user_id = m.by_user_id) AS by_player_id,
+       (SELECT pl.id FROM dm_threads dt JOIN players pl ON pl.user_id = CASE WHEN dt.user_a = ?1 THEN dt.user_b ELSE dt.user_a END
+         WHERE dt.id = m.thread_id) AS dm_other_player
      FROM mentions m
      LEFT JOIN forum_posts p ON m.source_kind = 'post' AND p.id = m.source_id
      LEFT JOIN forum_topics t ON t.id = m.topic_id
@@ -477,16 +658,22 @@ export async function mentionsList({ env, user }, body) {
   const items = page.map((r) => {
     const raw = r.source_kind === 'post' ? r.post_body : r.dm_body;
     const gone = r.source_kind === 'post' ? r.post_hidden || r.post_deleted || r.topic_hidden : r.dm_deleted;
+    // Where clicking this mention should land: the exact message (the app highlights it).
+    let target;
+    if (r.source_kind === 'dm') target = { kind: 'dm', path: `/chat/dm/${r.thread_id}?msg=${r.source_id}` };
+    else if (r.topic_id === GENERAL_ID) target = { kind: 'general', path: `/chat?post=${r.source_id}` };
+    else target = { kind: r.topic_category === 'disputes' ? 'dispute' : 'topic', path: `/chat/t/${r.topic_id}?post=${r.source_id}` };
     return {
       id: r.id, created_date: r.created_date, source_kind: r.source_kind, source_id: r.source_id, topic_id: r.topic_id,
-      thread_id: r.thread_id, topic_title: r.topic_hidden ? null : r.topic_title, unread: !r.read_at, by_player_id: r.by_player_id,
+      thread_id: r.thread_id, topic_title: r.topic_hidden ? null : r.topic_title, topic_category: r.topic_category || null,
+      unread: !r.read_at, by_player_id: r.by_player_id, dm_other_player_id: r.dm_other_player || null, target,
       snippet: gone || raw == null ? '' : plain(raw).slice(0, 200),
     };
   });
   const last = page[page.length - 1];
   return {
     items,
-    people: await peopleMap(env, items.map((i) => i.by_player_id)),
+    people: await peopleMap(env, items.flatMap((i) => [i.by_player_id, i.dm_other_player_id])),
     next_cursor: rows.length > TOPIC_PAGE && last ? cursorOf(last.created_date, last.id) : null,
     unread: (await first(env, 'SELECT count(*) AS n FROM mentions WHERE mentioned_user_id = ? AND read_at IS NULL', user.id)).n,
   };

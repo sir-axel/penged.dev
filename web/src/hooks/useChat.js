@@ -19,3 +19,16 @@ export function useChatUnread() {
 }
 
 export const errMsg = (err, fallback = "Something went wrong. Please try again.") => err?.response?.data?.error || err?.message || fallback;
+
+export const DISPUTE_COUNTS_KEY = "dispute-counts";
+/** Numbers for the red Disputes button: open threads I am in (signed in) or recently active ones (signed out). */
+export function useDisputeCounts() {
+  const { user } = useAuth();
+  const { data } = useQuery({
+    queryKey: [DISPUTE_COUNTS_KEY, user?.id || null],
+    staleTime: 30000,
+    refetchInterval: 60000,
+    queryFn: async () => (await api.functions.invoke("disputeCounts", {})).data,
+  });
+  return { n: user?.id ? data?.open_mine || 0 : data?.recent || 0, signedIn: !!user?.id };
+}

@@ -21,6 +21,7 @@ import { AdminReviews } from "@/pages/AdminReviews";
 import { AdminReports } from "@/pages/AdminReports";
 import { Chat } from "@/pages/Chat";
 import { ChatTopic } from "@/pages/ChatTopic";
+import { ChatDisputes } from "@/pages/ChatDisputes";
 import { ChatDm } from "@/pages/ChatDm";
 import { Login } from "@/pages/Login";
 import { Register } from "@/pages/Register";
@@ -46,6 +47,8 @@ function AppRoutes() {
         <Route path="/rules" element={<Rules />} />
         <Route path="/feedback" element={<Feedback />} />
         <Route path="/chat" element={<Chat />} />
+        <Route path="/chat/disputes" element={<ChatDisputes />} />
+        <Route path="/chat/messages" element={<Navigate to="/chat?tab=messages" replace />} />
         <Route path="/chat/t/:id" element={<ChatTopic />} />
         <Route element={<RequireAuth />}>
           <Route path="/welcome" element={<Welcome />} />
