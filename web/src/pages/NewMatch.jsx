@@ -111,11 +111,6 @@ export function NewMatch() {
           <p className="font-display text-[0.58rem] uppercase tracking-[0.22em] text-muted-foreground">
             Your side
           </p>
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            Paddle: <span className="font-medium text-foreground">Free</span> is a standard paddle,{" "}
-            <span className="font-medium text-foreground">Paid</span> is one the player paid for.
-            It's shown on the match and doesn't change ratings.
-          </p>
           <div className="space-y-2 rounded-sm border border-border bg-card p-3">
             <div className="flex items-center gap-3">
               <Avatar name={playerName(player)} src={player?.avatar_url} size={30} />
