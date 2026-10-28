@@ -1,0 +1,23 @@
+{
+  "name": "penged-api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --local --persist-to ./.wrangler/state",
+    "migrate:local": "wrangler d1 migrations apply penged --local --persist-to ./.wrangler/state",
+    "test": "vitest run",
+    "deploy": "npm --prefix ../web run build && wrangler deploy",
+    "migrate:remote": "wrangler d1 migrations apply penged --remote",
+    "seed": "node scripts/seed.js",
+    "make-admin": "node scripts/make-admin.js"
+  },
+  "dependencies": {
+    "better-auth": "^1.7.14",
+    "hono": "^4.13.14"
+  },
+  "devDependencies": {
+    "vitest": "^3.2.7",
+    "wrangler": "^4.154.0"
+  }
+}

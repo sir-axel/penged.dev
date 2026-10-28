@@ -1,0 +1,31 @@
+registered alicemvsedq7t
+registered bobmvsedq7t
+registered carolmvsedq7t
+ok   ADMIN_EMAILS user has role admin
+ok   four players ranked 1-4 (public read)
+ok   match is pending after submit
+ok   no rating/xp change while pending
+ok   match verified after second accept
+alice 1424 60 1 bob 1376 25 2
+ok   ratings 1400 -> 1424 / 1376 (K48, equal ratings)
+ok   xp winner 60 / loser 25 (got 60/25)
+ok   no ladder swap when higher-ranked player wins
+ok   records updated
+after rematch alice 1408 2 bob 1392 1
+ok   bob took alice's ladder spot (swap)
+ok   bob rating rose after win
+ok   declined match changes nothing
+ok   carol (rank 3) created a challenge
+ok   challenge open with message
+ok   defender accepted challenge
+CONSOLE Failed to load resource: the server responded with a status of 403 (Forbidden)
+ok   non-participant/closed respondMatch rejected (403)
+CONSOLE Failed to load resource: the server responded with a status of 404 (Not Found)
+ok   non-admin forfeit rejected (404)
+ok   anonymous function call -> 401
+ok   avatar uploaded & saved: /api/files/a086cc8e-a270-46fc-b16d-92af4d6f4146.png
+ok   avatar file served
+ok   guard: user without player redirected to /welcome (desktop)
+ok   guard: user without player redirected to /welcome (mobile)
+ok   guard: anonymous /challenges -> /login
+E2E COMPLETE

@@ -1,0 +1,114 @@
+URL: https://primitive-peak-ping-play.base44.app/
+
+PENGED.DEV
+LEADERBOARD
+RECORD A MATCH
+CHALLENGES
+SIGN IN
+
+PENGED.DEV · OFFICE TABLE TENNIS
+
+Settle it on the table.
+Rank it on the board.
+
+Singles and doubles. Everyone who played confirms the score. Elo settles who owns the table.
+
+RECORD A MATCH
+VIEW LEADERBOARD
+01
+PLAYERS RATED
+00
+VERIFIED MATCHES
+00
+AWAITING CONFIRMATION
+TABLE 01
+WARMING UP
+
+PLAYER ONE
+
+SIDE A
+
+00–00
+
+PLAYER TWO
+
+SIDE B
+
+WAITING ON THE FIRST RESULT
+SINGLES LADDER
+
+Top of the table
+
+Full ladder
+#
+PLAYER
+RATING
+01
+xim
+LVL 1 · 0W–0L
+1400
+MATCH FEED
+
+Latest results
+
+All matches
+
+No verified matches yet. Record the first one and get everyone to sign off.
+
+HOUSE RULES
+01
+Every player signs off
+
+A win only counts once each participant accepts the submitted result. Doubles needs all four. Declined or disputed matches never touch your rating.
+
+02
+Rating is not level
+
+Rating measures who you beat and moves only on verified results. Level is earned by showing up and playing — it never buys you rank.
+
+03
+Challenges, not shortcuts
+
+You climb by beating the player above you. A challenge has a 72-hour window, and silence never hands anyone a rank automatically.
+
+RATINGS
+
+How ratings work
+
+Elo, like chess ratings. Your rating moves only once everyone who played has confirmed the result, so nobody can award themselves a win.
+
+The short version
+Everyone starts at 1400.
+Beating someone above you gains more than beating someone below you.
+Losing to a stronger opponent costs fewer points.
+K-factor: 48 for your first 10 matches, 32 until 30, then 24 for good.
+One result moves you at most 45 points, and no rating ever drops below 700.
+Rematches are worth less — every earlier meeting with the same opponent halves the gain, and after six in six months a win pays nothing.
+Margins don't matter: 11-0 and 11-9 count exactly the same.
+THE MATHS
+expected = 1 / (1 + 10 ^ ((opponentRating - yourRating) / 400))
+newRating = yourRating + K * (result - expected) * repeatFactor
+
+result       = 1 for a win, 0 for a loss
+K            = 48 (first 10) / 32 (next 20) / 24 (after)
+repeatFactor = 1 / (1 + 0.75 * earlier meetings)
+Level is not rating
+
+Level counts the work you put in. Rating counts who you beat — so grinding easy games never buys rank.
+
++25 XP FOR TURNING UP
++25 XP FOR WINNING
++5 XP PER GAME YOU TAKE (FIVE GAMES MAX)
+
+level = floor(sqrt(xp / 40)) + 1 · level 5 opens at 640 xp
+
+WORKED EXAMPLE
+
+In your first match, a 1400-rated player beats a 1600-rated one. Expected score is 0.24, so the win is worth 48 × (1 − 0.24) = 36 points: the winner moves to 1436 and, because the win came against a higher rank, also takes that spot on the ladder.
+
+FULL HOUSE RULES
+PENGED.DEV
+
+PENGED.DEV — VERIFIED MATCH PLAY
+
+Edit with

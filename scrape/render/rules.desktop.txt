@@ -1,0 +1,50 @@
+URL: https://primitive-peak-ping-play.base44.app/rules
+
+PENGED.DEV
+LEADERBOARD
+RECORD A MATCH
+CHALLENGES
+SIGN IN
+
+HOUSE RULES
+
+How rating, level and challenges work
+
+Short version: only verified results count, rating measures who you beat, level measures how much you play, and rank is a position you have to take.
+
+Verification
+Every player in a match must confirm the submitted result. Singles needs both players; doubles needs all four.
+A result stays pending until the last sign-off arrives. Anyone can decline or dispute it instead.
+Declined and disputed matches never touch ratings, levels, records or ladder positions.
+Only verified matches appear in public stats and match history.
+Rating
+Each format has its own pool: a singles rating and a doubles rating. Doubles results never move your singles rating.
+Ratings use a standard Elo-style expected score, so beating a stronger opponent is worth more than beating a weaker one.
+New players move faster (K 48) for their first 10 matches, then 32 up to 30 matches, then 24.
+Who won is all that counts — running up the score earns nothing extra.
+Farming protection: every match you complete against the same opponent inside 180 days is worth less. After six meetings, a win against them earns zero rating.
+Rating is capped at +45 / −45 per match and never drops below 700.
+Level
+Level is earned by turning up: every verified match gives experience, plus a bonus for winning and for games won.
+Responding to a challenge also earns a little experience.
+Level grows without limit and never affects rating, rank or matchmaking. It is a record of activity, not a shortcut.
+The singles ladder
+Singles is a positional ladder. Everyone has a numbered spot, and new players join at the bottom.
+Beat someone above you and you take their spot; everyone between the two of you slides down one place.
+Beating someone below you never moves your position — it only affects rating.
+Doubles has no positions: it is ranked by doubles rating, so you climb it by beating pairs rated above you.
+Overall blends both ratings, weighted by how many matches you have played in each.
+Challenges, forfeits and inactivity
+You can challenge a player up to three places above you. Only one challenge can be open at a time.
+The challenged player has 72 hours to accept or decline. Declining is allowed and costs nothing — refusing a challenge never hands over a rank.
+If the window closes with no answer, the challenge expires and is counted against the defender.
+Silence is never enough on its own: the challenger can request a review, and an admin decides whether to award the position as a forfeit.
+A forfeit moves the ladder position only. Ratings stay untouched, because no match was played.
+Two unanswered challenges, or a player inactive for 30 days with an open dispute, puts a 'review' badge next to their name on the ladder.
+View the ladder
+Record a match
+PENGED.DEV
+
+PENGED.DEV — VERIFIED MATCH PLAY
+
+Edit with

@@ -1,0 +1,120 @@
+<!DOCTYPE html><html lang="en"><head>
+  <script>
+   (function () {
+  var proto = XMLHttpRequest.prototype;
+  var open = proto.open, setRequestHeader = proto.setRequestHeader, send = proto.send;
+  var TOKEN_KEY = 'base44_access_token';
+  var storedTokenHeader = function () {
+    try { return 'Bearer ' + localStorage.getItem(TOKEN_KEY); } catch (e) { return null; }
+  };
+  var forgetStoredToken = function () {
+    try { localStorage.removeItem(TOKEN_KEY); localStorage.removeItem('token'); } catch (e) {}
+  };
+
+  proto.open = function (method, url) {
+    this.__b44IsAuthCheck = /\/entities\/User\/me(\?|$)/.test(url);
+    return open.apply(this, arguments);
+  };
+
+  proto.setRequestHeader = function (name, value) {
+    if (this.__b44IsAuthCheck && name.toLowerCase() === 'authorization' && value === storedTokenHeader()) {
+      this.__b44SentToken = value;
+    }
+    return setRequestHeader.call(this, name, value);
+  };
+
+  proto.send = function () {
+    this.addEventListener('loadend', function () {
+      var rejectedTokenStillStored = this.status === 401 && this.__b44SentToken === storedTokenHeader();
+      if (rejectedTokenStillStored) forgetStoredToken();
+    });
+    return send.apply(this, arguments);
+  };
+})();
+  </script>
+  <meta charset="utf-8">
+  <link href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%23f0f0f0'/%3E%3Crect x='3' y='2' width='4' height='7' fill='%23101010'/%3E%3Crect x='4' y='9' width='2' height='5' fill='%23101010'/%3E%3Crect x='10' y='4' width='3' height='3' fill='%231d6b3f'/%3E%3C/svg%3E" rel="icon">
+  <meta content="width=device-width, initial-scale=1.0, viewport-fit=cover" name="viewport">
+  <meta content="#f0f0f0" name="theme-color">
+  <title>
+   Penged.dev — Verified workplace ping-pong
+  </title>
+  <meta content="Penged.dev is the workplace ping-pong ladder: record singles and doubles matches, get every player to confirm the result, and climb a rating that can't be farmed." name="description">
+  <meta content="Penged.dev — Verified workplace ping-pong" property="og:title">
+  <meta content="Record a match. Every player signs off. Ratings, levels and ranks move only on verified results." property="og:description">
+  <meta content="website" property="og:type">
+  <link href="/manifest.json" rel="manifest">
+  <link href="https://fonts.googleapis.com" rel="preconnect">
+  <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect">
+  <link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&amp;family=Chakra+Petch:wght@400;500;600;700&amp;family=Inter:wght@400;500;600&amp;family=IBM+Plex+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+  <script crossorigin="" src="/assets/index-BPPO09qq.js" type="module">
+  </script>
+  <link crossorigin="" href="/assets/index-Bm7vdhr1.css" rel="stylesheet">
+  <script type="module">
+   if (window.self === window.top) {
+  let lastPath = "";
+  function getPageNameFromPath(path) {
+    const segments = path.split("/").filter(Boolean);
+    return segments[0] || null;
+  }
+  function trackPageView() {
+    const path = window.location.pathname;
+    if (path === lastPath) return;
+    lastPath = path;
+    const pageName = getPageNameFromPath(path) || "home";
+    const appId = "6ae21c4a201480439351f37f";
+    if (!appId) return;
+    fetch(`/api/app-logs/${appId}/log-user-in-app/${pageName}`, {
+      method: "POST",
+    }).catch(() => {});
+  }
+  const originalPushState = history.pushState.bind(history);
+  history.pushState = function (...args) {
+    originalPushState(...args);
+    trackPageView();
+  };
+  const originalReplaceState = history.replaceState.bind(history);
+  history.replaceState = function (...args) {
+    originalReplaceState(...args);
+    trackPageView();
+  };
+  window.addEventListener("popstate", trackPageView);
+  trackPageView();
+}
+  </script>
+  <meta content="yes" name="mobile-web-app-capable">
+  <meta content="black" name="apple-mobile-web-app-status-bar-style">
+  <meta content="Penged.gg" name="apple-mobile-web-app-title">
+  <script async="true" data-app-id="6ae21c4a201480439351f37f" data-platform-url="https://app.base44.com" src="/static/js/badge.js">
+  </script>
+ </head>
+ <body>
+  <div id="root"><div class="flex min-h-screen flex-col bg-background"><header class="sticky top-0 z-30 border-b-2 border-foreground/80 bg-background/95 backdrop-blur"><div class="mx-auto flex h-14 max-w-5xl items-center justify-between gap-3 px-4 sm:px-6"><a aria-label="Penged.dev home" class="rounded-none py-1" href="/" data-discover="true"><span class="inline-flex items-center gap-2 "><svg width="24" height="24" viewBox="0 0 16 16" aria-hidden="true" class="shrink-0" shape-rendering="crispEdges"><rect x="1" y="1" width="5" height="6" fill="currentColor"></rect><rect x="2" y="7" width="3" height="6" fill="currentColor"></rect><rect x="10" y="2" width="4" height="4" fill="hsl(var(--brand))"></rect><rect x="9" y="3" width="1" height="2" fill="hsl(var(--brand))" opacity="0.45"></rect><rect x="14" y="3" width="1" height="2" fill="hsl(var(--brand))" opacity="0.45"></rect></svg><span class="font-display text-[0.72rem] leading-none tracking-tight">PENGED<span class="text-brand">.DEV</span></span></span></a><nav aria-label="Main" class="hidden items-center gap-1 md:flex"><a class="px-3 py-2 font-display text-[0.58rem] uppercase tracking-[0.14em] transition-colors text-muted-foreground hover:text-foreground" href="/leaderboard" data-discover="true">Leaderboard</a><a class="px-3 py-2 font-display text-[0.58rem] uppercase tracking-[0.14em] transition-colors text-muted-foreground hover:text-foreground" href="/matches/new" data-discover="true">Record a match</a><a class="px-3 py-2 font-display text-[0.58rem] uppercase tracking-[0.14em] transition-colors text-muted-foreground hover:text-foreground" href="/challenges" data-discover="true">Challenges</a></nav><a class="inline-flex items-center gap-1.5 border border-foreground bg-card px-2.5 py-1.5 font-display text-[0.55rem] uppercase tracking-[0.12em] hover:bg-secondary" href="/login" data-discover="true"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-log-in h-3.5 w-3.5" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path><polyline points="10 17 15 12 10 7"></polyline><line x1="15" x2="3" y1="12" y2="12"></line></svg>Sign in</a></div></header><main class="flex-1 pb-24 md:pb-0"><div class="border-b border-border"><div class="mx-auto flex max-w-5xl flex-col gap-3 px-4 py-7 sm:flex-row sm:items-end sm:justify-between sm:px-6 sm:py-10"><div><p class="font-display text-[0.58rem] uppercase tracking-[0.22em] text-brand">House rules</p><h1 class="mt-2 font-heading text-2xl font-bold tracking-tight sm:text-3xl">How rating, level and challenges work</h1><p class="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">Short version: only verified results count, rating measures who you beat, level measures how much you play, and rank is a position you have to take.</p></div></div></div><div class="mx-auto max-w-3xl space-y-8 px-4 py-8 sm:px-6"><section><h2 class="font-heading text-lg font-semibold tracking-tight">Verification</h2><ul class="mt-3 space-y-2"><li class="flex gap-2.5 text-sm leading-relaxed text-muted-foreground"><span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand" aria-hidden="true"></span><span>Every player in a match must confirm the submitted result. Singles needs both players; doubles needs all four.</span></li><li class="flex gap-2.5 text-sm leading-relaxed text-muted-foreground"><span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand" aria-hidden="true"></span><span>A result stays pending until the last sign-off arrives. Anyone can decline or dispute it instead.</span></li><li class="flex gap-2.5 text-sm leading-relaxed text-muted-foreground"><span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand" aria-hidden="true"></span><span>Declined and disputed matches never touch ratings, levels, records or ladder positions.</span></li><li class="flex gap-2.5 text-sm leading-relaxed text-muted-foreground"><span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand" aria-hidden="true"></span><span>Only verified matches appear in public stats and match history.</span></li></ul></section><section><h2 class="font-heading text-lg font-semibold tracking-tight">Rating</h2><ul class="mt-3 space-y-2"><li class="flex gap-2.5 text-sm leading-relaxed text-muted-foreground"><span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand" aria-hidden="true"></span><span>Each format has its own pool: a singles rating and a doubles rating. Doubles results never move your singles rating.</span></li><li class="flex gap-2.5 text-sm leading-relaxed text-muted-foreground"><span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand" aria-hidden="true"></span><span>Ratings use a standard Elo-style expected score, so beating a stronger opponent is worth more than beating a weaker one.</span></li><li class="flex gap-2.5 text-sm leading-relaxed text-muted-foreground"><span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand" aria-hidden="true"></span><span>New players move faster (K 48) for their first 10 matches, then 32 up to 30 matches, then 24.</span></li><li class="flex gap-2.5 text-sm leading-relaxed text-muted-foreground"><span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand" aria-hidden="true"></span><span>Who won is all that counts — running up the score earns nothing extra.</span></li><li class="flex gap-2.5 text-sm leading-relaxed text-muted-foreground"><span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand" aria-hidden="true"></span><span>Farming protection: every match you complete against the same opponent inside 180 days is worth less. After six meetings, a win against them earns zero rating.</span></li><li class="flex gap-2.5 text-sm leading-relaxed text-muted-foreground"><span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand" aria-hidden="true"></span><span>Rating is capped at +45 / −45 per match and never drops below 700.</span></li></ul></section><section><h2 class="font-heading text-lg font-semibold tracking-tight">Level</h2><ul class="mt-3 space-y-2"><li class="flex gap-2.5 text-sm leading-relaxed text-muted-foreground"><span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand" aria-hidden="true"></span><span>Level is earned by turning up: every verified match gives experience, plus a bonus for winning and for games won.</span></li><li class="flex gap-2.5 text-sm leading-relaxed text-muted-foreground"><span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand" aria-hidden="true"></span><span>Responding to a challenge also earns a little experience.</span></li><li class="flex gap-2.5 text-sm leading-relaxed text-muted-foreground"><span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand" aria-hidden="true"></span><span>Level grows without limit and never affects rating, rank or matchmaking. It is a record of activity, not a shortcut.</span></li></ul></section><section><h2 class="font-heading text-lg font-semibold tracking-tight">The singles ladder</h2><ul class="mt-3 space-y-2"><li class="flex gap-2.5 text-sm leading-relaxed text-muted-foreground"><span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand" aria-hidden="true"></span><span>Singles is a positional ladder. Everyone has a numbered spot, and new players join at the bottom.</span></li><li class="flex gap-2.5 text-sm leading-relaxed text-muted-foreground"><span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand" aria-hidden="true"></span><span>Beat someone above you and you take their spot; everyone between the two of you slides down one place.</span></li><li class="flex gap-2.5 text-sm leading-relaxed text-muted-foreground"><span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand" aria-hidden="true"></span><span>Beating someone below you never moves your position — it only affects rating.</span></li><li class="flex gap-2.5 text-sm leading-relaxed text-muted-foreground"><span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand" aria-hidden="true"></span><span>Doubles has no positions: it is ranked by doubles rating, so you climb it by beating pairs rated above you.</span></li><li class="flex gap-2.5 text-sm leading-relaxed text-muted-foreground"><span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand" aria-hidden="true"></span><span>Overall blends both ratings, weighted by how many matches you have played in each.</span></li></ul></section><section><h2 class="font-heading text-lg font-semibold tracking-tight">Challenges, forfeits and inactivity</h2><ul class="mt-3 space-y-2"><li class="flex gap-2.5 text-sm leading-relaxed text-muted-foreground"><span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand" aria-hidden="true"></span><span>You can challenge a player up to three places above you. Only one challenge can be open at a time.</span></li><li class="flex gap-2.5 text-sm leading-relaxed text-muted-foreground"><span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand" aria-hidden="true"></span><span>The challenged player has 72 hours to accept or decline. Declining is allowed and costs nothing — refusing a challenge never hands over a rank.</span></li><li class="flex gap-2.5 text-sm leading-relaxed text-muted-foreground"><span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand" aria-hidden="true"></span><span>If the window closes with no answer, the challenge expires and is counted against the defender.</span></li><li class="flex gap-2.5 text-sm leading-relaxed text-muted-foreground"><span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand" aria-hidden="true"></span><span>Silence is never enough on its own: the challenger can request a review, and an admin decides whether to award the position as a forfeit.</span></li><li class="flex gap-2.5 text-sm leading-relaxed text-muted-foreground"><span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand" aria-hidden="true"></span><span>A forfeit moves the ladder position only. Ratings stay untouched, because no match was played.</span></li><li class="flex gap-2.5 text-sm leading-relaxed text-muted-foreground"><span class="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand" aria-hidden="true"></span><span>Two unanswered challenges, or a player inactive for 30 days with an open dispute, puts a 'review' badge next to their name on the ladder.</span></li></ul></section><div class="flex flex-wrap gap-2 border-t border-border pt-6"><a class="rounded-sm border border-border bg-card px-4 py-2.5 text-sm font-medium hover:border-foreground/40" href="/leaderboard" data-discover="true">View the ladder</a><a class="rounded-sm bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground" href="/matches/new" data-discover="true">Record a match</a></div></div></main><footer class="border-t border-border px-4 py-8 sm:px-6"><div class="mx-auto flex max-w-5xl flex-col gap-2 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between"><span class="inline-flex items-center gap-2 "><svg width="24" height="24" viewBox="0 0 16 16" aria-hidden="true" class="shrink-0" shape-rendering="crispEdges"><rect x="1" y="1" width="5" height="6" fill="currentColor"></rect><rect x="2" y="7" width="3" height="6" fill="currentColor"></rect><rect x="10" y="2" width="4" height="4" fill="hsl(var(--brand))"></rect><rect x="9" y="3" width="1" height="2" fill="hsl(var(--brand))" opacity="0.45"></rect><rect x="14" y="3" width="1" height="2" fill="hsl(var(--brand))" opacity="0.45"></rect></svg><span class="font-display text-[0.72rem] leading-none tracking-tight">PENGED<span class="text-brand">.DEV</span></span></span><p class="font-mono uppercase tracking-[0.14em]">penged.dev — verified match play</p></div></footer><nav aria-label="Primary" class="fixed inset-x-0 bottom-0 z-30 border-t-2 border-foreground/80 bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"><ul class="grid grid-cols-3"><li><a class="flex min-h-[58px] flex-col items-center justify-center gap-1 font-display text-[0.5rem] uppercase tracking-[0.12em] text-muted-foreground" href="/leaderboard" data-discover="true"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-trophy h-5 w-5" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path><path d="M4 22h16"></path><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"></path><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"></path><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"></path></svg>Ladder</a></li><li><a class="flex min-h-[58px] flex-col items-center justify-center gap-1 font-display text-[0.5rem] uppercase tracking-[0.12em] text-muted-foreground" href="/matches/new" data-discover="true"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-plus h-5 w-5" aria-hidden="true"><path d="M5 12h14"></path><path d="M12 5v14"></path></svg>Record</a></li><li><a class="flex min-h-[58px] flex-col items-center justify-center gap-1 font-display text-[0.5rem] uppercase tracking-[0.12em] text-muted-foreground" href="/challenges" data-discover="true"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-swords h-5 w-5" aria-hidden="true"><polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5"></polyline><line x1="13" x2="19" y1="19" y2="13"></line><line x1="16" x2="20" y1="16" y2="20"></line><line x1="19" x2="21" y1="21" y2="19"></line><polyline points="14.5 6.5 18 3 21 3 21 6 17.5 9.5"></polyline><line x1="5" x2="9" y1="14" y2="18"></line><line x1="7" x2="4" y1="17" y2="20"></line><line x1="3" x2="5" y1="19" y2="21"></line></svg>Challenges</a></li></ul></nav></div><div role="region" aria-label="Notifications (F8)" tabindex="-1" style="pointer-events: none;"><ol tabindex="-1" class="fixed top-0 z-[100] flex max-h-screen w-full flex-col-reverse p-4 sm:bottom-0 sm:right-0 sm:top-auto sm:flex-col md:max-w-[420px]"></ol></div></div>
+ 
+
+<div id="base44-edit-badge" dir="ltr" style="position: fixed; z-index: 999999; bottom: 16px; right: 16px; display: flex; align-items: center; gap: 8px; background-color: rgb(0, 0, 0); color: rgb(255, 255, 255); padding: 8px 12px; border-radius: 6px; box-shadow: rgba(0, 0, 0, 0.1) 0px 10px 15px -3px, rgba(0, 0, 0, 0.05) 0px 4px 6px -2px; cursor: pointer; transition: box-shadow 0.2s; border: 1px solid rgb(38, 38, 38); font-family: -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, Roboto, &quot;Helvetica Neue&quot;, Arial, sans-serif; font-size: 14px;">
+      <img src="https://media.base44.com/images/public/builder-assets/symbol-orange.png" alt="base44" style="width: 20px; height: 20px;">
+      <span style="white-space: nowrap; font-size: 12px;">
+        <span id="badge-content">
+          <div style="display: flex; align-items: center; gap: 6px; justify-content: center; font-size: 14px;">
+            <span>Edit with </span>
+            <span style="margin-bottom: 2px;"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAARAAAABECAMAAAB+vJpyAAAACXBIWXMAACxLAAAsSwGlPZapAAAAAXNSR0IArs4c6QAAAEVQTFRFAAAA////////////////////////////////////////////////////////////////////////////////////////Up1zwgAAABZ0Uk5TABAgMEBQX2BvcH+Aj5CfoK+wv8/f741pbhwAAAVHSURBVHja7ZvtbuwoDECNQ5ZNSZgsAd7/Ufeq6i0Ex3Y6I1WJNOdv3RlyGvAHKrx58+bNmzdvfg0v4OwAN8P5BnH16FsM/KUoxNnCffi3tDgQCKUFqxCd5OAmYCFCdHVUiE5CuAXptBDMohCdD7gBczktJBVVyP2NuNLhBHWaEB0LFwcTESKoe11IMnBtYulxvDpdiI6HS/NRCE5UpwvJqaX05ItnXIoT1elCPOwY3HqfU8QkTQhVpwtRNtsE1yUUTQhVpwtR6pdwi5I9KUJCeUUI+FKJcFUwVx+eCOHULVETomy4dIOSPSMRwqqDZ4QAEXLtjDuBLCQ1Dp4TkoQtg25ev/Jziqu30EAD81fcZIHFjDVwdginsO0xR4Rw6jw8JySXb/6DFvORSs/qgEIDU7CHNlzsAyf8UcmeUBYytn/d54QYJu1iODk7MXMuB8SBHneHgQF/kHFHIEJYdU8KsaUyCIuvzAYabBbjKsNWTimWd4EsZO1+pAqR9ad2EQKbOReYEFTD+uQB2wUSIZy6BX4shD6Q0x6THr5O6Z9PfmI4V7IjEcKqM88JMfNh0h2KwlSTvkjQfOjvyEyWT4Rw6nQhwba4OZaGjMz4bQuLDzHvYs1BlZw+42i7SA3nLcat7Bj1Sc8KVAirThWiM7a5q/J9oeESedewlT0cxcWDdusrJaNLRLGccRkhVF2E14Vke9wdWag8+u3lDncjbqVi+gFnsjVwUadTkTw8FUJLdnxdSESoZG6ZW/f5ayuoYvJ+ydhlqIonr4iQNmQhpAc+LUQtjpCdoTk2zQdo8XujgZ/bRuKeTRusEKruJSFUiWWbG9N968YEDumbpeu3+N40itMrBFGIJerOC9EzH35j2M44dN9nz7ZmfG1phJrRAyuEqntJCNneEtj1ges+dzAsjLY+ozl+0hOBF0LV6UJeN4LjFLbc59OptOQ4j4OYKbLoeOEnPcgJEdXpQrawY41Zr6CNneaYS0+sm0Gz0k7/KN1Lx6QNUQgWRt0TvYx9lBZLhzlCO1O/kFqx5B1QSVzGDSAKMaw6XYh265daG1Hv72xhSQGBjdGFjCRtsEJmou5pIbSutqRbF4WA1/OWLWdhGzVRiCPqXhBCVrzU6lsVohvZ8FkhWE7hyAo0BCGV3L+2Qy5nhYBLYt66pZC1VAzrI62LOxAC+BD0zbcU8igV/D5mK3kLkzXwh+N8b9yaCoMFvLmQbroVlxHhCyqkMox+3QplAUN+ieOSWwb3N1cWGtRnM3Z6dFZy+3npJkJSqRgYSc6R+2Cl2MPWN95CiN3/wsKvP+yFYMWwxZ6FSVoAVsxVhHQz0JV9C3AfCCv7Lk3MqZqN8JH2GkJM2J+BEFkhWyek2Rob+5x2Vy/O/IwwQwvyLHshBnmaFVv8RBNiPnLf3a1ctx5KJ2Ri20K7ux4d2QuY4dRllVS6S+ile/Q7wpoO+qsHc/m9kUrV0GtL6q5uSmrkn0yU/pqQ83tyOlr9MOeD0j0eX1mbWZib1EAbySzmakISuWXLq3duCunMgGibLP5hnDO5L166cUnwYe0M41WE0Nc+ChFkQKSQajcvM8H1hORBm+gkR+8oZbBWJiIeriOEHosLa8xWIcKDkgWrgR6uJ2Qx9VDcGB9AhIgPmh1UzEOKu5YQ2sUtzPUvFQLgtftibZS0IlxLSI6TASCLp8aOhQA+EqtYVZKDBfhdIVFgDd4NBo5wTV5Mi4VPhviXuWtwt04xwiF2aQNTcAZ+jIvfaDKXGmrgdYZx8t670ZyMdv4Pk7MIEsaO02fcYN7/Zf7mzfX5H+WZeZXgxfH6AAAAAElFTkSuQmCC" alt="Base44" height="18" width="56"></span>
+          </div>
+        </span>
+      </span>
+      <button id="badge-close" aria-label="Close badge" style="
+          padding: 2px;
+          margin-left: 2px;
+          border-radius: 9999px;
+          background: transparent;
+          border: none;
+          cursor: pointer;
+          transition: background-color 0.2s;
+          color: white;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        ">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    </div></body></html>

@@ -1,0 +1,9 @@
+BETTER_AUTH_SECRET=change-me-openssl-rand-base64-32
+# Optional. When unset, the base URL is derived from each request's origin (right for one Worker serving
+# web + api). Set it only if you serve the site from a different public origin than the Worker sees.
+# BETTER_AUTH_URL=http://localhost:8787
+# Optional extra trusted origins (comma-separated); the request origin / BETTER_AUTH_URL is always trusted.
+# TRUSTED_ORIGINS=http://localhost:5173
+# Local/test only: turn Better Auth rate limiting off (many sign-ups from one IP). Never set this in production.
+# RATE_LIMIT=off
+# Admins are NOT configured here. Promote a user with: npm run make-admin -- someone@example.com
