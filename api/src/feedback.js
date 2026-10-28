@@ -8,6 +8,7 @@ const MAX_MESSAGE = 2000;
 const MAX_SHORT = 200;
 const PER_IP_PER_HOUR = 5;
 const PER_USER_PER_DAY = 20;
+const FOLLOWUPS_PER_DAY = 10;
 
 const isStr = (v) => typeof v === 'string';
 const adminOnly = (user) => {
@@ -68,6 +69,111 @@ export async function submitFeedback({ env, user, request }, body) {
 }
 
 const pubFeedback = ({ ip_hash, user_agent, ...r }) => r; // ip_hash never leaves the server
+const pubReply = (r) => ({ id: r.id, feedback_id: r.feedback_id, created_date: r.created_date, author_role: r.author_role, author_name: r.author_name, message: r.message });
+
+/** Replies for a set of feedback ids, grouped by feedback id, oldest first. */
+async function repliesFor(env, ids) {
+  const by = new Map(ids.map((id) => [id, []]));
+  if (!ids.length) return by;
+  const rows = await all(
+    env,
+    `SELECT * FROM feedback_replies WHERE feedback_id IN (${ids.map(() => '?').join(',')}) ORDER BY created_date, id`,
+    ...ids,
+  );
+  for (const r of rows) by.get(r.feedback_id).push(pubReply(r));
+  return by;
+}
+
+const cleanReply = (v) => {
+  if (!isStr(v) || !v.trim()) throw bad('Write a message first.');
+  const m = v.trim();
+  if (m.length > MAX_MESSAGE) throw bad(`Replies are at most ${MAX_MESSAGE} characters.`);
+  return m;
+};
+
+/** The signed-in user's own feedback with replies, newest activity first. Never returns admin_note / ip_hash / user_agent. */
+export async function myFeedback({ env, user }, body) {
+  const limit = body.limit == null ? 20 : Number(body.limit);
+  if (!Number.isInteger(limit) || limit < 1) throw bad('limit must be a positive integer.');
+  const cap = Math.min(limit, 50);
+  const where = ['user_id = ?'];
+  const params = [user.id];
+  if (body.cursor != null && body.cursor !== '') {
+    if (!isStr(body.cursor) || !body.cursor.includes('|')) throw bad('Bad cursor.');
+    const i = body.cursor.indexOf('|');
+    const d = body.cursor.slice(0, i);
+    where.push('(COALESCE(last_reply_at, created_date) < ? OR (COALESCE(last_reply_at, created_date) = ? AND id < ?))');
+    params.push(d, d, body.cursor.slice(i + 1));
+  }
+  const rows = await all(
+    env,
+    `SELECT id, created_date, kind, message, page, status, user_unread, reply_count, last_reply_at, COALESCE(last_reply_at, created_date) AS activity
+     FROM feedback WHERE ${where.join(' AND ')} ORDER BY activity DESC, id DESC LIMIT ${cap + 1}`,
+    ...params,
+  );
+  const more = rows.length > cap;
+  const page = rows.slice(0, cap);
+  const threads = await repliesFor(env, page.map((r) => r.id));
+  const last = page[page.length - 1];
+  return {
+    items: page.map(({ activity, ...r }) => ({ ...r, user_unread: !!r.user_unread, replies: threads.get(r.id) })),
+    next_cursor: more && last ? `${last.activity}|${last.id}` : null,
+    unread: (await first(env, 'SELECT count(*) AS n FROM feedback WHERE user_id = ? AND user_unread = 1', user.id)).n,
+  };
+}
+
+/** Cheap badge count: my feedback items with an unseen admin reply. */
+export async function myFeedbackUnread({ env, user }) {
+  return { unread: (await first(env, 'SELECT count(*) AS n FROM feedback WHERE user_id = ? AND user_unread = 1', user.id)).n };
+}
+
+export async function markFeedbackSeen({ env, user }, body) {
+  if (!isStr(body.id)) throw bad('Missing feedback id.');
+  const row = await first(env, 'SELECT id, user_id FROM feedback WHERE id = ?', body.id);
+  if (!row || row.user_id !== user.id) throw new HttpError(404, 'Feedback not found.');
+  await stmt(env, 'UPDATE feedback SET user_unread = 0 WHERE id = ?', row.id).run();
+  return { ok: true };
+}
+
+export async function replyFeedback({ env, user }, body) {
+  if (!isStr(body.id)) throw bad('Missing feedback id.');
+  const message = cleanReply(body.message);
+  const row = await first(env, 'SELECT * FROM feedback WHERE id = ?', body.id);
+  const isAdmin = user.role === 'admin';
+  if (!row || (!isAdmin && row.user_id !== user.id)) throw new HttpError(404, 'Feedback not found.');
+  if (!isAdmin && !row.user_id) throw new HttpError(404, 'Feedback not found.');
+  const now = nowIso();
+  if (!isAdmin) {
+    const r = await first(
+      env,
+      `SELECT count(*) AS n FROM feedback_replies WHERE author_user_id = ? AND author_role = 'user' AND created_date > ?`,
+      user.id,
+      new Date(Date.now() - 86400e3).toISOString(),
+    );
+    if (r.n >= FOLLOWUPS_PER_DAY) throw new HttpError(429, "You've sent plenty of follow-ups today. Please try again tomorrow.");
+  }
+  const player = await first(env, 'SELECT username FROM players WHERE user_id = ?', user.id);
+  const name = player?.username || user.name || (isAdmin ? 'Admin' : 'You');
+  const id = uuid();
+  const upd = isAdmin
+    ? stmt(
+        env,
+        `UPDATE feedback SET user_unread = CASE WHEN user_id IS NULL THEN 0 ELSE 1 END, last_reply_at = ?, reply_count = reply_count + 1,
+         status = CASE WHEN status = 'new' THEN 'read' ELSE status END, updated_date = ? WHERE id = ?`,
+        now, now, row.id,
+      )
+    : stmt(env, `UPDATE feedback SET status = 'new', last_reply_at = ?, reply_count = reply_count + 1, updated_date = ? WHERE id = ?`, now, now, row.id);
+  await env.DB.batch([
+    stmt(
+      env,
+      'INSERT INTO feedback_replies (id, feedback_id, created_date, author_user_id, author_role, author_name, message) VALUES (?,?,?,?,?,?,?)',
+      id, row.id, now, user.id, isAdmin ? 'admin' : 'user', name, message,
+    ),
+    upd,
+  ]);
+  const reply = await first(env, 'SELECT * FROM feedback_replies WHERE id = ?', id);
+  return { reply: pubReply(reply) };
+}
 
 export async function listFeedback({ env, user }, body) {
   adminOnly(user);
@@ -99,8 +205,12 @@ export async function listFeedback({ env, user }, body) {
   const counts = { new: 0, read: 0, done: 0 };
   for (const r of await all(env, 'SELECT status, count(*) AS n FROM feedback GROUP BY status')) counts[r.status] = r.n;
   const last = items[items.length - 1];
+  const threads = await repliesFor(env, items.map((r) => r.id));
   return {
-    items: items.map(pubFeedback),
+    items: items.map((r) => {
+      const replies = threads.get(r.id);
+      return { ...pubFeedback(r), user_unread: !!r.user_unread, replies, needs_reply: replies.length > 0 && replies[replies.length - 1].author_role === 'user' };
+    }),
     next_cursor: more && last ? `${last.created_date}|${last.id}` : null,
     new_count: counts.new,
     counts: { ...counts, all: counts.new + counts.read + counts.done },

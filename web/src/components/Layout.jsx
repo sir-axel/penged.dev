@@ -3,7 +3,7 @@ import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { Trophy, Plus, Swords, User, LogIn } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { Logo } from "@/components/Logo";
-import { CountBadge, useNewFeedbackCount } from "@/hooks/useFeedbackCount";
+import { CountBadge, UnreadDot, useNewFeedbackCount, useUnreadReplyCount } from "@/hooks/useFeedbackCount";
 import { feedbackHref } from "@/pages/Feedback";
 
 export const NAV_ITEMS = [
@@ -30,6 +30,7 @@ export function Layout() {
   let { isAuthenticated } = useAuth();
   const location = useLocation();
   const newFeedback = useNewFeedbackCount();
+  const unreadReplies = useUnreadReplyCount();
   // While a text field is focused the on-screen keyboard is (probably) open: drop the bottom nav and
   // let the fixed submit bar sit flush at the bottom so neither covers the field being typed in.
   useEffect(() => {
@@ -76,6 +77,7 @@ export function Layout() {
               <User className="h-3.5 w-3.5" aria-hidden="true" />
               My profile
               <CountBadge n={newFeedback} />
+              <UnreadDot n={unreadReplies} />
             </Link>
           ) : (
             <Link
@@ -100,6 +102,7 @@ export function Layout() {
               className="inline-flex min-h-10 items-center underline underline-offset-4 hover:text-foreground"
             >
               Feedback
+              <UnreadDot n={unreadReplies} className="ml-1.5" />
             </Link>
             <span>penged.dev — verified match play</span>
           </p>
