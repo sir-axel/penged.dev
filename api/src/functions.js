@@ -5,7 +5,7 @@ import {
 } from './db.js';
 import { getUser } from './auth.js';
 import { HttpError, bad } from './errors.js';
-import { submitFeedback, listFeedback, updateFeedback } from './feedback.js';
+import { submitFeedback, listFeedback, updateFeedback, myFeedback, myFeedbackUnread, markFeedbackSeen, replyFeedback } from './feedback.js';
 import { avatarOwner, removeAvatar } from './uploads.js';
 import { decodeInternal, pub } from './schema.js';
 import {
@@ -616,6 +616,10 @@ fns.deleteAccount = ({ env, user }, body) =>
 fns.submitFeedback = submitFeedback;
 fns.listFeedback = listFeedback;
 fns.updateFeedback = updateFeedback;
+fns.myFeedback = myFeedback;
+fns.myFeedbackUnread = myFeedbackUnread;
+fns.markFeedbackSeen = markFeedbackSeen;
+fns.replyFeedback = replyFeedback;
 
 // The only functions callable without a session (they get user = null).
 const PUBLIC_FNS = new Set(['submitFeedback']);

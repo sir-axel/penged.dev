@@ -1,13 +1,15 @@
 import { BackButton } from "@/components/BackButton";
 import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { LoaderCircle } from "lucide-react";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
+import { ChevronDown, LoaderCircle } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { PageHeader } from "@/components/PageHeader";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { api } from "@/api/client";
+import { ReplyBox, ReplyList, whenShort } from "@/components/FeedbackThread";
 
 export const MAX_FEEDBACK = 2000;
 const KINDS = [
@@ -29,8 +31,123 @@ function referrerPath() {
 /** Link to the feedback form that remembers where the person was. */
 export const feedbackHref = (from) => (from && from !== "/feedback" ? `/feedback?from=${encodeURIComponent(from)}` : "/feedback");
 
+const KIND_STYLE = {
+  bug: "bg-destructive text-white",
+  idea: "bg-brand text-white",
+  other: "bg-foreground text-background",
+};
+const STATUS_LABEL = { new: "Sent", read: "Seen", done: "Resolved" };
+
+function MyItem({ item, onSeen, onReply }) {
+  const [open, setOpen] = useState(false);
+  const unread = item.user_unread;
+  const toggle = () => {
+    const next = !open;
+    setOpen(next);
+    if (next && unread) onSeen(item.id);
+  };
+  return (
+    <li className="rounded-sm border border-border bg-card">
+      <button
+        type="button"
+        onClick={toggle}
+        aria-expanded={open}
+        className="flex min-h-11 w-full items-start gap-3 p-3 text-left"
+      >
+        <span className="min-w-0 flex-1">
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className={`px-1.5 py-0.5 font-display text-[0.5rem] uppercase tracking-[0.14em] ${KIND_STYLE[item.kind]}`}>{item.kind}</span>
+            <span className="border border-border px-1.5 py-0.5 font-display text-[0.5rem] uppercase tracking-[0.14em] text-muted-foreground">
+              {STATUS_LABEL[item.status] || item.status}
+            </span>
+            {unread && (
+              <span className="bg-destructive px-1.5 py-0.5 font-display text-[0.5rem] uppercase tracking-[0.14em] text-white">New reply</span>
+            )}
+            <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">{whenShort(item.created_date)}</span>
+            {item.reply_count > 0 && (
+              <span className="font-mono text-[10px] text-muted-foreground">
+                {item.reply_count} {item.reply_count === 1 ? "reply" : "replies"}
+              </span>
+            )}
+          </span>
+          {!open && <span className="mt-2 line-clamp-2 block break-words text-sm [overflow-wrap:anywhere]">{item.message}</span>}
+        </span>
+        <ChevronDown className={`mt-1 h-4 w-4 shrink-0 transition-transform ${open ? "rotate-180" : ""}`} aria-hidden="true" />
+      </button>
+      {open && (
+        <div className="border-t border-border px-3 pb-3 pt-2">
+          <p className="whitespace-pre-wrap break-words text-sm leading-relaxed [overflow-wrap:anywhere]">{item.message}</p>
+          <ReplyList replies={item.replies} viewer="user" />
+          <ReplyBox
+            id={`fb-reply-${item.id}`}
+            label="Reply"
+            buttonLabel="Send reply"
+            placeholder="Add a follow-up"
+            onSend={(message) => onReply(item.id, message)}
+          />
+        </div>
+      )}
+    </li>
+  );
+}
+
+function MyFeedback() {
+  const queryClient = useQueryClient();
+  const q = useInfiniteQuery({
+    queryKey: ["my-feedback"],
+    initialPageParam: null,
+    queryFn: async ({ pageParam }) => (await api.functions.invoke("myFeedback", { limit: 20, cursor: pageParam || undefined })).data,
+    getNextPageParam: (last) => last.next_cursor || undefined,
+  });
+  const items = (q.data?.pages || []).flatMap((p) => p.items);
+  const refreshCounts = () => queryClient.invalidateQueries({ queryKey: ["feedback-unread-replies"] });
+  const seen = async (id) => {
+    try {
+      await api.functions.invoke("markFeedbackSeen", { id });
+      await queryClient.invalidateQueries({ queryKey: ["my-feedback"] });
+      refreshCounts();
+    } catch {
+      /* the red chip simply stays until the next try */
+    }
+  };
+  const reply = async (id, message) => {
+    await api.functions.invoke("replyFeedback", { id, message });
+    await queryClient.invalidateQueries({ queryKey: ["my-feedback"] });
+  };
+  return (
+    <section aria-labelledby="my-fb" className="mt-10">
+      <h2 id="my-fb" className="font-heading text-xl font-bold">
+        Your feedback
+      </h2>
+      <div className="mt-3 space-y-2">
+        {q.isLoading ? (
+          <div className="flex justify-center py-6">
+            <LoaderCircle className="h-5 w-5 animate-spin text-muted-foreground" aria-label="Loading" />
+          </div>
+        ) : q.isError ? (
+          <p role="alert" className="text-sm text-destructive">Could not load your feedback.</p>
+        ) : items.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Nothing sent yet.</p>
+        ) : (
+          <ul className="space-y-2">
+            {items.map((it) => (
+              <MyItem key={it.id} item={it} onSeen={seen} onReply={reply} />
+            ))}
+          </ul>
+        )}
+        {q.hasNextPage && (
+          <Button variant="outline" className="h-11 w-full rounded-sm" disabled={q.isFetchingNextPage} onClick={() => q.fetchNextPage()}>
+            Load more
+          </Button>
+        )}
+      </div>
+    </section>
+  );
+}
+
 export function Feedback() {
   const { isAuthenticated } = useAuth();
+  const queryClient = useQueryClient();
   const [params] = useSearchParams();
   const from = useMemo(() => safePath(params.get("from")) || referrerPath(), [params]);
   const [kind, setKind] = useState("bug");
@@ -57,6 +174,7 @@ export function Feedback() {
         website,
       });
       setDone(true);
+      queryClient.invalidateQueries({ queryKey: ["my-feedback"] });
     } catch (err) {
       setError(err.response?.data?.error || err.message || "Could not send that. Please try again.");
     } finally {
@@ -184,6 +302,13 @@ export function Feedback() {
               Send feedback
             </Button>
           </form>
+        )}
+        {isAuthenticated ? (
+          <MyFeedback />
+        ) : (
+          <p className="mt-8 text-sm text-muted-foreground">
+            <Link to="/login" className="underline underline-offset-4 hover:text-brand">Sign in</Link> to see replies to your feedback.
+          </p>
         )}
       </div>
     </>

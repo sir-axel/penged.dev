@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { Button } from "@/components/ui/button";
 import { api } from "@/api/client";
+import { ReplyBox, ReplyList } from "@/components/FeedbackThread";
 
 const TABS = [
   { key: "new", label: "New" },
@@ -27,7 +28,7 @@ const when = (iso) => {
     : d.toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
 };
 
-function Item({ item, onChange, busy }) {
+function Item({ item, onChange, onReply, busy }) {
   const [note, setNote] = useState(item.admin_note || "");
   const dirty = note.trim() !== (item.admin_note || "");
   const act = (status) => onChange(item.id, { status, ...(dirty ? { admin_note: note } : {}) });
@@ -42,6 +43,9 @@ function Item({ item, onChange, busy }) {
           <span className="border border-border px-1.5 py-0.5 font-display text-[0.5rem] uppercase tracking-[0.14em] text-muted-foreground">
             {item.status}
           </span>
+        )}
+        {item.needs_reply && (
+          <span className="bg-destructive px-1.5 py-0.5 font-display text-[0.5rem] uppercase tracking-[0.14em] text-white">New reply</span>
         )}
         <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">{when(item.created_date)}</span>
       </div>
@@ -59,8 +63,34 @@ function Item({ item, onChange, busy }) {
       </p>
       {item.page && <p className="mt-0.5 break-all font-mono text-[11px] text-muted-foreground">from {item.page}</p>}
       <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed [overflow-wrap:anywhere]">{item.message}</p>
+      <ReplyList replies={item.replies} viewer="admin" />
+      {item.user_id ? (
+        <ReplyBox
+          id={`reply-${item.id}`}
+          label={`Reply to ${item.username || "this player"}`}
+          placeholder="They will see this on their Feedback page"
+          onSend={(message) => onReply(item.id, message)}
+        />
+      ) : (
+        <p className="mt-3 break-words text-sm text-muted-foreground [overflow-wrap:anywhere]">
+          Visitor
+          {item.contact ? (
+            <>
+              {" "}— reply by email:{" "}
+              <a
+                href={`mailto:${item.contact}`}
+                className="inline-flex min-h-10 items-center break-all underline underline-offset-4 hover:text-brand"
+              >
+                {item.contact}
+              </a>
+            </>
+          ) : (
+            " — no contact left, so no reply is possible."
+          )}
+        </p>
+      )}
       <label className="mt-3 block">
-        <span className="font-display text-[0.5rem] uppercase tracking-[0.16em] text-muted-foreground">Admin note (private)</span>
+        <span className="font-display text-[0.5rem] uppercase tracking-[0.16em] text-muted-foreground">Private note (only admins see this)</span>
         <textarea
           value={note}
           onChange={(e) => setNote(e.target.value)}
@@ -134,6 +164,12 @@ export function AdminFeedback() {
     }
   };
 
+  const reply = async (id, message) => {
+    await api.functions.invoke("replyFeedback", { id, message });
+    await queryClient.invalidateQueries({ queryKey: ["feedback"] });
+    queryClient.invalidateQueries({ queryKey: ["feedback-new-count"] });
+  };
+
   if (!isAdmin) {
     return (
       <div className="mx-auto max-w-2xl px-4 py-16 sm:px-6">
@@ -188,7 +224,7 @@ export function AdminFeedback() {
         ) : (
           <ul className="space-y-2">
             {items.map((it) => (
-              <Item key={`${it.id}:${it.updated_date}`} item={it} busy={busy === it.id} onChange={change} />
+              <Item key={`${it.id}:${it.updated_date}`} item={it} busy={busy === it.id} onChange={change} onReply={reply} />
             ))}
           </ul>
         )}

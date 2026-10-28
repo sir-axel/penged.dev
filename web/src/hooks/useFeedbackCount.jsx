@@ -14,6 +14,29 @@ export function useNewFeedbackCount() {
   return user?.role === "admin" ? data || 0 : 0;
 }
 
+/** Number of my feedback notes with an unseen admin reply (signed-in users; one cheap COUNT, cached ~60s). */
+export function useUnreadReplyCount() {
+  const { user } = useAuth();
+  const { data } = useQuery({
+    queryKey: ["feedback-unread-replies"],
+    enabled: !!user,
+    staleTime: 60000,
+    queryFn: async () => (await api.functions.invoke("myFeedbackUnread", {})).data.unread || 0,
+  });
+  return user ? data || 0 : 0;
+}
+
+/** Small red dot for unseen replies. */
+export function UnreadDot({ n, className = "" }) {
+  return n > 0 ? (
+    <span
+      role="img"
+      aria-label={`${n} unread ${n === 1 ? "reply" : "replies"}`}
+      className={`inline-block h-2 w-2 rounded-full bg-destructive ${className}`}
+    />
+  ) : null;
+}
+
 export function CountBadge({ n, className = "" }) {
   return n > 0 ? (
     <span
