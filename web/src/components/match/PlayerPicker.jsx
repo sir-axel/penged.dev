@@ -49,7 +49,14 @@ export function PlayerPicker({
         <ChevronsUpDown className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
       </button>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="gap-0 p-0 sm:max-w-md">
+        <DialogContent
+          // Phones: a bottom sheet sized to the visible screen, so the list (not the page behind) scrolls.
+          // Touch devices don't auto-focus search: that popped the keyboard and moved the sheet off-screen.
+          onOpenAutoFocus={(e) => {
+            if (window.matchMedia?.("(pointer: coarse)").matches) e.preventDefault();
+          }}
+          className="bottom-0 top-auto flex max-h-[85dvh] translate-y-0 flex-col gap-0 rounded-t-lg p-0 data-[state=open]:slide-in-from-top-[100%] sm:bottom-auto sm:top-[50%] sm:max-h-[80vh] sm:max-w-md sm:translate-y-[-50%] sm:data-[state=open]:slide-in-from-top-[48%]"
+        >
           <DialogHeader className="border-b border-border px-4 py-3 text-left">
             <DialogTitle className="font-heading text-base">
               {label || "Choose a player"}
@@ -66,11 +73,11 @@ export function PlayerPicker({
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search players"
                 aria-label="Search players"
-                className="h-11 w-full rounded-sm border border-input bg-background pl-9 pr-3 text-sm outline-none focus:border-foreground/40"
+                className="h-11 w-full rounded-sm border border-input bg-background pl-9 pr-3 text-base outline-none focus:border-foreground/40 sm:text-sm"
               />
             </div>
           </div>
-          <ul className="max-h-[52vh] overflow-y-auto py-1">
+          <ul className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain py-1 pb-[env(safe-area-inset-bottom)]">
             {filtered.map((e) => (
               <li key={e.id}>
                 <button
