@@ -16,6 +16,7 @@ import {
   RANK_SQL, DOUBLES_RANK_SQL, rankPlayers, ACTIVE_DAYS, meetingWeight, NOVELTY_DAYS, stakes, currentRd, RATING_FLOOR, challengePenalty, WALKOVER_XP, COOLDOWN_DAYS, WAIVER_DAYS, FATIGUE_DAYS,
   CHALLENGE_CAP_DAYS, CHALLENGES_RECEIVED_PER_WEEK, CHALLENGES_SENT_PER_WEEK,
 } from './rating.js';
+import { bountyFor, BOUNTY_CLAIM_DAYS } from './bounty.js';
 import { weekdayDeadline, cleanTimeZone, DEFAULT_TZ } from './weekdays.js';
 import { withCtx } from './email.js';
 import { notify } from './notify.js';
@@ -494,6 +495,32 @@ function unrankedPlan(env, m, now, players, parts, sideOf) {
   return { stmts, changes };
 }
 
+/**
+ * Bounty claims a verified ranked match pays: every losing player in the top BOUNTY_RANKS of this format's ladder carries
+ * bountyFor(rank, current win streak). Each winner collects the full XP and an equal share of the rating, unless they
+ * already claimed that player's bounty in the last BOUNTY_CLAIM_DAYS. Returns [{ from, from_name, to, rank, rating, xp }].
+ */
+async function bountyClaims(env, m, players, sideOf) {
+  const rk = `${m.format}_rank`, sc = `${m.format}_win_streak`;
+  const winners = players.filter((p) => sideOf(p.id) === m.winner_side);
+  const bountied = players.filter((p) => sideOf(p.id) !== m.winner_side).map((p) => ({ p, b: bountyFor(p[rk], p[sc]) })).filter((x) => x.b);
+  if (!bountied.length) return [];
+  const rows = await all(env,
+    `SELECT rating_changes FROM matches WHERE status = 'verified' AND ranked = 1 AND format = ? AND id <> ? AND verified_at > ?
+       AND EXISTS (SELECT 1 FROM json_each(all_player_ids) WHERE value IN (${placeholders(bountied.length)}))`,
+    m.format, m.id, daysAgoIso(BOUNTY_CLAIM_DAYS), ...bountied.map((x) => x.p.id));
+  const claimed = new Set();
+  for (const r of rows) for (const c of JSON.parse(r.rating_changes || '[]')) for (const b of c.bounties || []) claimed.add(`${c.player_id}:${b.from}`);
+  const out = [];
+  for (const { p, b } of bountied) {
+    for (const w of winners) {
+      if (claimed.has(`${w.id}:${p.id}`)) continue;
+      out.push({ from: p.id, from_name: nameOf(p), to: w.id, rank: b.rank, rating: Math.round(b.rating / winners.length), xp: b.xp });
+    }
+  }
+  return out;
+}
+
 /** Builds the guarded statements that verify a match (ratings, xp, records, ladder). */
 async function verifyPlan(env, m, now) {
   const fmt = m.format;
@@ -508,6 +535,7 @@ async function verifyPlan(env, m, now) {
   const rc = `${fmt}_rating`, wc = `${fmt}_wins`, lc = `${fmt}_losses`, gwc = `${fmt}_game_wins`, glc = `${fmt}_game_losses`, vc = `${fmt}_last_verified_at`, sc = `${fmt}_win_streak`, bc = `${fmt}_best_streak`;
   const rdc = `${fmt}_rd`, volc = `${fmt}_vol`, rdat = `${fmt}_rd_at`;
   const results = rateMatch(parts, m.winner_side, m.games, { target: m.target, challenge: !!ch });
+  const claims = await bountyClaims(env, m, players, sideOf);
   const sideAvg = (s) => sides[s].reduce((t, id) => t + players.find((x) => x.id === id)[rc], 0) / sides[s].length;
   const today = now.slice(0, 10);
   const changes = [];
@@ -531,7 +559,16 @@ async function verifyPlan(env, m, now) {
       firstOfDay: p.last_match_day !== today,
       newRival: parts.find((x) => x.id === p.id).novel,
     });
-    const xpGain = xpRes.total;
+    // Bounties: collectors gain the rating the bountied player loses, plus bounty XP.
+    const got = claims.filter((c) => c.to === p.id);
+    const paid = claims.filter((c) => c.from === p.id);
+    for (const c of got) xpRes.parts.push({ key: 'bounty', label: `bounty on ${c.from_name}`, xp: c.xp });
+    const bountyDelta = got.reduce((t, c) => t + c.rating, 0) - paid.reduce((t, c) => t + c.rating, 0);
+    if (bountyDelta) {
+      res.after = Math.max(RATING_FLOOR, res.after + bountyDelta);
+      res.delta = res.after - res.before;
+    }
+    const xpGain = xpRes.parts.reduce((t, x) => t + x.xp, 0);
     const xp = p.xp + xpGain;
     stmts.push(guardRow(env, 'players', p.id, p.version));
     stmts.push(stmt(env,
@@ -549,6 +586,8 @@ async function verifyPlan(env, m, now) {
         challenge: g.challenge, novelty: g.novelty,
       })),
       xp_gained: xpGain, xp_parts: xpRes.parts, win_streak: streak,
+      ...(got.length ? { bounties: got.map((c) => ({ from: c.from, name: c.from_name, rank: c.rank, rating: c.rating, xp: c.xp })) } : null),
+      ...(paid.length ? { bounty_paid: paid.reduce((t, c) => t + c.rating, 0) } : null),
       matches_played: p[wc] + p[lc] + 1, // in this format, including this match (placement badge)
       // Tier crossing (derived from rating); only once placed (5+ matches in this format before this one).
       ...(p[wc] + p[lc] >= PROVISIONAL ? tierChange(res.before, res.after) : null),
@@ -609,17 +648,43 @@ fns.matchStakes = async ({ env, user }, body) => {
     for (const e of [...a, ...b]) paddles[e.player_id] = e.paddle;
     challenge = !!(await challengeFor(env, fmt, sides, now, now));
   }
-  const { players, parts } = await ratingParts(env, { fmt, sides, paddleOf: (id) => paddles[id] || 'default', now });
+  const { players, parts, sideOf } = await ratingParts(env, { fmt, sides, paddleOf: (id) => paddles[id] || 'default', now });
   const bySide = { a: parts.filter((p) => p.side === 'a'), b: parts.filter((p) => p.side === 'b') };
   const out = stakes({ format: fmt, target, sides: bySide, paddles, challenge }, tierChange);
+  // Bounties ride on top of the match result, exactly as verification pays them (ranked only).
+  const ranked = match ? match.ranked !== false : body.ranked !== false;
+  const claims = { a: [], b: [] };
+  if (ranked) for (const w of ['a', 'b']) claims[w] = await bountyClaims(env, { format: fmt, id: match?.id || '', winner_side: w }, players, sideOf);
+  const sum = (cs) => cs.reduce((t, c) => t + c.rating, 0);
+  for (const x of out) {
+    const gets = claims[x.side].filter((c) => c.to === x.id);
+    const pays = sum(claims[x.side === 'a' ? 'b' : 'a'].filter((c) => c.from === x.id));
+    const bw = sum(gets);
+    const lose = (v) => Math.max(RATING_FLOOR - x.rating, v - pays);
+    if (bw) {
+      x.win = x.win.map((v) => v + bw); x.narrow.win += bw; x.dominant.win += bw; x.win_after += bw;
+      if (!x.placing) x.tier_win = tierChange(x.rating, x.win_after);
+    }
+    if (pays) {
+      x.lose = x.lose.map(lose); x.narrow.lose = lose(x.narrow.lose); x.dominant.lose = lose(x.dominant.lose);
+      x.lose_after = Math.max(RATING_FLOOR, x.rating + x.lose[1]);
+      if (!x.placing) x.tier_lose = tierChange(x.rating, x.lose_after);
+    }
+    if (gets.length) x.bounty_win = { rating: bw, xp: gets.reduce((t, c) => t + c.xp, 0), from: gets.map((c) => c.from_name) };
+    if (pays) x.bounty_risk = pays;
+  }
   const nameById = Object.fromEntries(players.map((p) => [p.id, nameOf(p)]));
   // A pending match already has its scores: also say exactly what confirming it does (same rules verification uses).
-  const actual = match && match.ranked !== false
+  const actual = match && ranked
     ? Object.fromEntries(rateMatch(parts.map((p) => ({ ...p, paddle: paddles[p.id] || 'default' })), match.winner_side, match.games,
-      { target, challenge }).map((r) => [r.id, r]))
+      { target, challenge }).map((r) => {
+        const cs = claims[match.winner_side];
+        const after = Math.max(RATING_FLOOR, r.after + sum(cs.filter((c) => c.to === r.id)) - sum(cs.filter((c) => c.from === r.id)));
+        return [r.id, { ...r, after, delta: after - r.before }];
+      }))
     : null;
   return {
-    format: fmt, target, challenge, ranked: match ? match.ranked !== false : body.ranked !== false, assumed: 'a narrow 2-1 (11-9, 9-11, 11-9) up to a dominant 2-0 (11-4, 11-5)',
+    format: fmt, target, challenge, ranked, assumed: 'a narrow 2-1 (11-9, 9-11, 11-9) up to a dominant 2-0 (11-4, 11-5)',
     players: out.map((x) => {
       const r = actual?.[x.id];
       return {

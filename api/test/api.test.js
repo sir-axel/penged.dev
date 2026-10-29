@@ -326,18 +326,18 @@ describe('rating-derived ranks', () => {
   it('a win moves you past everyone you now out-rate, not just the opponent', async () => {
     const a = await mkPlayer('Aa1'); const b = await mkPlayer('Bb2'); const c = await mkPlayer('Cc3');
     await seasoned(a, b, c);
-    await win(c, a); // c 1480, a 1320, b 1400
-    expect(await ranks()).toEqual([['Cc3', 1, 1480], ['Bb2', 2, 1400], ['Aa1', 3, 1320]]);
+    await win(c, a); // c 1480, a 1320, b 1400, plus a's #1 bounty (20): c 1500, a 1300
+    expect(await ranks()).toEqual([['Cc3', 1, 1500], ['Bb2', 2, 1400], ['Aa1', 3, 1300]]);
     void b;
   });
 
   it('a lower-rated winner who stays below the loser does not take the loser spot', async () => {
     const a = await mkPlayer('Aa1'); const b = await mkPlayer('Bb2');
     await seasoned(a, b);
-    await sql('UPDATE players SET singles_rating = 1600 WHERE id = ?', a.player.id);
+    await sql('UPDATE players SET singles_rating = 1700 WHERE id = ?', a.player.id);
     await sql('UPDATE players SET singles_rating = 1400 WHERE id = ?', b.player.id);
     await call(a, 'syncLadder'); // recompute
-    await win(b, a); // upset worth < 200 points
+    await win(b, a); // upset + a's #1 bounty, worth < 300 points
     const r = await ranks();
     expect(r[0][0]).toBe('Aa1');
     expect(r[0][2]).toBeGreaterThan(r[1][2]);
