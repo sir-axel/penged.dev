@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { formatRecord, matchesPlayed, playerName, overallRating, rankFor, ratingFor, streakFor, isProvisional, isInactive, settlingHint } from "@/lib/ladder";
 import { LevelBar } from "@/components/LevelBar";
 import { TierBadge } from "@/components/TierBadge";
+import { EloButton } from "@/components/EloButton";
 import { nextTier } from "@/lib/tiers";
 
 export function YourSpot({ player, toConfirm = 0 }) {
@@ -11,7 +12,10 @@ export function YourSpot({ player, toConfirm = 0 }) {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
           <div className="flex flex-1 flex-col gap-3">
             <div className="flex items-center justify-between gap-3">
-              <p className="truncate font-heading text-sm font-semibold">{playerName(player)}</p>
+              <div className="flex min-w-0 items-center gap-2">
+                <p className="truncate font-heading text-sm font-semibold">{playerName(player)}</p>
+                <EloButton />
+              </div>
               <div className="hidden w-32 sm:block">
                 <LevelBar xp={player.xp || 0} />
               </div>

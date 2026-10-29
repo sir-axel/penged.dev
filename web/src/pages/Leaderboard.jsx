@@ -7,27 +7,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { LadderRow } from "@/components/LadderRow";
 import { api } from "@/api/client";
-import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { RatingExplainer } from "@/components/home/RatingExplainer";
-
-function RatingsButton() {
-  return (
-    <Dialog>
-      <DialogTrigger asChild>
-        <button
-          type="button"
-          className="inline-flex min-h-[40px] items-center self-start rounded-sm bg-secondary px-3 font-heading text-sm font-medium text-foreground hover:bg-secondary/70 sm:self-auto"
-        >
-          How ratings work
-        </button>
-      </DialogTrigger>
-      <DialogContent className="max-h-[88dvh] max-w-3xl overflow-y-auto overscroll-contain p-4 sm:p-6">
-        <DialogTitle className="sr-only">How ratings work</DialogTitle>
-        <RatingExplainer alwaysOpen page="leaderboard" />
-      </DialogContent>
-    </Dialog>
-  );
-}
+import { EloButton } from "@/components/EloButton";
 
 export const BOARD_TABS = [
   {
@@ -113,7 +93,7 @@ export function Leaderboard() {
         eyebrow="Ladder"
         title="Leaderboard"
         description="Ranked by rating, on verified matches only."
-        action={<RatingsButton />}
+        action={<EloButton format={view} />}
       />
       <div className="sticky top-14 z-20 border-b border-border bg-background/95 backdrop-blur">
         <div

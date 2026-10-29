@@ -5,6 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useMyPlayer } from "@/hooks/useMyPlayer";
 import { useQuery } from "@tanstack/react-query";
 import { RatingChart } from "@/components/RatingChart";
+import { EloButton } from "@/components/EloButton";
 import { BackButton } from "@/components/BackButton";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
@@ -81,7 +82,10 @@ function FormatBlock({ player, format }) {
   const streak = streakFor(player, format);
   return (
     <section className="border border-border bg-card p-4" aria-label={`${name} ladder`} data-testid={`block-${format}`}>
-      <h2 className="font-display text-[0.58rem] uppercase tracking-[0.22em] text-muted-foreground">{name}</h2>
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="font-display text-[0.58rem] uppercase tracking-[0.22em] text-muted-foreground">{name}</h2>
+        <EloButton format={format} />
+      </div>
       <div className="mt-2 flex items-start gap-4">
         <div>
           <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Rating</p>
