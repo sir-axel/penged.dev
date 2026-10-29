@@ -64,9 +64,9 @@ describe('stakes range (pure)', () => {
     expect(placing[0]).toMatchObject({ placing: true, tier_win: null });
   });
   it('floor and caps hold; repeats never preview zero', () => {
-    const low = stakes({ format: 'singles', target: 11, sides: { a: [pl('a', { rating: 705, rd: 200, daysSinceLast: null })], b: [pl('b', { rating: 705 })] } })[0];
+    const low = stakes({ format: 'singles', target: 11, sides: { a: [pl('a', { rating: 105, rd: 200, daysSinceLast: null })], b: [pl('b', { rating: 105 })] } })[0];
     expect(low.lose_after).toBe(RATING_FLOOR);
-    expect(low.lose[1]).toBe(RATING_FLOOR - 705);
+    expect(low.lose[1]).toBe(RATING_FLOOR - 105);
     const huge = stakes({ format: 'singles', target: 11, sides: { a: [pl('a', { rating: 900, rd: 200, daysSinceLast: null })], b: [pl('b', { rating: 2200 })] } })[0];
     expect(huge.win[1]).toBeLessThanOrEqual(MAX_DELTA);
     let daily = 0;

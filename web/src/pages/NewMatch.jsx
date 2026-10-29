@@ -20,6 +20,7 @@ export function NewMatch() {
     { player } = useMyPlayer(),
     [format, setFormat] = useState("singles"),
     [target, setTarget] = useState(11),
+    [ranked, setRanked] = useState(true),
     [partnerId, setPartnerId] = useState(""),
     [opponentId, setOpponentId] = useState(""),
     [opponent2Id, setOpponent2Id] = useState(""),
@@ -79,7 +80,7 @@ export function NewMatch() {
   // A stale submit error must not outlive the inputs it was about.
   useEffect(() => {
     setError("");
-  }, [games, format, target, partnerId, opponentId, opponent2Id]);
+  }, [games, format, target, ranked, partnerId, opponentId, opponent2Id]);
   return (
     <>
       <PageHeader
@@ -122,6 +123,20 @@ export function NewMatch() {
               },
             ]}
           />
+          <SegmentedControl
+            label="Ranked or unranked"
+            value={ranked ? "ranked" : "unranked"}
+            onChange={(e) => setRanked(e === "ranked")}
+            options={[
+              { value: "ranked", label: "Ranked" },
+              { value: "unranked", label: "Unranked" },
+            ]}
+          />
+          <p className="text-xs text-muted-foreground" data-testid="ranked-hint">
+            {ranked
+              ? "Ranked: moves your elo and your record, and earns XP."
+              : "Unranked: XP only. Ratings, records, streaks and challenges stay as they are."}
+          </p>
         </section>
         <section className="space-y-2">
           <p className="font-display text-[0.58rem] uppercase tracking-[0.22em] text-muted-foreground">
@@ -198,7 +213,7 @@ export function NewMatch() {
               </div>
             )}
           </div>
-          {stakesRequest && <StakesLine request={stakesRequest} />}
+          {stakesRequest && ranked && <StakesLine request={stakesRequest} />}
         </section>
         <section className="space-y-2">
           <div className="flex items-center justify-between">
@@ -339,6 +354,7 @@ export function NewMatch() {
                 let t = await api.functions.invoke("submitMatch", {
                   format: format,
                   target: target,
+                  ranked,
                   side_a: r,
                   side_b: a,
                   games: filledGames.map((e) => ({

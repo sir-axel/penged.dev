@@ -246,7 +246,7 @@ export function PlayerProfile() {
           ) : (
             <ul className="mt-3 overflow-hidden rounded-sm border border-border bg-card">
               {matches.map((e) => (
-                <MatchRow match={e} key={e.id} />
+                <MatchRow match={e} key={e.id} pov={player.id} />
               ))}
             </ul>
           )}

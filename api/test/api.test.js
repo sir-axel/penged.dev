@@ -258,16 +258,16 @@ describe('challenge penalties', () => {
     expect(r).toMatchObject({ penalty_rating: 6, penalty_reason: 'fatigue_halved' });
   });
 
-  it('respects the 700 floor', async () => {
+  it('respects the 100 floor', async () => {
     const { b, c } = await trio();
-    await sql('UPDATE players SET singles_rating = 702, doubles_rating = 702 WHERE id = ?', b.player.id);
-    await sql('UPDATE players SET singles_rating = 702 WHERE id = ?', c.player.id);
+    await sql('UPDATE players SET singles_rating = 102, doubles_rating = 102 WHERE id = ?', b.player.id);
+    await sql('UPDATE players SET singles_rating = 102 WHERE id = ?', c.player.id);
     const ch = (await call(c, 'createChallenge', { defender_player_id: b.player.id })).body.challenge;
     await expire(ch.id);
     await call(c, 'syncLadder');
-    expect((await ent('Player', b.player.id)).singles_rating).toBe(700);
+    expect((await ent('Player', b.player.id)).singles_rating).toBe(100);
     expect((await ent('Challenge', ch.id)).penalty_rating).toBe(2);
-    expect((await ent('Player', c.player.id)).singles_rating).toBe(704);
+    expect((await ent('Player', c.player.id)).singles_rating).toBe(104);
     expect(await order()).toEqual(['Aa1', 'Cc3', 'Bb2']);
   });
 

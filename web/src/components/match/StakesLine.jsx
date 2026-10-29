@@ -25,6 +25,13 @@ export function useStakes(request) {
 export function StakesLine({ request, showResult = false, className = "" }) {
   const { data, isError } = useStakes(request);
   if (!request || isError || data?.error) return null;
+  if (data?.ranked === false)
+    return (
+      <div className={`rounded-sm border border-dashed border-border bg-secondary/50 px-2.5 py-1.5 text-xs ${className}`} data-testid="stakes-line">
+        <span className="font-display text-[0.55rem] uppercase tracking-[0.16em] text-muted-foreground">Unranked</span>{" "}
+        XP only. Nobody's rating or record moves.
+      </div>
+    );
   const me = data?.players?.find((p) => p.you);
   const bits = me
     ? [

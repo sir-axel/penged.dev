@@ -165,8 +165,8 @@ describe('caps and floor', () => {
     expect(r.games.every((g) => g.delta <= MAX_GAME_DELTA)).toBe(true);
     expect(r.delta).toBe(MAX_DELTA);
   });
-  it('never below 700, also mid-match', () => {
-    const r = duel({ rating: 760 }, { rating: 720, rd: 200, daysSinceLast: null }, BLOW).l;
+  it('never below 100, also mid-match', () => {
+    const r = duel({ rating: 160 }, { rating: 120, rd: 200, daysSinceLast: null }, BLOW).l;
     expect(r.after).toBe(RATING_FLOOR);
     expect(r.games.every((g) => g.after >= RATING_FLOOR)).toBe(true);
   });

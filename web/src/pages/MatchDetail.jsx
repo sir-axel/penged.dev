@@ -163,7 +163,7 @@ export function MatchDetail() {
     <>
       <BackButton fallback="/matches" />
       <PageHeader
-        eyebrow={`${match.format === "doubles" ? "Doubles" : "Singles"} · to ${match.target}`}
+        eyebrow={`${match.format === "doubles" ? "Doubles" : "Singles"} · to ${match.target}${match.ranked === false ? " · Unranked" : ""}`}
         title="Match result"
         description={`Submitted by ${match.submitted_by_name || "a player"} · ${formatShortDate(match.created_date)}`}
         action={<StatusBadge status={match.status} />}
@@ -326,13 +326,14 @@ export function MatchDetail() {
         {match.status === "verified" && (match.rating_changes || []).length > 0 && (
           <section>
             <h2 className="font-display text-[0.58rem] uppercase tracking-[0.22em] text-muted-foreground">
-              Rating change
+              {match.ranked === false ? "XP earned · unranked, ratings unchanged" : "Rating change"}
             </h2>
             <ul className="mt-2 divide-y divide-border overflow-hidden rounded-sm border border-border bg-card">
               {match.rating_changes.map((e) => (
                 <li className="px-3 py-2.5" key={e.player_id}>
                   <div className="flex items-center gap-2">
                     <span className="flex-1 truncate font-heading text-sm">{e.name}</span>
+                    {!e.unranked && (<>
                     <span className="font-mono text-xs tabular-nums text-muted-foreground">
                       {e.before}
                       {" → "}
@@ -344,6 +345,7 @@ export function MatchDetail() {
                       {e.delta >= 0 ? "+" : "−"}
                       {Math.abs(e.delta)}
                     </span>
+                    </>)}
                   </div>
                   {(e.games || []).length > 0 ? <GameLines change={e} /> : e.mov != null && <FactorLines change={e} />}
                   {(e.xp_parts || []).length > 0 && (

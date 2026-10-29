@@ -17,7 +17,7 @@ export const ENTITIES = {
       ...common, format: 'text', target: 'int', side_a: 'json', side_b: 'json', games: 'json',
       games_a: 'int', games_b: 'int', winner_side: 'text', status: 'text', all_player_ids: 'array',
       all_user_ids: 'array', accepted_user_ids: 'array', submitted_by_name: 'text',
-      submitted_by_user_id: 'text', note: 'text', rating_changes: 'json', expires_at: 'ts', verified_at: 'ts',
+      submitted_by_user_id: 'text', note: 'text', rating_changes: 'json', expires_at: 'ts', verified_at: 'ts', ranked: 'bool',
     },
   },
   Challenge: {

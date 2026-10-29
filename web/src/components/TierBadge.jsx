@@ -3,7 +3,7 @@ import { TierEmblem } from "@/components/TierEmblem";
 
 // Self-contained colors (text on tint, >= 4.5:1) as CSS variables with a light and a dark set (see index.css).
 export const TIER_STYLE = Object.fromEntries(
-  ["wood", "iron", "bronze", "silver", "gold", "platinum", "diamond", "master", "grandmaster"].map((k) => [
+  ["dirt", "wood", "iron", "bronze", "silver", "gold", "platinum", "diamond", "master", "grandmaster"].map((k) => [
     k,
     { fg: `var(--tier-${k}-fg)`, bg: `var(--tier-${k}-bg)`, bd: `var(--tier-${k}-bd)` },
   ]),

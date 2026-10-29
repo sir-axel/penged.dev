@@ -54,7 +54,7 @@ function SideRow({ players, games, won, changes }) {
 
 export function FeedCard({ match }) {
   const aWon = match.winner_side === "a";
-  const changes = match.rating_changes || [];
+  const changes = match.ranked === false ? [] : match.rating_changes || [];
   const chips = allChips(match);
   return (
     <li className="border-b border-border last:border-0" data-testid="feed-card">
@@ -66,6 +66,7 @@ export function FeedCard({ match }) {
             {match.format === "doubles" ? "Doubles" : "Singles"}
             {" · to "}
             {match.target}
+            {match.ranked === false && " · unranked"}
           </span>
           {chips.map((c) => (
             <Chip chip={c} key={c.key} />

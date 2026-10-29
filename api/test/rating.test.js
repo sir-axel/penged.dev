@@ -119,7 +119,7 @@ describe('challenge penalties', () => {
   });
   it('never exceeds the cap and respects the floor', () => {
     expect(pen('expired').penalty).toBeLessThanOrEqual(80);
-    expect(pen('expired', { defRating: 702, chalRating: 702 }).penalty).toBe(2);
+    expect(pen('expired', { defRating: 102, chalRating: 102 }).penalty).toBe(2);
     expect(pen('expired', { defRating: RATING_FLOOR, chalRating: RATING_FLOOR }).penalty).toBe(0);
   });
 });

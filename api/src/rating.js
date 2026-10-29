@@ -10,7 +10,7 @@
 // api/test/explainer.test.js asserts the copy matches)
 // ===================================================================================================
 export const START_RATING = 1400;
-export const RATING_FLOOR = 700;
+export const RATING_FLOOR = 100;
 export const MAX_DELTA = 80; // hard cap on one player's TOTAL change in one match (all its games together)
 export const MAX_GAME_DELTA = 40; // cap on one game
 // ---- Glicko-2 core ----
@@ -46,7 +46,7 @@ export const AC_MAX = 1.6;
 // (like home advantage). Scaled by the share of a side's players using one. Stored ratings never include it.
 export const PADDLE_EDGE = 50;
 // Target 21: a game to 21 is a more reliable result than a game to 11.
-export const EVIDENCE_TARGET_21 = 1.1;
+export const EVIDENCE_TARGET_21 = 1.3;
 // Rematches: each earlier meeting in the last REPEAT_WINDOW_DAYS counts 0.5 ^ (days ago / REPEAT_HALF_LIFE_DAYS), so the
 // multiplier recovers as time passes between games. repeat = REPEAT_FLOOR + (1 - REPEAT_FLOOR) / (1 + REPEAT_STEP * weightedMeetings):
 // frequent rematches count less (and shrink RD less) but never stop counting.

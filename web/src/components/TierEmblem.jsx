@@ -1,6 +1,6 @@
 import { TIERS } from "@/lib/tiers";
 
-// Pixel emblems, one per tier, a ping-pong climb: bare wooden blade, net, ball, paddle, trophy, shield, gem, crown, flaming ball.
+// Pixel emblems, one per tier, a ping-pong climb: ball sunk in the dirt, bare wooden blade, net, ball, paddle, trophy, shield, gem, crown, flaming ball.
 // '#' = tier colour, '+' = tier edge colour, 'o' = highlight, 'x' = shade, '.' = empty. 12x12.
 // Grandmaster sits on a solid red tile, so it gets its own palette: white ball, orange and yellow flames.
 const GM = { "#": "#ffffff", x: "#d6d3d1", "+": "#f97316", o: "#fde047" };
@@ -19,6 +19,21 @@ const ART = {
     "..#......#..",
     "....#.#.#...",
     "............",
+  ],
+  // Rock bottom: a cracked ball half sunk in a mound of dirt, pebbles around it.
+  dirt: [
+    "............",
+    "............",
+    "....oooo....",
+    "...oo..oo...",
+    "..o..o...o..",
+    "..o...o..o..",
+    ".+x+x++x+x+.",
+    "+#+x#+#x+#x+",
+    "x#x##x##x##x",
+    "#x##o##x#o##",
+    "##x###x###x#",
+    "############",
   ],
   wood: [
     "...######...",

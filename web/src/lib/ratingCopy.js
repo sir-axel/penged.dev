@@ -6,7 +6,8 @@ export const SEPARATE_RATINGS =
 
 export const RATING_POINTS = [
   SEPARATE_RATINGS,
-  "Everyone starts at 1400. No rating ever drops below 700.",
+  "Everyone starts at 1400. No rating ever drops below 100, so there is a long way down to the Dirt.",
+  "Only Ranked matches move ratings. Record a match as Unranked to just play for XP: ratings, records, streaks, rematch counts and challenges stay as they are.",
   "Every game counts. Each game in a match is rated on its own, in order — a 3-0 sweep earns three wins, a 2-1 grind earns two wins and a loss.",
   "Confidence: the ladder also tracks how sure it is about your rating (±200 when you are brand new, never tighter than ±50). The less sure it is, the more each result moves you, so new players find their level fast and settled regulars move steadily.",
   "Every game you play firms your confidence up. Time away loosens it: a settled ±50 is back to ±76 after 30 days and ±95 after 60, so returning players move fast again until they settle. Your profile shows \"settling ±N\" while it is ±90 or wider.",
@@ -17,7 +18,7 @@ export const RATING_POINTS = [
   "One game moves you at most 40 points, and one match (all its games together) at most 80.",
   "Rematches count, just a little less, and the effect fades fast. Each recent match against the same opponent shrinks the swing, but it halves every 3 days: play the same person every day and results count about half (×0.48), weekly ×0.89, after a few weeks off fully. Never below ×0.30, so regulars keep moving.",
   "New rivals count more. Your first match against someone in 30+ days (or ever) is fresh evidence: ×1.1 and +10 xp. Playing around the office is the fastest way to find your real level.",
-  "Games to 21 count 10% more than games to 11. An accepted challenge counts ×1.25.",
+  "Games to 21 count 30% more than games to 11: a longer game is a truer result, so a short one swings less. An accepted challenge counts ×1.25.",
   "Paddles count. A paid paddle is treated as +50 rating when working out who was expected to win: win with one and you gain a little less, beat one and you gain a little more.",
   "Doubles uses each team's average rating and combined confidence; each player then moves by their own confidence, and a stronger partner gains a little less and loses a little more (×0.75 to ×1.25).",
   "No streak bonus. A real improvement shows up as wins you were not expected to get, and each one counts in full. (Glicko-2 also tracks a volatility, starting at 0.06, but at office scale it barely moves.)",
@@ -41,9 +42,9 @@ export const RATING_FORMULA =
   "upset     = 2.2 / (2.2 + 0.001 * (winner - loser))   (0.6 to 1.6, edges included)\n" +
   "repeat    = 0.3 + 0.7 / (1 + 0.75 * meetings)     meetings = sum of 0.5 ^ (days ago / 3)\n" +
   "new rival = 1.1 if you have not met these opponents in 30 days, else 1\n" +
-  "to21      = 1.1 for games to 21      challenge = 1.25 for an accepted challenge\n" +
+  "to21      = 1.3 for games to 21      challenge = 1.25 for an accepted challenge\n" +
   "partner   = doubles: 0.75 to 1.25 (stronger partner gains less, loses more)\n" +
-  "match total = sum of its games, never more than 80; rating never below 700";
+  "match total = sum of its games, never more than 80; rating never below 100";
 
 export const WORKED_EXAMPLE =
   "Two regulars (confidence ±60, last played 3 days ago, free paddles): 1400 beats 1600. A 3-0 blowout (11-2, 11-3, 11-1) is three wins: +19, +17, +17 = +53, and the loser drops 53. The same match played narrowly (11-9, 9-11, 12-10) is two wins and a loss: +12, −4, +12 = +20. With a paid paddle the blowout is +48 for the winner. Between two evenly rated regulars (1400 each), a 3-0 sweep is +27, a 2-1 grind +6, a close 2-0 +14. Back after 45 days away the same grind is worth +12, after 90 days +17. A brand-new player (±200) who beats a regular 2-1 gains +40 while the regular drops only 5. What's on the line for two equal regulars: +8 to +21 against a new rival, +6 to +17 if you meet weekly, +3 to +9 if you play every day, and +11 to +34 for the one coming back from six weeks off. Rank simply follows rating.";

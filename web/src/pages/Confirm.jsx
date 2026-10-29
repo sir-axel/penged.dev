@@ -28,6 +28,7 @@ function MatchSummary({ match, children }) {
           {match.format === "doubles" ? "Doubles" : "Singles"}
           {" · to "}
           {match.target}
+          {match.ranked === false && " · unranked"}
           <span className="block normal-case tracking-normal">
             {"Submitted by "}
             {match.submitted_by_name || "a player"}

@@ -30,7 +30,7 @@ const signed = (n) => (n > 0 ? `+${n}` : `${n}`);
 function buildSeries(player, format, matches, dodged, walkovers) {
   const ev = [];
   for (const m of matches) {
-    if (m.format !== format) continue;
+    if (m.format !== format || m.ranked === false) continue;
     const rc = (m.rating_changes || []).find((x) => x.player_id === player.id);
     if (!rc || rc.after == null) continue;
     const mine = (m.side_a || []).some((s) => s.player_id === player.id) ? "a" : "b";

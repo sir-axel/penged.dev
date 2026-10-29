@@ -99,17 +99,17 @@ export const flagsStmt = (env) => {
 async function penaltyFacts(env, c) {
   const ids = [c.challenger_player_id, c.defender_player_id];
   const pair = (days) => first(env,
-    `SELECT count(*) AS n FROM matches WHERE status = 'verified' AND format = 'singles' AND verified_at > ?
+    `SELECT count(*) AS n FROM matches WHERE status = 'verified' AND ranked = 1 AND format = 'singles' AND verified_at > ?
        AND EXISTS (SELECT 1 FROM json_each(all_player_ids) WHERE value = ?) AND EXISTS (SELECT 1 FROM json_each(all_player_ids) WHERE value = ?)`,
     daysAgoIso(days), ...ids);
   const meetingRows = await all(env,
-    `SELECT verified_at FROM matches WHERE status = 'verified' AND format = 'singles' AND verified_at > ?
+    `SELECT verified_at FROM matches WHERE status = 'verified' AND ranked = 1 AND format = 'singles' AND verified_at > ?
        AND EXISTS (SELECT 1 FROM json_each(all_player_ids) WHERE value = ?) AND EXISTS (SELECT 1 FROM json_each(all_player_ids) WHERE value = ?)`,
     daysAgoIso(REPEAT_WINDOW_DAYS), ...ids);
   const meetings = meetingRows.reduce((s, r) => s + meetingWeight((Date.now() - Date.parse(r.verified_at)) / 86400000), 0);
   const recentPairMatch = (await pair(WAIVER_DAYS)).n > 0;
   const defRecentMatches = (await first(env,
-    `SELECT count(*) AS n FROM matches WHERE status = 'verified' AND verified_at > ?
+    `SELECT count(*) AS n FROM matches WHERE status = 'verified' AND ranked = 1 AND verified_at > ?
        AND EXISTS (SELECT 1 FROM json_each(all_player_ids) WHERE value = ?)`, daysAgoIso(FATIGUE_DAYS), c.defender_player_id)).n;
   return { meetings, recentPairMatch, defRecentMatches };
 }
@@ -294,6 +294,8 @@ fns.submitMatch = ({ env, user }, body) =>
   retrying(async () => {
     const { format, target } = body;
     if (format !== 'singles' && format !== 'doubles') throw bad('Choose singles or doubles.');
+    if (body.ranked != null && typeof body.ranked !== 'boolean') throw bad('Choose ranked or unranked.');
+    const ranked = body.ranked !== false;
     const err = validateGames(target, body.games);
     if (err) throw bad(err);
     const size = format === 'singles' ? 1 : 2;
@@ -322,11 +324,11 @@ fns.submitMatch = ({ env, user }, body) =>
       stmt(env,
         `INSERT INTO matches (id, format, target, side_a, side_b, games, games_a, games_b, winner_side, status,
            all_player_ids, all_user_ids, accepted_user_ids, submitted_by_name, submitted_by_user_id, expires_at,
-           created_date, updated_date, created_by_id)
-         VALUES (?,?,?,?,?,?,?,?,?,'pending',?,?,?,?,?,?,?,?,?)`,
+           created_date, updated_date, created_by_id, ranked)
+         VALUES (?,?,?,?,?,?,?,?,?,'pending',?,?,?,?,?,?,?,?,?,?)`,
         id, format, target, J(a.map(full)), J(b.map(full)), J(games), sum.games_a, sum.games_b, sum.winner_side,
         J(ids), J(ids.map((i) => byId[i].user_id)), J([user.id]), nameOf(me), user.id,
-        inFutureIso(MATCH_EXPIRY_MS), now, now, user.id),
+        inFutureIso(MATCH_EXPIRY_MS), now, now, user.id, ranked ? 1 : 0),
       touch(env, me.id, now),
     ]);
     return { match: pub('Match', await first(env, 'SELECT * FROM matches WHERE id = ?', id)) };
@@ -346,7 +348,7 @@ async function ratingParts(env, { fmt, sides, paddleOf, excludeId = '', now }) {
   // where P was opposite at least one of P's opponents in this match (singles: the same opponent).
   // Each counts 0.5 ^ (days ago / REPEAT_HALF_LIFE_DAYS) (meetingWeight): it fades as time passes.
   const prevRows = await all(env,
-    `SELECT side_a, side_b, verified_at FROM matches WHERE status = 'verified' AND format = ? AND id <> ? AND verified_at > ?
+    `SELECT side_a, side_b, verified_at FROM matches WHERE status = 'verified' AND ranked = 1 AND format = ? AND id <> ? AND verified_at > ?
        AND EXISTS (SELECT 1 FROM json_each(all_player_ids) WHERE value IN (${placeholders(ids.length)}))`,
     fmt, excludeId, daysAgoIso(REPEAT_WINDOW_DAYS), ...ids);
   const prev = prevRows.map((r) => {
@@ -385,12 +387,47 @@ const acceptedChallenge = (env, x, y, before, now) => first(env,
      AND ((challenger_player_id = ? AND defender_player_id = ?) OR (challenger_player_id = ? AND defender_player_id = ?)) LIMIT 1`,
   before, now, x, y, y, x);
 
+/**
+ * Unranked match: XP only. Ratings, W/L records, streaks, ranks, activity and challenges stay untouched, and it never
+ * counts as a meeting for rematch / new-rival / dodge math, so neither the streak nor the new-rival XP applies.
+ */
+function unrankedPlan(env, m, now, players, parts, sideOf) {
+  const rc = `${m.format}_rating`;
+  const sideAvg = (s) => {
+    const ps = players.filter((p) => sideOf(p.id) === s);
+    return ps.reduce((t, p) => t + p[rc], 0) / ps.length;
+  };
+  const today = now.slice(0, 10);
+  const stmts = [];
+  const changes = [];
+  for (const p of players) {
+    const side = sideOf(p.id);
+    const won = side === m.winner_side;
+    const mine = side === 'a' ? (g) => g.a : (g) => g.b;
+    const theirs = side === 'a' ? (g) => g.b : (g) => g.a;
+    const gamesWon = m.games.filter((g) => mine(g) > theirs(g)).length;
+    const xpRes = xpForMatch({
+      won, gamesWon, ratingGap: sideAvg(side === 'a' ? 'b' : 'a') - sideAvg(side),
+      skunks: m.games.filter((g) => mine(g) > theirs(g) && theirs(g) === 0).length,
+      lostFirstGame: mine(m.games[0]) < theirs(m.games[0]), firstOfDay: p.last_match_day !== today,
+    });
+    const xp = p.xp + xpRes.total;
+    stmts.push(guardRow(env, 'players', p.id, p.version));
+    stmts.push(stmt(env, 'UPDATE players SET xp = ?, level = ?, last_active_at = ?, last_match_day = ?, updated_date = ?, version = version + 1 WHERE id = ?',
+      xp, levelForXp(xp), now, today, now, p.id));
+    const r = p[rc];
+    changes.push({ player_id: p.id, name: nameOf(p), before: r, after: r, delta: 0, unranked: true, xp_gained: xpRes.total, xp_parts: xpRes.parts });
+  }
+  return { stmts, changes };
+}
+
 /** Builds the guarded statements that verify a match (ratings, xp, records, ladder). */
 async function verifyPlan(env, m, now) {
   const fmt = m.format;
   const sides = { a: m.side_a.map((e) => e.player_id), b: m.side_b.map((e) => e.player_id) };
   const paddleOf = (id) => [...m.side_a, ...m.side_b].find((e) => e.player_id === id)?.paddle;
   const { players, parts, sideOf } = await ratingParts(env, { fmt, sides, paddleOf, excludeId: m.id, now });
+  if (m.ranked === false) return unrankedPlan(env, m, now, players, parts, sideOf);
 
   // An accepted challenge between these two players, accepted before this result was submitted, is played by this match.
   let ch = null;
@@ -499,12 +536,12 @@ fns.matchStakes = async ({ env, user }, body) => {
   const out = stakes({ format: fmt, target, sides: bySide, paddles, challenge }, tierChange);
   const nameById = Object.fromEntries(players.map((p) => [p.id, nameOf(p)]));
   // A pending match already has its scores: also say exactly what confirming it does (same rules verification uses).
-  const actual = match
+  const actual = match && match.ranked !== false
     ? Object.fromEntries(rateMatch(parts.map((p) => ({ ...p, paddle: paddles[p.id] || 'default' })), match.winner_side, match.games,
       { target, challenge }).map((r) => [r.id, r]))
     : null;
   return {
-    format: fmt, target, challenge, assumed: 'a narrow 2-1 (11-9, 9-11, 11-9) up to a dominant 2-0 (11-4, 11-5)',
+    format: fmt, target, challenge, ranked: match ? match.ranked !== false : body.ranked !== false, assumed: 'a narrow 2-1 (11-9, 9-11, 11-9) up to a dominant 2-0 (11-4, 11-5)',
     players: out.map((x) => {
       const r = actual?.[x.id];
       return {

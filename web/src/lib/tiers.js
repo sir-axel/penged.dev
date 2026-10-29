@@ -1,7 +1,8 @@
 // Tiers are DERIVED from rating (no stored field). Keep in sync with api/src/tiers.js (api test asserts they match).
 export const PROVISIONAL = 5; // matches in a format before a tier is shown (mirrors PROVISIONAL_MATCHES)
 export const TIERS = [
-  { key: "wood", name: "Wood", min: -Infinity }, // the 700 floor up
+  { key: "dirt", name: "Dirt", min: -Infinity }, // the 100 floor up
+  { key: "wood", name: "Wood", min: 900 },
   { key: "iron", name: "Iron", min: 1050 },
   { key: "bronze", name: "Bronze", min: 1200 },
   { key: "silver", name: "Silver", min: 1350 },
@@ -28,11 +29,11 @@ export function nextTier(rating) {
   const tier = TIERS[i + 1];
   return { tier, pointsToGo: Math.max(1, Math.ceil(tier.min - Number(rating))) };
 }
-/** 0..1 progress through the current tier toward the next (1 at the top; Wood measured from the 700 floor). */
+/** 0..1 progress through the current tier toward the next (1 at the top; Dirt measured from the 100 floor). */
 export function tierProgress(rating) {
   const i = tierIndex(rating);
   if (i >= TIERS.length - 1) return 1;
-  const lo = i === 0 ? 700 : TIERS[i].min;
+  const lo = i === 0 ? 100 : TIERS[i].min;
   return Math.max(0, Math.min(1, (Number(rating) - lo) / (TIERS[i + 1].min - lo)));
 }
 /** Placement: fewer than PROVISIONAL matches in that format. */

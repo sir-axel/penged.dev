@@ -11,7 +11,7 @@ import { matchesPlayed, ratingFor } from "@/lib/ladder";
 const range = (i) => {
   const t = TIERS[i];
   const next = TIERS[i + 1];
-  if (i === 0) return `700–${next.min - 1}`; // 700 is the rating floor
+  if (i === 0) return `100–${next.min - 1}`; // 100 is the rating floor
   return next ? `${t.min}–${next.min - 1}` : `${t.min}+`;
 };
 
