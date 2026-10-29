@@ -46,9 +46,11 @@ describe('per-game ratings through verification', () => {
     pa = await ent(a);
     expect(pa).toMatchObject({ singles_wins: 1, singles_game_wins: 2, singles_game_losses: 1, doubles_wins: 1, doubles_game_wins: 2, doubles_game_losses: 0 });
     expect(await ent(d)).toMatchObject({ doubles_losses: 1, doubles_game_wins: 0, doubles_game_losses: 2, singles_game_wins: 0, singles_game_losses: 0 });
-    // K now reads GAMES: a has 3 singles games behind them, so game 1 of the next match uses kSmooth(3)
+    // the next singles match starts from the singles RD the last one left (doubles RD is separate)
+    const before = await ent(a);
     const m = await verified('singles', [a], [b], [{ a: 11, b: 1 }]);
-    expect(m.rating_changes.find((x) => x.player_id === a.player.id).games[0].k).toBeCloseTo(32 + 16 * Math.exp(-3 / 60), 6);
+    expect(m.rating_changes.find((x) => x.player_id === a.player.id).rd_before).toBeGreaterThanOrEqual(before.singles_rd);
+    expect(m.rating_changes.find((x) => x.player_id === a.player.id).rd_before).toBeLessThan(before.singles_rd + 1);
   });
 
   it('doubles partners keep independent per-game sequences', async () => {

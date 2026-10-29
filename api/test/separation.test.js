@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import { env, dispose, reset, call, get, mkPlayer } from './helpers.js';
-import { kSmooth, repeatFactor } from '../src/rating.js';
+import { repeatFactor } from '../src/rating.js';
 
 beforeEach(reset);
 afterAll(() => dispose());
@@ -59,28 +59,35 @@ describe('singles and doubles are separate ladders', () => {
     expect((await ent(a)).win_streak).toBe(0); // legacy shared column is no longer written
   });
 
-  it('K and provisional certainty use the format\'s own games', async () => {
+  it('confidence (RD) and sigma are per format', async () => {
     const [a, b, c, d] = await four();
-    // A is a veteran at singles only.
-    await sql('UPDATE players SET singles_wins = 40, singles_losses = 10, singles_game_wins = 30, singles_game_losses = 20 WHERE id = ?', a.player.id);
+    // A is a settled singles veteran only.
+    await sql('UPDATE players SET singles_wins = 40, singles_losses = 10, singles_game_wins = 30, singles_game_losses = 20, singles_rd = 50, singles_vol = 0.07, singles_rd_at = ? WHERE id = ?',
+      new Date().toISOString(), a.player.id);
     const rc = await double([a, c], [b, d]);
     const ra = rc.find((x) => x.player_id === a.player.id);
-    expect(ra.games[0].k).toBeCloseTo(kSmooth(0), 6); // a brand-new doubles player, whatever the singles record
-    expect(ra.games[0].k).toBeGreaterThan(kSmooth(50));
-    // opponent certainty also reads doubles games (all four have 0) and not singles games
-    expect(ra.games[0].opp_certainty).toBeCloseTo(0.8, 6);
+    expect(ra.rd_before).toBeCloseTo(200, 9); // a brand-new doubles player, whatever the singles record
+    expect(ra.vol_before).toBe(0.06);
     const rs = await single(a, b);
-    expect(rs.find((x) => x.player_id === a.player.id).games[0].k).toBeCloseTo(kSmooth(50) * 1, 5);
+    const sa = rs.find((x) => x.player_id === a.player.id);
+    expect(sa.rd_before).toBeLessThan(55);
+    expect(sa.vol_before).toBe(0.07);
+    const pa = (await get('/api/entities/Player/' + a.player.id)).body;
+    expect(pa.doubles_rd).toBeCloseTo(ra.rd_after, 9);
+    expect(pa.singles_rd).toBeCloseTo(sa.rd_after, 9);
   });
 
-  it('rust reads the format\'s own last verified match', async () => {
+  it('time away reads the format\'s own RD date', async () => {
     const [a, b, c, d] = await four();
     await single(a, b);
+    await double([a, c], [b, d]);
     const old = new Date(Date.now() - 100 * 86400000).toISOString();
-    await sql('UPDATE players SET singles_last_verified_at = ? WHERE id = ?', old, a.player.id);
+    await sql('UPDATE players SET singles_rd_at = ?, singles_last_verified_at = ? WHERE id = ?', old, old, a.player.id);
+    const pa = (await get('/api/entities/Player/' + a.player.id)).body;
     const rc = await double([a, c], [b, d]);
-    expect(rc.find((x) => x.player_id === a.player.id).rust).toBe(1); // no doubles history: not rusty
-    await single(b, a); // consume singles
+    expect(rc.find((x) => x.player_id === a.player.id).rd_before).toBeLessThan(pa.doubles_rd + 1); // doubles: not away
+    const rs = await single(b, a);
+    expect(rs.find((x) => x.player_id === a.player.id).rd_before).toBeGreaterThan(pa.singles_rd + 30); // singles: 100 days away
   });
 
   it('doubles rematch count ignores singles meetings (and vice versa)', async () => {

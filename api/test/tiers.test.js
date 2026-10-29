@@ -33,8 +33,9 @@ describe('tiers', () => {
   });
   const run = async (wRating, lRating, wWins, lLosses) => {
     const w = await mkPlayer('Aa1'), l = await mkPlayer('Bb2');
-    await sql('UPDATE players SET singles_rating = ?, singles_wins = ? WHERE id = ?', wRating, wWins, w.player.id);
-    await sql('UPDATE players SET singles_rating = ?, singles_losses = ? WHERE id = ?', lRating, lLosses, l.player.id);
+    // settled regulars (RD 60), so one match moves them a normal amount
+    await sql('UPDATE players SET singles_rating = ?, singles_wins = ?, singles_rd = 60 WHERE id = ?', wRating, wWins, w.player.id);
+    await sql('UPDATE players SET singles_rating = ?, singles_losses = ?, singles_rd = 60 WHERE id = ?', lRating, lLosses, l.player.id);
     const s = await call(w, 'submitMatch', { format: 'singles', target: 11, side_a: [{ player_id: w.player.id }], side_b: [{ player_id: l.player.id }], games });
     const rc = (await call(l, 'respondMatch', { match_id: s.body.match.id, decision: 'accept' })).body.match.rating_changes;
     return { w: rc.find((x) => x.player_id === w.player.id), l: rc.find((x) => x.player_id === l.player.id) };

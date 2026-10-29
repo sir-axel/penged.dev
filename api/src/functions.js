@@ -13,7 +13,7 @@ import { tierChange, PROVISIONAL } from './tiers.js';
 import { decodeInternal, pub } from './schema.js';
 import {
   START_RATING, REPEAT_WINDOW_DAYS, rateMatch, xpForMatch, levelForXp, validateGames, summarizeGames,
-  RANK_SQL, DOUBLES_RANK_SQL, rankPlayers, ACTIVE_DAYS, meetingWeight, NOVELTY_DAYS, stakes, RATING_FLOOR, challengePenalty, WALKOVER_XP, COOLDOWN_DAYS, WAIVER_DAYS, FATIGUE_DAYS,
+  RANK_SQL, DOUBLES_RANK_SQL, rankPlayers, ACTIVE_DAYS, meetingWeight, NOVELTY_DAYS, stakes, currentRd, RATING_FLOOR, challengePenalty, WALKOVER_XP, COOLDOWN_DAYS, WAIVER_DAYS, FATIGUE_DAYS,
 } from './rating.js';
 
 const MATCH_EXPIRY_MS = 7 * 86400000;
@@ -112,9 +112,12 @@ async function penaltyFacts(env, c) {
        AND EXISTS (SELECT 1 FROM json_each(all_player_ids) WHERE value = ?)`, daysAgoIso(FATIGUE_DAYS), c.defender_player_id)).n;
   return { meetings, recentPairMatch, defRecentMatches };
 }
+/** A player's current singles/doubles RD (stored RD grown by the days since it was last updated). */
+const rdOf = (p, fmt, nowMs = Date.now()) =>
+  currentRd({ rd: p[`${fmt}_rd`], vol: p[`${fmt}_vol`], rdAt: p[`${fmt}_rd_at`], games: p[`${fmt}_game_wins`] + p[`${fmt}_game_losses`] }, nowMs);
 const penaltyOf = (kind, def, chal, rankGap, facts) =>
   challengePenalty({
-    kind, rankGap, defRating: def.singles_rating, defMatches: def.singles_wins + def.singles_losses, chalRating: chal.singles_rating, ...facts,
+    kind, rankGap, defRating: def.singles_rating, defRd: rdOf(def, 'singles'), chalRating: chal.singles_rating, ...facts,
   });
 
 /**
@@ -349,7 +352,8 @@ async function ratingParts(env, { fmt, sides, paddleOf, excludeId = '', now }) {
       return opps.some((o) => theirs.includes(o));
     });
   };
-  const rc = `${fmt}_rating`, wc = `${fmt}_wins`, lc = `${fmt}_losses`, gwc = `${fmt}_game_wins`, glc = `${fmt}_game_losses`, vc = `${fmt}_last_verified_at`;
+  const rc = `${fmt}_rating`, wc = `${fmt}_wins`, lc = `${fmt}_losses`, gwc = `${fmt}_game_wins`, glc = `${fmt}_game_losses`;
+  const rdc = `${fmt}_rd`, volc = `${fmt}_vol`, rdat = `${fmt}_rd_at`;
   const parts = players.map((p) => {
     const met = meetings(p.id);
     return {
@@ -357,7 +361,9 @@ async function ratingParts(env, { fmt, sides, paddleOf, excludeId = '', now }) {
       earlierMeetings: met.reduce((t, x) => t + x.w, 0),
       // novelty / New rival: no meeting with these opponents in NOVELTY_DAYS (or ever)
       novel: !met.some((x) => x.days < NOVELTY_DAYS),
-      daysSinceLast: p[vc] ? Math.max(0, (Date.parse(now) - Date.parse(p[vc])) / 86400000) : null,
+      // Glicko-2 state: RD grows with the days since it was last updated (null = first ever match in this format)
+      rd: p[rdc], vol: p[volc],
+      daysSinceLast: p[rdat] ? Math.max(0, (Date.parse(now) - Date.parse(p[rdat])) / 86400000) : null,
     };
   });
   return { players, parts, sideOf };
@@ -381,6 +387,7 @@ async function verifyPlan(env, m, now) {
   if (fmt === 'singles') ch = await acceptedChallenge(env, sides.a[0], sides.b[0], m.created_date, now);
 
   const rc = `${fmt}_rating`, wc = `${fmt}_wins`, lc = `${fmt}_losses`, gwc = `${fmt}_game_wins`, glc = `${fmt}_game_losses`, vc = `${fmt}_last_verified_at`, sc = `${fmt}_win_streak`, bc = `${fmt}_best_streak`;
+  const rdc = `${fmt}_rd`, volc = `${fmt}_vol`, rdat = `${fmt}_rd_at`;
   const results = rateMatch(parts, m.winner_side, m.games, { target: m.target, challenge: !!ch });
   const sideAvg = (s) => sides[s].reduce((t, id) => t + players.find((x) => x.id === id)[rc], 0) / sides[s].length;
   const today = now.slice(0, 10);
@@ -410,15 +417,16 @@ async function verifyPlan(env, m, now) {
     stmts.push(guardRow(env, 'players', p.id, p.version));
     stmts.push(stmt(env,
       `UPDATE players SET ${rc} = ?, ${won ? wc : lc} = ${won ? wc : lc} + 1, ${gwc} = ${gwc} + ?, ${glc} = ${glc} + ?, xp = ?, level = ?, last_active_at = ?,
-         ${sc} = ?, ${bc} = ?, last_match_day = ?, ${vc} = ?, updated_date = ?, version = version + 1 WHERE id = ?`,
-      res.after, gamesWon, m.games.length - gamesWon, xp, levelForXp(xp), now, streak, best, today, now, now, p.id));
+         ${sc} = ?, ${bc} = ?, last_match_day = ?, ${vc} = ?, ${rdc} = ?, ${volc} = ?, ${rdat} = ?, updated_date = ?, version = version + 1 WHERE id = ?`,
+      res.after, gamesWon, m.games.length - gamesWon, xp, levelForXp(xp), now, streak, best, today, now, res.rd_after, res.vol_after, now, now, p.id));
     changes.push({
       player_id: p.id, name: nameOf(p), before: res.before, after: res.after, delta: res.delta,
-      dominance: res.dominance, rust: res.rust, repeat: res.repeat, evidence: res.evidence, challenge: res.challenge, novelty: res.novelty,
+      dominance: res.dominance, repeat: res.repeat, evidence: res.evidence, challenge: res.challenge, novelty: res.novelty,
+      rd_before: res.rd_before, rd_after: res.rd_after, vol_before: res.vol_before, vol_after: res.vol_after,
       games: res.games.map((g) => ({
         game: g.game, score: g.score, won: g.won, before: g.before, after: g.after, delta: g.delta,
         expected: g.expected, dominance: g.dominance, mov: g.mov, ac: g.ac, paddle_edge: g.paddle_edge, k: g.k,
-        rust: g.rust, opp_certainty: g.opp_certainty, evidence: g.evidence, repeat: g.repeat, teammate: g.teammate,
+        rd_before: g.rd_before, rd_after: g.rd_after, vol: g.vol, evidence: g.evidence, repeat: g.repeat, teammate: g.teammate,
         challenge: g.challenge, novelty: g.novelty,
       })),
       xp_gained: xpGain, xp_parts: xpRes.parts, win_streak: streak,
@@ -486,7 +494,7 @@ fns.matchStakes = async ({ env, user }, body) => {
       { target, challenge }).map((r) => [r.id, r]))
     : null;
   return {
-    format: fmt, target, challenge, assumed: 'a 2-1 match with typical scores',
+    format: fmt, target, challenge, assumed: 'a narrow 2-1 (11-9, 9-11, 11-9) up to a dominant 2-0 (11-4, 11-5)',
     players: out.map((x) => {
       const r = actual?.[x.id];
       return {

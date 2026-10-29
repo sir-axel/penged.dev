@@ -75,12 +75,12 @@ describe('match flow', () => {
     expect(acc.status).toBe(200);
     expect(acc.body.match.status).toBe('verified');
     const rc = acc.body.match.rating_changes;
-    expect(rc.find((x) => x.player_id === b.player.id)).toMatchObject({ before: 1400, after: 1429, delta: 29, xp_gained: 25 + 25 + 10 + 10 + 10 }); // +10 new rival
-    expect(rc.find((x) => x.player_id === a.player.id)).toMatchObject({ delta: -29, xp_gained: 25 + 10 + 10 });
+    expect(rc.find((x) => x.player_id === b.player.id)).toMatchObject({ before: 1400, after: 1480, delta: 80, xp_gained: 25 + 25 + 10 + 10 + 10 }); // +10 new rival
+    expect(rc.find((x) => x.player_id === a.player.id)).toMatchObject({ delta: -80, xp_gained: 25 + 10 + 10 });
     const players = (await get('/api/entities/Player?sort=singles_rank')).body.items;
     expect(players.map((p) => [p.username, p.singles_rank])).toEqual([['Bobby', 1], ['Carol', 2], ['Alice', 3]]);
-    expect(players[0]).toMatchObject({ singles_wins: 1, xp: 80, level: 2, singles_rating: 1429, singles_win_streak: 1, singles_best_streak: 1 });
-    expect(players[2]).toMatchObject({ singles_losses: 1, xp: 45, singles_rating: 1371, singles_win_streak: 0 });
+    expect(players[0]).toMatchObject({ singles_wins: 1, xp: 80, level: 2, singles_rating: 1480, singles_win_streak: 1, singles_best_streak: 1 });
+    expect(players[2]).toMatchObject({ singles_losses: 1, xp: 45, singles_rating: 1320, singles_win_streak: 0 });
     // second response after verification is rejected
     expect((await call(a, 'respondMatch', { match_id: m.id, decision: 'accept' })).status).toBe(400);
   });
@@ -95,7 +95,7 @@ describe('match flow', () => {
     const first = await play();
     const second = await play();
     const d = (rc, id) => rc.find((x) => x.player_id === id).delta;
-    expect(d(first, a.player.id)).toBe(29); // first meeting: x1.1 novelty
+    expect(d(first, a.player.id)).toBe(80); // two brand-new players (RD 200): the match cap
     expect(first.find((x) => x.player_id === a.player.id).novelty).toBeCloseTo(1.1, 9);
     expect(second.find((x) => x.player_id === a.player.id).novelty).toBe(1);
     expect(d(second, a.player.id)).toBeLessThan(d(first, a.player.id));
@@ -130,7 +130,7 @@ describe('match flow', () => {
     expect(last.body.match.status).toBe('verified');
     const ps = (await get('/api/entities/Player?sort=singles_rank')).body.items;
     expect(ps.map((p) => p.username)).toEqual(['Aa1', 'Bb2', 'Cc3', 'Dd4']);
-    expect(ps.find((p) => p.username === 'Dd4')).toMatchObject({ doubles_wins: 1, doubles_game_wins: 1, doubles_game_losses: 0, singles_game_wins: 0, doubles_rating: 1415, singles_rating: 1400 });
+    expect(ps.find((p) => p.username === 'Dd4')).toMatchObject({ doubles_wins: 1, doubles_game_wins: 1, doubles_game_losses: 0, singles_game_wins: 0, doubles_rating: 1440, singles_rating: 1400 });
   });
 });
 
@@ -317,8 +317,8 @@ describe('rating-derived ranks', () => {
 
   it('a win moves you past everyone you now out-rate, not just the opponent', async () => {
     const a = await mkPlayer('Aa1'); const b = await mkPlayer('Bb2'); const c = await mkPlayer('Cc3');
-    await win(c, a); // c 1429, a 1371, b 1400
-    expect(await ranks()).toEqual([['Cc3', 1, 1429], ['Bb2', 2, 1400], ['Aa1', 3, 1371]]);
+    await win(c, a); // c 1480, a 1320, b 1400
+    expect(await ranks()).toEqual([['Cc3', 1, 1480], ['Bb2', 2, 1400], ['Aa1', 3, 1320]]);
     void b;
   });
 
@@ -335,12 +335,12 @@ describe('rating-derived ranks', () => {
 
   it('new players join at 1400 in the right position; deleting leaves no gaps', async () => {
     const a = await mkPlayer('Aa1'); const b = await mkPlayer('Bb2');
-    await win(a, b); // a 1429, b 1371
+    await win(a, b); // a 1480, b 1320
     const c = await mkPlayer('Cc3'); // 1400 -> between them
-    expect(await ranks()).toEqual([['Aa1', 1, 1429], ['Cc3', 2, 1400], ['Bb2', 3, 1371]]);
+    expect(await ranks()).toEqual([['Aa1', 1, 1480], ['Cc3', 2, 1400], ['Bb2', 3, 1320]]);
     expect(c.player.singles_rank).toBe(2); // derived in the same batch as the insert
     await call(c, 'deleteAccount', { confirm: 'DELETE' });
-    expect(await ranks()).toEqual([['Aa1', 1, 1429], ['Bb2', 2, 1371]]);
+    expect(await ranks()).toEqual([['Aa1', 1, 1480], ['Bb2', 2, 1320]]);
   });
 
   it('ties are deterministic: more games played first, then earlier joiner', async () => {
@@ -787,31 +787,42 @@ describe('rating factors wired through verification', () => {
   };
   const player = async (p) => (await get('/api/entities/Player/' + p.player.id)).body;
 
-  it('stores every factor, paddle edge, and stamps last verified time', async () => {
+  it('stores every factor, paddle edge, RD/sigma per game, and stamps last verified time + RD time', async () => {
     const a = await mkPlayer('Aa1'); const b = await mkPlayer('Bb2');
-    expect((await player(a)).singles_last_verified_at).toBeNull();
+    const pa0 = await player(a);
+    expect(pa0.singles_last_verified_at).toBeNull();
+    expect(pa0).toMatchObject({ singles_rd: 200, singles_vol: 0.06, singles_rd_at: null, doubles_rd: 200 });
     const m = await play(a, b, { side_a: [{ player_id: a.player.id, paddle: 'modded' }] });
     const w = m.rating_changes.find((x) => x.player_id === a.player.id);
-    expect(w).toMatchObject({ rust: 1, challenge: 1, evidence: 1 });
-    expect(w.games[0]).toMatchObject({ paddle_edge: -50, rust: 1, challenge: 1, teammate: 1, opp_certainty: 0.8, evidence: 1 });
-    expect(w.games[0].k).toBe(48);
-    expect(w.games[1].k).toBeLessThan(48); // K eases game by game
-    expect(typeof w.repeat).toBe('number');
-    expect((await player(a)).singles_last_verified_at).toBeTruthy();
-    // second match: K shrinks, certainty grows
+    expect(w).toMatchObject({ challenge: 1, evidence: 1 });
+    expect(w.rd_before).toBeCloseTo(200, 9);
+    expect(w.rd_after).toBeLessThan(w.rd_before);
+    expect(w.games[0]).toMatchObject({ paddle_edge: -50, challenge: 1, teammate: 1, evidence: 1 });
+    expect(w.games[1].rd_before).toBe(w.games[0].rd_after);
+    expect(w.games[1].k).toBeLessThan(w.games[0].k); // RD shrinks game by game, so does the step
+    const pa = await player(a);
+    expect(pa.singles_last_verified_at).toBeTruthy();
+    expect(pa.singles_rd_at).toBe(pa.singles_last_verified_at);
+    expect(pa.singles_rd).toBeCloseTo(w.rd_after, 9);
+    expect(pa.singles_vol).toBeCloseTo(w.vol_after, 12);
+    expect(pa.doubles_rd).toBe(200); // the other format is untouched
     const m2 = await play(a, b);
     const w2 = m2.rating_changes.find((x) => x.player_id === a.player.id);
     expect(w2.games[0].k).toBeLessThan(w.games[1].k);
-    expect(w2.games[0].opp_certainty).toBeGreaterThan(0.8);
+    expect(w2.rd_before).toBeGreaterThanOrEqual(w.rd_after); // time since (tiny) only grows it
   });
 
-  it('rust: a long-absent player gets a larger K', async () => {
+  it('time away: RD grows with days since the last rating update, so a returning player moves more', async () => {
     const a = await mkPlayer('Aa1'); const b = await mkPlayer('Bb2');
-    await play(a, b);
-    await sql('UPDATE players SET singles_last_verified_at = ? WHERE id = ?', new Date(Date.now() - 80 * 86400e3).toISOString(), a.player.id);
-    const m = await play(a, b);
-    expect(m.rating_changes.find((x) => x.player_id === a.player.id).rust).toBeGreaterThan(1.4);
-    expect(m.rating_changes.find((x) => x.player_id === b.player.id).rust).toBe(1);
+    await play(a, b); await play(a, b); await play(a, b);
+    const before = await player(a);
+    await sql('UPDATE players SET singles_rd_at = ? WHERE id = ?', new Date(Date.now() - 80 * 86400e3).toISOString(), a.player.id);
+    const m = await play(b, a);
+    const ea = m.rating_changes.find((x) => x.player_id === a.player.id);
+    const eb = m.rating_changes.find((x) => x.player_id === b.player.id);
+    expect(ea.rd_before).toBeGreaterThan(before.singles_rd + 20);
+    expect(eb.rd_before).toBeLessThan(ea.rd_before);
+    expect(Math.abs(ea.delta)).toBeGreaterThan(Math.abs(eb.delta));
   });
 
   it('players idle more than 30 days drop off the ranked ladder and re-rank when they play', async () => {
