@@ -19,7 +19,7 @@ export function MatchRow({ match, pov }) {
         className={`block py-3 pr-3 transition-colors hover:bg-secondary/60 ${povSide ? "pl-4" : "pl-3"} ${povSide ? (povWon ? "bg-success/[0.06]" : "bg-destructive/[0.05]") : ""}`}
       >
         <div className="mb-2 flex items-center justify-between gap-2">
-          <span className="flex min-w-0 items-center gap-2 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+          <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
             {povSide && (
               <span
                 className={`rounded-sm px-1.5 py-0.5 font-heading text-[11px] font-bold tracking-normal ${povWon ? "bg-success text-white" : "bg-destructive text-white"}`}
@@ -28,7 +28,7 @@ export function MatchRow({ match, pov }) {
                 {povWon ? "W" : "L"}
               </span>
             )}
-            <span className="truncate">
+            <span>
               {match.format === "doubles" ? "Doubles" : "Singles"}
               {" · to "}
               {match.target}
