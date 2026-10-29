@@ -303,3 +303,24 @@ describe('guilds', () => {
     expect((await call(lead, 'updateGuild', { guild_id: g.id, avatar_url: '' })).body.guild.avatar_url).toBeNull();
   });
 });
+
+describe('guild duo', () => {
+  it('doubles partners in the same guild each get the guild duo XP (ranked and unranked); others do not', async () => {
+    const [a, b, c, d] = [await mkPlayer('Aa1'), await mkPlayer('Bb2'), await mkPlayer('Cc3'), await mkPlayer('Dd4')];
+    const g = await mkGuild(a);
+    expect((await join(b, g.id)).status).toBe(200);
+    const go = async (ranked) => {
+      const s = await call(a, 'submitMatch', { format: 'doubles', target: 11, ranked, side_a: [{ player_id: a.player.id }, { player_id: b.player.id }], side_b: [{ player_id: c.player.id }, { player_id: d.player.id }], games });
+      let m;
+      for (const u of [b, c, d]) m = (await call(u, 'respondMatch', { match_id: s.body.match.id, decision: 'accept' })).body.match;
+      return m;
+    };
+    for (const ranked of [true, false]) {
+      const m = await go(ranked);
+      const keys = (p) => m.rating_changes.find((x) => x.player_id === p.player.id).xp_parts.map((x) => x.key);
+      expect(keys(a)).toContain('guild_duo');
+      expect(keys(b)).toContain('guild_duo');
+      expect(keys(c)).not.toContain('guild_duo');
+    }
+  });
+});

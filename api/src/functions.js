@@ -442,7 +442,7 @@ function partsFrom({ fmt, sides, paddleOf, now, players, prevRows }) {
       // novelty / New rival: no meeting with these opponents in NOVELTY_DAYS (or ever)
       novel: !met.some((x) => x.days < NOVELTY_DAYS),
       // Glicko-2 state: RD grows with the days since it was last updated (null = first ever match in this format)
-      rd: p[rdc], vol: p[volc],
+      rd: p[rdc], vol: p[volc], rank: p[`${fmt}_rank`] ?? null,
       daysSinceLast: p[rdat] ? Math.max(0, (Date.parse(now) - Date.parse(p[rdat])) / 86400000) : null,
     };
   });
@@ -473,7 +473,7 @@ const challengeFor = (env, fmt, sides, before, now) =>
  * Unranked match: XP only. Ratings, W/L records, streaks, ranks, activity and challenges stay untouched, and it never
  * counts as a meeting for rematch / new-rival / dodge math, so neither the streak nor the new-rival XP applies.
  */
-function unrankedPlan(env, m, now, players, parts, sideOf) {
+function unrankedPlan(env, m, now, players, parts, sideOf, duo = {}) {
   const rc = `${m.format}_rating`;
   const sideAvg = (s) => {
     const ps = players.filter((p) => sideOf(p.id) === s);
@@ -491,7 +491,7 @@ function unrankedPlan(env, m, now, players, parts, sideOf) {
     const xpRes = xpForMatch({
       won, gamesWon, ratingGap: sideAvg(side === 'a' ? 'b' : 'a') - sideAvg(side),
       skunks: m.games.filter((g) => mine(g) > theirs(g) && theirs(g) === 0).length,
-      lostFirstGame: mine(m.games[0]) < theirs(m.games[0]), firstOfDay: p.last_match_day !== today,
+      lostFirstGame: mine(m.games[0]) < theirs(m.games[0]), firstOfDay: p.last_match_day !== today, guildDuo: !!duo[p.id],
     });
     const xp = p.xp + xpRes.total;
     stmts.push(guardRow(env, 'players', p.id, p.version));
@@ -597,13 +597,28 @@ function softenStakes(x, f) {
   x.loss_factor = f;
 }
 
+/** Doubles: { player_id: true } for each player whose partner is in the same guild (guild duo XP). */
+async function guildDuos(env, fmt, players, sideOf) {
+  if (fmt !== 'doubles') return {};
+  const ids = players.map((p) => p.id);
+  const rows = await all(env, `SELECT player_id, guild_id FROM guild_members WHERE player_id IN (${placeholders(ids.length)})`, ...ids);
+  const g = Object.fromEntries(rows.map((r) => [r.player_id, r.guild_id]));
+  const out = {};
+  for (const p of players) {
+    const mate = players.find((q) => q.id !== p.id && sideOf(q.id) === sideOf(p.id));
+    if (mate && g[p.id] && g[p.id] === g[mate.id]) out[p.id] = true;
+  }
+  return out;
+}
+
 /** Builds the guarded statements that verify a match (ratings, xp, records, ladder). */
 async function verifyPlan(env, m, now) {
   const fmt = m.format;
   const sides = { a: m.side_a.map((e) => e.player_id), b: m.side_b.map((e) => e.player_id) };
   const paddleOf = (id) => [...m.side_a, ...m.side_b].find((e) => e.player_id === id)?.paddle;
   const { players, parts, sideOf } = await ratingParts(env, { fmt, sides, paddleOf, excludeId: m.id, now });
-  if (m.ranked === false) return unrankedPlan(env, m, now, players, parts, sideOf);
+  const duo = await guildDuos(env, m.format, players, sideOf);
+  if (m.ranked === false) return unrankedPlan(env, m, now, players, parts, sideOf, duo);
 
   // An accepted challenge between these players (pairs), accepted before this result was submitted, is played by this match.
   const ch = await challengeFor(env, fmt, sides, m.created_date, now);
@@ -635,6 +650,7 @@ async function verifyPlan(env, m, now) {
       lostFirstGame: mine(m.games[0]) < theirs(m.games[0]),
       firstOfDay: p.last_match_day !== today,
       newRival: parts.find((x) => x.id === p.id).novel,
+      guildDuo: !!duo[p.id],
     });
     // Bounties: collectors gain the rating the bountied player loses, plus bounty XP.
     const got = claims.filter((c) => c.to === p.id);

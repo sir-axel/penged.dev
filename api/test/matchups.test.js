@@ -241,8 +241,8 @@ describe('max win > max loss', () => {
     for (const v of [vt, vb]) expect(v.max_win).toBeGreaterThan(v.max_loss);
     const rt = await rowOf(top);
     expect(rt.opponent_player_id).toBe(bot.player.id);
-    // #1 vs the bottom: a 2-0 win could even cost #1 rating (close-loss credit), so the win is topped up to +5
-    expect(rt.quote_win).toBeLessThanOrEqual(1);
+    // #1 vs the bottom (only 1 rank apart in this two-player pool): a 2-0 win is tiny, so the matched win is topped up to +5
+    expect(rt.quote_win).toBeLessThan(5);
     expect(rt.quote_loss).toBeGreaterThan(0);
     expect(vt).toMatchObject({ max_win: 5, max_loss: 4 });
     expect(vt.decline_cost).toBeGreaterThan(0);

@@ -1,3 +1,4 @@
+import { tierIndex } from './tiers.js';
 // Pure rules module: ratings, XP, game validation, rating-derived ranking. No DB access.
 //
 // Rating = Glicko-2 per player per format (singles and doubles never share anything), applied GAME BY GAME in play order,
@@ -65,6 +66,11 @@ export const TEAMMATE_MAX = 1.25;
 // CLOSE_CREDIT_MAX, instead of a loss, and the winners pay the same: letting a much weaker side get that close is a
 // bad result even in a win. Get beaten clearly and it is an ordinary loss: the underdog still has to prove it.
 export const CLOSE_GAP_MIN = 100;
+// ...and only across a real class gap: the sides' tiers (by rating, team mean in doubles) at least CLOSE_TIER_GAP apart,
+// e.g. Platinum vs Bronze. Closer than that, the normal rules apply (and a win always gains, see MATCH_WIN_MIN).
+export const CLOSE_TIER_GAP = 3;
+// Win a match and you gain at least MATCH_WIN_MIN, unless the close-loss credit above makes you pay for letting them close.
+export const MATCH_WIN_MIN = 3;
 export const CLOSE_CREDIT_PER = 150;
 export const CLOSE_CREDIT_MAX = 15;
 // A verified match (singles or doubles) that completes an accepted challenge is worth more.
@@ -93,6 +99,7 @@ export const XP_COMEBACK = 15;
 export const XP_FIRST_OF_DAY = 10;
 export const XP_SHOT = 15; // "took a shot": lost to a side rated XP_SHOT_GAP+ above you
 export const XP_SHOT_GAP = 100;
+export const XP_GUILD_DUO = 20; // doubles: you and your partner are in the same guild
 export const XP_NEW_RIVAL = 10; // first verified match vs an opponent in this format, or the first in NOVELTY_DAYS+
 
 /** Plain Elo expectation (closeness of a challenge pair). */
@@ -354,7 +361,8 @@ export function rateMatch(participants, winnerSide, games = [], ctx = {}) {
   // Close-loss credit (from pre-match ratings): a narrow loss to a much stronger side becomes a small gain.
   const loserSide = winnerSide === 'a' ? 'b' : 'a';
   const effOf = (sd) => average(side(sd).map((p) => p.rating)) + edge[sd];
-  const close = games.length && ctx.closeCredit !== false
+  const farApart = tierIndex(average(side(winnerSide).map((p) => p.rating))) - tierIndex(average(side(loserSide).map((p) => p.rating))) >= CLOSE_TIER_GAP;
+  const close = games.length && ctx.closeCredit !== false && farApart
     ? closeLossCredit({ loserEff: effOf(loserSide), winnerEff: effOf(winnerSide), games, loserSide, target: ctx.target || 11 })
     : null;
   return participants.map((p) => {
@@ -369,7 +377,14 @@ export function rateMatch(participants, winnerSide, games = [], ctx = {}) {
       credit = { ...close, credit: -c }; // the favourite let them get too close: pays what the underdog earned
       s.r = Math.max(RATING_FLOOR, p.rating - c);
     }
+    // A win always gains a little, unless the close-loss credit just charged this winner.
+    let winFloor = false;
+    if (games.length && p.side === winnerSide && !(credit && credit.credit < 0) && s.r - p.rating < MATCH_WIN_MIN) {
+      s.r = p.rating + MATCH_WIN_MIN;
+      winFloor = true;
+    }
     return {
+      ...(winFloor ? { win_floor: MATCH_WIN_MIN } : null),
       ...(credit ? { close_loss: { credit: credit.credit, gap: credit.gap, share: +credit.share.toFixed(3), expected: +credit.expected.toFixed(3) } } : null),
       id: p.id, before: p.rating, after: s.r, delta: s.r - p.rating, rd_before: s.rdStart, rd_after: s.phi * Q,
       vol_before: s.volStart, vol_after: s.vol, dominance: md, repeat: s.games[0]?.repeat ?? repeatFactor(p.earlierMeetings || 0),
@@ -425,7 +440,7 @@ export function stakes({ format = 'singles', target = 11, sides, paddles = {}, c
  *   skunks (games your side won to 0), lostFirstGame, firstOfDay, newRival (first match vs these opponents, or first in 30+ days) }
  * Returns { total, parts: [{ key, label, xp }] }.
  */
-export function xpForMatch({ won, gamesWon = 0, ratingGap = 0, streak = 0, skunks = 0, lostFirstGame = false, firstOfDay = false, newRival = false }) {
+export function xpForMatch({ won, gamesWon = 0, ratingGap = 0, streak = 0, skunks = 0, lostFirstGame = false, firstOfDay = false, newRival = false, guildDuo = false }) {
   const parts = [{ key: 'played', label: 'played', xp: XP_PLAYED }];
   if (won) parts.push({ key: 'win', label: 'win', xp: XP_WIN });
   const gw = XP_PER_GAME * Math.min(XP_MAX_GAMES, Math.max(0, gamesWon));
@@ -439,6 +454,7 @@ export function xpForMatch({ won, gamesWon = 0, ratingGap = 0, streak = 0, skunk
   if (won && lostFirstGame) parts.push({ key: 'comeback', label: 'comeback', xp: XP_COMEBACK });
   if (firstOfDay) parts.push({ key: 'first_of_day', label: 'first match of the day', xp: XP_FIRST_OF_DAY });
   if (newRival) parts.push({ key: 'new_rival', label: 'new rival', xp: XP_NEW_RIVAL });
+  if (guildDuo) parts.push({ key: 'guild_duo', label: 'guild duo', xp: XP_GUILD_DUO });
   return { total: parts.reduce((s, x) => s + x.xp, 0), parts };
 }
 

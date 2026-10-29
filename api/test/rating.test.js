@@ -252,3 +252,25 @@ describe('ducking costs more the higher you stand', () => {
     expect(pen(1800)).toBeGreaterThanOrEqual(Math.round(2 * pen(1400)) - 1);
   });
 });
+
+describe('close-loss credit needs a class gap (Platinum vs Bronze); a win always gains', () => {
+  const P = (id, side, rating) => ({ id, side, rating, rd: 60, vol: 0.06, daysSinceLast: 3, gamesPlayed: 60, earlierMeetings: 0, novel: false });
+  const G = (arr) => arr.map(([a, b]) => ({ a, b }));
+  const run = (games, top, low) => Object.fromEntries(R.rateMatch([P('top', 'a', top), P('low', 'b', low)], 'a', G(games), {}).map((x) => [x.id, x]));
+  it('Platinum (1559) vs Silver (1397), the Franklin vs jucey 11-9: no credit, the winner gains', () => {
+    const r = run([[11, 9]], 1559, 1397);
+    expect(r.top.close_loss).toBeUndefined();
+    expect(r.top.delta).toBeGreaterThan(0);
+    expect(r.low.delta).toBeLessThan(0);
+  });
+  it('Platinum vs Bronze: the credit applies, a close win costs the favourite', () => {
+    const r = run([[11, 9], [11, 9]], 1580, 1300);
+    expect(r.low.close_loss).toBeDefined();
+    expect(r.top.delta).toBeLessThan(0);
+  });
+  it('a 3-2 win with two close losses still gains at least +3', () => {
+    const r = run([[10, 12], [11, 5], [9, 11], [11, 6], [11, 5]], 1557, 1399);
+    expect(r.top.delta).toBe(R.MATCH_WIN_MIN);
+    expect(r.top.win_floor).toBe(R.MATCH_WIN_MIN);
+  });
+});

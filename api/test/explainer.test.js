@@ -59,7 +59,7 @@ describe('explainer quotes the shipped constants', () => {
     const share = (gap) => Math.round(100 * R.expectedPointShare(R.expectedScore(1400 - gap, 1400)));
     has(`about ${share(100)}% against someone 100 above, ${share(300)}% at 300, ${share(450)}% at 450`);
     has(`${R.CLOSE_CREDIT_PER} rating for every whole share of points above that mark, at most +${R.CLOSE_CREDIT_MAX}`);
-    has(`rated ${R.CLOSE_GAP_MIN}+ above you but keep it close`); has(`+${R.XP_SHOT} xp for losing to someone rated ${R.XP_SHOT_GAP}+ above you`);
+    has(`at least ${R.CLOSE_TIER_GAP} tiers above you`); has(`at least ${R.CLOSE_GAP_MIN} rating apart`); has(`every match you win gains you at least +${R.MATCH_WIN_MIN}`); has(`+${R.XP_SHOT} xp for losing to someone rated ${R.XP_SHOT_GAP}+ above you`);
     const B = await import('../src/bounty.js');
     has(`#1 ${B.BOUNTY_PODIUM_RATING[1]} rating and ${B.BOUNTY_PODIUM_XP[1]} xp, #2 ${B.BOUNTY_PODIUM_RATING[2]} and ${B.BOUNTY_PODIUM_XP[2]}, #3 ${B.BOUNTY_PODIUM_RATING[3]} and ${B.BOUNTY_PODIUM_XP[3]}`);
     has(`plus ${B.BOUNTY_GAP_RATING} rating and ${B.BOUNTY_GAP_XP} xp for every extra place between you, up to +${B.BOUNTY_GAP_RATING_MAX} and +${B.BOUNTY_GAP_XP_MAX}`);

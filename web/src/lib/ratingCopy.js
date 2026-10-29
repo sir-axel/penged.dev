@@ -14,7 +14,7 @@ export const RATING_POINTS = [
   "Every game you play firms your confidence up. Time away loosens it: a settled ±50 is back to ±76 after 30 days and ±95 after 60, so returning players move fast again until they settle. Your profile shows \"settling ±N\" while it is ±90 or wider.",
   "Your opponent's confidence matters too: a result against someone still settling tells the ladder less about you, so it moves you a little less (and a brand-new player's win barely dents a regular).",
   "Margins matter. Win a game 11-2 and you gain far more than winning it 11-9 — up to double (margin ×0.75 to ×2.0).",
-  "Playing up always means growth. Lose to someone rated 100+ above you but keep it close, taking more of the points than the gap says you should (about 46% against someone 100 above, 39% at 300, 35% at 450), and the loss turns into a gain: 150 rating for every whole share of points above that mark, at most +15. The winner pays the same, so a top player who lets you get close drops even though they won. Get beaten clearly and it is an ordinary loss: you still have to prove it. Rematches earn less of it, like everything else.",
+  "Playing up always means growth. Lose to someone at least 3 tiers above you (Bronze against Platinum, say; and at least 100 rating apart) but keep it close, taking more of the points than the gap says you should (about 46% against someone 100 above, 39% at 300, 35% at 450), and the loss turns into a gain: 150 rating for every whole share of points above that mark, at most +15. The winner pays the same, so a top player who lets you get close drops even though they won. That is the only way a win can cost rating: otherwise every match you win gains you at least +3. Get beaten clearly and it is an ordinary loss: you still have to prove it. Rematches earn less of it, like everything else.",
   "Upsets pay. Beat someone rated above you and the win is boosted (up to ×1.6); crushing someone far below you is damped (down to ×0.6).",
   "You lose points the same way you win them. Get crushed in a game and you lose big; lose narrowly to someone better and it barely stings. Between two equally settled players in singles, what the winner gains the loser drops.",
   "One game moves you at most 40 points, and one match (all its games together) at most 80.",
@@ -53,6 +53,7 @@ export const WORKED_EXAMPLE =
 
 export const XP_POINTS = [
   "+25 xp for playing, +25 for winning",
+  "Guild duo: +20 xp each when you play doubles with a partner from your own guild (ranked or unranked), which also feeds your guild's weekly points",
   "Took a shot: +15 xp for losing to someone rated 100+ above you",
   "Bounty: up to +120 xp for taking down a top-3 player, a hot streak or a fast riser in a ranked match",
   "+5 xp per game you take (five games max)",
