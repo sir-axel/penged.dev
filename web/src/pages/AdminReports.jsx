@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, Navigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/context/AuthContext";
 import { BackButton } from "@/components/BackButton";
@@ -32,7 +32,7 @@ export function AdminReports() {
     queryFn: ({ pageParam }) => call("adminReports", { status, cursor: pageParam || undefined }),
     getNextPageParam: (l) => l.next_cursor || undefined,
   });
-  if (user?.role !== "admin") return <Navigate to="/" replace />;
+  if (user?.role !== "admin") return <EmptyState title="Admins only" body="Chat reports are limited to ladder admins." />;
   const items = (q.data?.pages || []).flatMap((p) => p.items);
   const people = Object.assign({}, ...(q.data?.pages || []).map((p) => p.people));
   const resolve = async (id, st) => {

@@ -16,7 +16,7 @@ export function LadderRow({ rank, player, rating: rating, wins = 0, losses = 0, 
         <Avatar name={playerName(player)} src={player.avatar_url} size={30} />
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-1.5">
-            <span className="truncate font-heading text-sm font-semibold">
+            <span className="line-clamp-2 min-w-0 break-words font-heading text-sm font-semibold">
               {playerName(player)}
             </span>
             <TierBadge rating={rating} played={wins + losses} />

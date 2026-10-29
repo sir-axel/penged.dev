@@ -81,7 +81,7 @@ function FormatBlock({ player, format }) {
   return (
     <section className="border border-border bg-card p-4" aria-label={`${name} ladder`} data-testid={`block-${format}`}>
       <h2 className="font-display text-[0.58rem] uppercase tracking-[0.22em] text-muted-foreground">{name}</h2>
-      <div className="mt-2 flex items-end gap-4">
+      <div className="mt-2 flex items-start gap-4">
         <div>
           <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Rating</p>
           <p className="font-heading text-2xl font-bold leading-none">{ratingFor(player, format)}</p>

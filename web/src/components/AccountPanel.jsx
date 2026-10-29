@@ -22,7 +22,8 @@ export function AccountPanel({ email }) {
     [sendingVerify, setSendingVerify] = useState(false),
     [verifySent, setVerifySent] = useState(false),
     [deleting, setDeleting] = useState(false),
-    [error, setError] = useState("");
+    [error, setError] = useState(""),
+    [deleteError, setDeleteError] = useState("");
   return (
     <div className="space-y-3">
       <section className="border border-border bg-card p-4">
@@ -108,6 +109,11 @@ export function AccountPanel({ email }) {
             {notice}
           </p>
         )}
+        {error && (
+          <p role="alert" className="mt-3 border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {error}
+          </p>
+        )}
       </section>
       <section className="border border-destructive/40 bg-destructive/5 p-4">
         <h2 className="font-display text-[0.55rem] uppercase tracking-[0.16em] text-destructive">
@@ -139,7 +145,7 @@ export function AccountPanel({ email }) {
               <AlertDialogCancel>Keep my account</AlertDialogCancel>
               <AlertDialogAction
                 onClick={async () => {
-                  (setDeleting(true), setError(""));
+                  (setDeleting(true), setDeleteError(""));
                   try {
                     let e = await api.functions.invoke("deleteAccount", {
                       confirm: "DELETE",
@@ -147,7 +153,7 @@ export function AccountPanel({ email }) {
                     if (e.data?.error) throw Error(e.data.error);
                     logout(true);
                   } catch (e) {
-                    (setError(
+                    (setDeleteError(
                       e.response?.data?.error || e.message || "Could not delete your account.",
                     ),
                       setDeleting(false));
@@ -161,12 +167,12 @@ export function AccountPanel({ email }) {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+        {deleteError && (
+          <p role="alert" className="mt-3 border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {deleteError}
+          </p>
+        )}
       </section>
-      {error && (
-        <p className="border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {error}
-        </p>
-      )}
     </div>
   );
 }

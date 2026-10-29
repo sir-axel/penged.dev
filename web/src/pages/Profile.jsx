@@ -63,7 +63,7 @@ export function Profile() {
           <div className="flex items-center gap-4">
             <Avatar name={playerName(player)} src={form.avatar_url} size={64} />
             <div className="min-w-0 flex-1">
-              <p className="truncate font-heading text-lg font-semibold">{playerName(player)}</p>
+              <p className="line-clamp-2 break-words font-heading text-lg font-semibold">{playerName(player)}</p>
               <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
                 {`Singles #${player.singles_rank || "—"} · ${player.singles_rating} · ${formatRecord(player.singles_wins, player.singles_losses)}`}
                 <br />
@@ -135,6 +135,7 @@ export function Profile() {
               id="username"
               value={form.username}
               onChange={(e) => setField("username", e.target.value)}
+              maxLength={20}
               className="h-12 rounded-sm"
               required
             />
@@ -145,6 +146,7 @@ export function Profile() {
               id="display_name"
               value={form.display_name}
               onChange={(e) => setField("display_name", e.target.value)}
+              maxLength={40}
               className="h-12 rounded-sm"
             />
           </div>
@@ -178,7 +180,7 @@ export function Profile() {
         <section className="space-y-3 border-t border-border pt-5">
           <div className="flex flex-wrap gap-2">
             <Link
-              to="/matches"
+              to="/feed?scope=mine"
               className="inline-flex min-h-10 items-center rounded-sm border border-border bg-card px-3 py-2 text-sm font-medium hover:border-foreground/40"
             >
               My matches
@@ -186,7 +188,7 @@ export function Profile() {
             {user?.role === "admin" && (
               <Link
                 to="/admin/reviews"
-                className="inline-flex items-center gap-1.5 rounded-sm border border-border bg-card px-3 py-2 text-sm font-medium hover:border-foreground/40"
+                className="inline-flex min-h-10 items-center gap-1.5 rounded-sm border border-border bg-card px-3 py-2 text-sm font-medium hover:border-foreground/40"
               >
                 <ShieldCheck className="h-4 w-4" aria-hidden="true" />
                 Review queue
@@ -195,7 +197,7 @@ export function Profile() {
             {user?.role === "admin" && (
               <Link
                 to="/admin/feedback"
-                className="inline-flex items-center gap-1.5 rounded-sm border border-border bg-card px-3 py-2 text-sm font-medium hover:border-foreground/40"
+                className="inline-flex min-h-10 items-center gap-1.5 rounded-sm border border-border bg-card px-3 py-2 text-sm font-medium hover:border-foreground/40"
               >
                 Feedback inbox
                 <CountBadge n={newFeedback} />
@@ -204,7 +206,7 @@ export function Profile() {
             {user?.role === "admin" && (
               <Link
                 to="/admin/reports"
-                className="inline-flex items-center gap-1.5 rounded-sm border border-border bg-card px-3 py-2 text-sm font-medium hover:border-foreground/40"
+                className="inline-flex min-h-10 items-center gap-1.5 rounded-sm border border-border bg-card px-3 py-2 text-sm font-medium hover:border-foreground/40"
               >
                 Chat reports
                 <CountBadge n={chatReports} />
