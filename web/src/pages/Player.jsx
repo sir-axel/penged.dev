@@ -202,7 +202,7 @@ export function PlayerProfile() {
       <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
         <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
           <div className="flex items-center gap-4">
-            <Avatar name={playerName(player)} src={player.avatar_url} size={72} />
+            <Avatar name={playerName(player)} src={player.avatar_url} size={72} player={player} />
             {player.under_review && (
               <p className="inline-flex rounded-sm border border-destructive/40 px-1.5 py-0.5 font-mono text-[9px] uppercase text-destructive">
                 under review

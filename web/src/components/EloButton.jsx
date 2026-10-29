@@ -46,7 +46,7 @@ export function EloButton({ format = "singles", className = "" }) {
           type="button"
           className={`inline-flex min-h-[40px] items-center gap-1.5 self-start rounded-sm bg-secondary px-3 font-heading text-sm font-medium text-foreground hover:bg-secondary/70 sm:self-auto ${className}`}
         >
-          <TierEmblem tierKey={mine || (me ? "unranked" : "gold")} size={16} />
+          <TierEmblem tierKey="gold" size={16} />
           elo :)
         </button>
       </DialogTrigger>

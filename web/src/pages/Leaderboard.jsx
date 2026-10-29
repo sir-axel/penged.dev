@@ -144,10 +144,10 @@ export function Leaderboard() {
             </div>
             <ul>
               {rows.map((e) => (
-                <LadderRow {...e} provisional={e.wins + e.losses < PROVISIONAL_MATCHES} key={e.player.id} />
+                <LadderRow {...e} format={view} provisional={e.wins + e.losses < PROVISIONAL_MATCHES} key={e.player.id} />
               ))}
               {unratedRows.map((e) => (
-                <LadderRow {...e} unrated key={e.player.id} />
+                <LadderRow {...e} format={view} unrated key={e.player.id} />
               ))}
             </ul>
           </div>
@@ -162,7 +162,7 @@ export function Leaderboard() {
             </p>
             <ul className="mt-2 overflow-hidden rounded-sm border border-border bg-card opacity-80">
               {inactiveRows.map((e) => (
-                <LadderRow {...e} inactive provisional={e.wins + e.losses < PROVISIONAL_MATCHES} key={e.player.id} />
+                <LadderRow {...e} format={view} inactive provisional={e.wins + e.losses < PROVISIONAL_MATCHES} key={e.player.id} />
               ))}
             </ul>
           </section>

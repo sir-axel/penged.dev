@@ -61,7 +61,7 @@ export function Profile() {
       <div className="mx-auto max-w-2xl space-y-6 px-4 py-6 sm:px-6">
         <section className="rounded-sm border border-border bg-card p-4">
           <div className="flex items-center gap-4">
-            <Avatar name={playerName(player)} src={form.avatar_url} size={64} />
+            <Avatar name={playerName(player)} src={form.avatar_url} size={64} player={player} />
             <div className="min-w-0 flex-1">
               <p className="line-clamp-2 break-words font-heading text-lg font-semibold">{playerName(player)}</p>
               <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">

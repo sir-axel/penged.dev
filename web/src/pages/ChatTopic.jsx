@@ -42,7 +42,7 @@ function Post({ post, people, admin, topic, onChanged, setReport, highlighted })
       {post.removed && !admin ? (
         <span className="mt-0.5 h-9 w-9 shrink-0 rounded-sm border border-dashed border-border" aria-hidden="true" />
       ) : (
-        <Avatar name={nameOf(author)} src={author?.avatar_url} size={36} />
+        <Avatar name={nameOf(author)} src={author?.avatar_url} size={36} player={author} />
       )}
       <div className="min-w-0 flex-1">
         <p className="flex flex-wrap items-baseline gap-x-2 text-sm">

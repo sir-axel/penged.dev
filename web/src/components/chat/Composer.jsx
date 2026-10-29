@@ -152,7 +152,7 @@ export function Composer({
                   onMouseEnter={() => setActive(i)}
                   className={`flex min-h-11 cursor-pointer items-center gap-2 px-3 py-1.5 ${i === active ? "bg-secondary" : ""}`}
                 >
-                  <Avatar name={nameOf(p)} src={p.avatar_url} size={28} />
+                  <Avatar name={nameOf(p)} src={p.avatar_url} size={28} player={p} />
                   <span className="min-w-0 flex-1 truncate font-heading text-sm font-semibold">{nameOf(p)}</span>
                   <span className="truncate font-mono text-[11px] text-muted-foreground">@{p.username}</span>
                 </li>

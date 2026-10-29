@@ -180,7 +180,7 @@ export function ChatDm() {
         <div className="mx-auto flex max-w-2xl items-center gap-3 px-4 py-2 sm:px-6">
           {other ? (
             <Link to={`/players/${encodeURIComponent(other.username)}`} className="flex min-w-0 flex-1 items-center gap-3">
-              <Avatar name={nameOf(other)} src={other.avatar_url} size={36} />
+              <Avatar name={nameOf(other)} src={other.avatar_url} size={36} player={other} />
               <span className="min-w-0">
                 <span className="block truncate font-heading text-base font-bold">{nameOf(other)}</span>
                 <span className="block truncate font-mono text-[11px] text-muted-foreground">@{other.username}</span>

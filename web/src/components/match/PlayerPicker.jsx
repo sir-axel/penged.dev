@@ -87,7 +87,7 @@ export function PlayerPicker({
                   }}
                   className={`flex min-h-[52px] w-full items-center gap-2.5 px-4 py-2 text-left hover:bg-secondary ${value === e.id ? "bg-secondary" : ""}`}
                 >
-                  <Avatar name={playerName(e)} src={e.avatar_url} size={30} />
+                  <Avatar name={playerName(e)} src={e.avatar_url} size={30} player={e} />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-heading text-sm font-medium">
                       {playerName(e)}

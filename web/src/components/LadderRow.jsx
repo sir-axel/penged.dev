@@ -3,7 +3,7 @@ import { Avatar } from "@/components/Avatar";
 import { playerName } from "@/lib/ladder";
 import { TierBadge } from "@/components/TierBadge";
 
-export function LadderRow({ rank, player, rating: rating, wins = 0, losses = 0, provisional = false, inactive = false, unrated = false, streak = 0 }) {
+export function LadderRow({ rank, player, rating: rating, wins = 0, losses = 0, provisional = false, inactive = false, unrated = false, streak = 0, format = "singles" }) {
   return (
     <li className="border-b border-border last:border-0">
       <Link
@@ -13,7 +13,7 @@ export function LadderRow({ rank, player, rating: rating, wins = 0, losses = 0, 
         <span className="w-7 shrink-0 font-mono text-xs tabular-nums text-muted-foreground">
           {inactive || unrated ? "—" : String(rank).padStart(2, "0")}
         </span>
-        <Avatar name={playerName(player)} src={player.avatar_url} size={30} />
+        <Avatar name={playerName(player)} src={player.avatar_url} size={30} player={player} format={format} />
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-1.5">
             <span className="line-clamp-2 min-w-0 break-words font-heading text-sm font-semibold">

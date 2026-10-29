@@ -70,7 +70,7 @@ function NewMessage() {
           {list.map((p) => (
             <li key={p.id}>
               <button type="button" onClick={() => start(p)} className="flex min-h-11 w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-secondary">
-                <Avatar name={nameOf(p)} src={p.avatar_url} size={28} />
+                <Avatar name={nameOf(p)} src={p.avatar_url} size={28} player={p} />
                 <span className="min-w-0 flex-1 truncate font-heading text-sm font-semibold">{nameOf(p)}</span>
                 <span className="font-mono text-[11px] text-muted-foreground">@{p.username}</span>
               </button>
@@ -106,7 +106,7 @@ function Messages() {
           {items.map((t) => (
             <li key={t.id}>
               <Link to={`/chat/dm/${t.id}`} className="flex min-h-14 items-center gap-3 px-3 py-3 hover:bg-secondary/60">
-                <Avatar name={nameOf(t.other)} src={t.other?.avatar_url} size={40} />
+                <Avatar name={nameOf(t.other)} src={t.other?.avatar_url} size={40} player={t.other} />
                 <span className="min-w-0 flex-1">
                   <span className="flex items-baseline justify-between gap-2">
                     <span className={`truncate font-heading text-base ${t.unread ? "font-bold" : "font-semibold"}`}>{nameOf(t.other) || "Former player"}</span>

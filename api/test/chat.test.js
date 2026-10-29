@@ -393,7 +393,7 @@ describe('mentions', () => {
     for (let i = 0; i < 9; i++) await mkPlayer(`Zed${i}`);
     expect((await call(null, 'playerSearch', { q: 'zed' })).body.items).toHaveLength(8);
     const one = (await call(null, 'playerSearch', { q: 'alice' })).body.items[0];
-    expect(Object.keys(one).sort()).toEqual(['avatar_url', 'display_name', 'id', 'username']);
+    expect(Object.keys(one).sort()).toEqual(['avatar_url', 'display_name', 'id', 'singles_losses', 'singles_rating', 'singles_wins', 'username']);
   });
 });
 

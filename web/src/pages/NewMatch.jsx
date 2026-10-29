@@ -129,7 +129,7 @@ export function NewMatch() {
           </p>
           <div className="space-y-2 rounded-sm border border-border bg-card p-3">
             <div className="flex items-center gap-3">
-              <Avatar name={playerName(player)} src={player?.avatar_url} size={30} />
+              <Avatar name={playerName(player)} src={player?.avatar_url} size={30} player={player} />
               <span className="min-w-0 flex-1 truncate font-heading text-sm font-semibold">
                 {player ? playerName(player) : "You"}
               </span>

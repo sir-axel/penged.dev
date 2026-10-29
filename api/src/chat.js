@@ -71,7 +71,12 @@ export function parseMentionIds(body) {
 }
 
 const plain = (s) => String(s || '').replace(MENTION_RE, '@$1');
-const personOf = (p) => ({ id: p.id, username: p.username, display_name: p.display_name || null, avatar_url: p.avatar_url || null });
+// singles rating + record ride along so avatars can show the tier emblem (public on the ladder anyway).
+const PERSON_COLS = 'id, username, display_name, avatar_url, singles_rating, singles_wins, singles_losses';
+const personOf = (p) => ({
+  id: p.id, username: p.username, display_name: p.display_name || null, avatar_url: p.avatar_url || null,
+  singles_rating: p.singles_rating, singles_wins: p.singles_wins, singles_losses: p.singles_losses,
+});
 
 /** id -> {id, username, display_name, avatar_url} for every id that still exists (the client falls back to the stored token text). */
 async function peopleMap(env, ids) {
@@ -79,7 +84,7 @@ async function peopleMap(env, ids) {
   const out = {};
   for (let i = 0; i < uniq.length; i += 80) {
     const chunk = uniq.slice(i, i + 80);
-    const rows = await all(env, `SELECT id, username, display_name, avatar_url FROM players WHERE id IN (${placeholders(chunk.length)})`, ...chunk);
+    const rows = await all(env, `SELECT ${PERSON_COLS} FROM players WHERE id IN (${placeholders(chunk.length)})`, ...chunk);
     for (const r of rows) out[r.id] = personOf(r);
   }
   return out;
@@ -502,7 +507,7 @@ const otherUser = (t, user) => (t.user_a === user.id ? t.user_b : t.user_a);
 
 async function threadSummary(env, user, t) {
   const otherUid = otherUser(t, user);
-  const other = await first(env, 'SELECT id, username, display_name, avatar_url FROM players WHERE user_id = ?', otherUid);
+  const other = await first(env, `SELECT ${PERSON_COLS} FROM players WHERE user_id = ?`, otherUid);
   return { id: t.id, created_date: t.created_date, last_message_at: t.last_message_at, other: other ? personOf(other) : null };
 }
 
@@ -585,7 +590,7 @@ export async function dmMessages({ env, user }, body) {
     mine: m.sender_user_id === user.id, body: m.deleted ? '' : m.body, removed: !!m.deleted,
   }));
   const me = await first(env, 'SELECT id FROM players WHERE user_id = ?', user.id);
-  const other = await first(env, 'SELECT id, username, display_name, avatar_url FROM players WHERE user_id = ?', otherUid);
+  const other = await first(env, `SELECT ${PERSON_COLS} FROM players WHERE user_id = ?`, otherUid);
   const iBlocked = !!(await first(env, 'SELECT 1 AS x FROM blocks WHERE blocker_user_id = ? AND blocked_user_id = ?', user.id, otherUid));
   const blockedMe = !!(await first(env, 'SELECT 1 AS x FROM blocks WHERE blocker_user_id = ? AND blocked_user_id = ?', otherUid, user.id));
   const people = await peopleMap(env, [me?.id, ...items.flatMap((m) => parseMentionIds(m.body))]);
@@ -711,13 +716,13 @@ const likeEsc = (s) => s.replace(/[\\%_]/g, (c) => '\\' + c);
 export async function playerSearch({ env }, body) {
   const q = isStr(body.q) ? body.q.trim().toLowerCase().slice(0, 40) : '';
   if (!q) {
-    const rows = await all(env, 'SELECT id, username, display_name, avatar_url FROM players ORDER BY COALESCE(last_active_at, created_date) DESC LIMIT 8');
+    const rows = await all(env, `SELECT ${PERSON_COLS} FROM players ORDER BY COALESCE(last_active_at, created_date) DESC LIMIT 8`);
     return { items: rows.map(personOf) };
   }
   const e = likeEsc(q);
   const rows = await all(
     env,
-    `SELECT id, username, display_name, avatar_url FROM players
+    `SELECT ${PERSON_COLS} FROM players
      WHERE username_lower LIKE ?1 ESCAPE '\\' OR lower(display_name) LIKE ?1 ESCAPE '\\'
      ORDER BY (username_lower LIKE ?2 ESCAPE '\\' OR lower(display_name) LIKE ?2 ESCAPE '\\') DESC, username_lower LIMIT 8`,
     `%${e}%`, `${e}%`,
