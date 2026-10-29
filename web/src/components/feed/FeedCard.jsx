@@ -31,21 +31,26 @@ function Delta({ change }) {
 function SideRow({ players, games, won, changes }) {
   return (
     <div className="flex items-center gap-2">
+      <span
+        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-sm font-heading text-xs font-bold ${won ? "bg-success text-white" : "bg-destructive/15 text-destructive"}`}
+        aria-label={won ? "Won" : "Lost"}
+      >
+        {won ? "W" : "L"}
+      </span>
       <span className="flex shrink-0 -space-x-2">
         {players.map((p) => (
           <Avatar key={p.player_id} name={p.display_name || p.username} src={p.avatar_url} size={28} className="ring-2 ring-card" />
         ))}
       </span>
-      <span className={`min-w-0 flex-1 truncate font-heading text-sm ${won ? "font-semibold text-foreground" : "text-muted-foreground"}`}>
-        {players.map((p) => p.display_name || p.username).join(" / ")}
-        {won && <span className="ml-1.5 font-mono text-[10px] uppercase text-success">win</span>}
+      <span className={`min-w-0 flex-1 truncate font-heading text-[15px] ${won ? "font-bold text-foreground" : "text-muted-foreground"}`}>
+        {players.map((p) => p.display_name || p.username).join(" & ")}
       </span>
       <span className="flex shrink-0 flex-col items-end gap-0.5">
         {players.map((p) => (
           <Delta key={p.player_id} change={changes.find((c) => c.player_id === p.player_id)} />
         ))}
       </span>
-      <span className={`w-5 shrink-0 text-right font-mono text-base tabular-nums ${won ? "font-bold" : "text-muted-foreground"}`}>
+      <span className={`w-6 shrink-0 text-right font-heading text-xl font-bold leading-none tabular-nums ${won ? "text-foreground" : "text-muted-foreground"}`}>
         {games}
       </span>
     </div>

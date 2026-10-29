@@ -78,7 +78,21 @@ export function extraChips(match) {
   }));
 }
 
-export const allChips = (match) => [...matchChips(match), ...extraChips(match)];
+/** "Bounty: Maya" when a winner claimed a top-3 player's bounty. */
+export function bountyChips(match) {
+  const seen = new Set();
+  const out = [];
+  for (const c of match?.rating_changes || []) {
+    for (const b of c.bounties || []) {
+      if (seen.has(b.from)) continue;
+      seen.add(b.from);
+      out.push({ key: `bounty-${b.from}`, label: `Bounty: ${b.name}`, tone: "brand" });
+    }
+  }
+  return out;
+}
+
+export const allChips = (match) => [...bountyChips(match), ...matchChips(match), ...extraChips(match)];
 
 export const CHIP_TONES = {
   brand: "border-brand/40 bg-brand-soft text-brand",

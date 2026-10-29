@@ -13,21 +13,35 @@ const TABS = [
   { key: "doubles", label: "Doubles" },
   { key: "mine", label: "Mine", auth: true },
 ];
+const KINDS = [
+  { key: "all", label: "All" },
+  { key: "ranked", label: "Ranked" },
+  { key: "unranked", label: "Unranked" },
+];
 
 export function Feed() {
   const { user, isAuthenticated } = useAuth();
   // The filter lives in the URL so Back from a match returns to the same tab.
   const [params, setParams] = useSearchParams();
   const tab = TABS.some((t) => t.key === params.get("scope")) ? params.get("scope") : "all";
-  const setTab = (key) => setParams(key === "all" ? {} : { scope: key }, { replace: true });
+  const kind = KINDS.some((k) => k.key === params.get("kind")) ? params.get("kind") : "all";
+  const setParam = (name, key) =>
+    setParams((p) => {
+      const n = new URLSearchParams(p);
+      if (key === "all") n.delete(name);
+      else n.set(name, key);
+      return n;
+    }, { replace: true });
+  const setTab = (key) => setParam("scope", key);
   const scope = tab === "mine" && !user?.id ? "all" : tab;
   const { data, isLoading, isError, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
-    queryKey: ["feed", scope, user?.id],
+    queryKey: ["feed", scope, kind, user?.id],
     initialPageParam: 0,
     queryFn: async ({ pageParam }) => {
       const filter = { status: "verified" };
       if (scope === "singles" || scope === "doubles") filter.format = scope;
       if (scope === "mine") filter.all_user_ids = user.id;
+      if (kind !== "all") filter.ranked = kind === "ranked";
       // Ask for one extra row to know whether another page exists.
       const { items } = await api.entities.Match.filter(filter, { sort: "-verified_at", limit: PAGE + 1, skip: pageParam });
       return { items: items.slice(0, PAGE), more: items.length > PAGE, next: pageParam + PAGE };
@@ -61,6 +75,19 @@ export function Feed() {
               className={`min-h-[44px] shrink-0 rounded-sm px-4 font-heading text-sm font-medium transition-colors ${scope === t.key ? "bg-primary text-primary-foreground" : "border border-border bg-card text-muted-foreground hover:text-foreground"}`}
             >
               {t.label}
+            </button>
+          ))}
+        </div>
+        <div className="mt-2 flex gap-1" role="tablist" aria-label="Ranked or unranked">
+          {KINDS.map((k) => (
+            <button
+              key={k.key}
+              role="tab"
+              aria-selected={kind === k.key}
+              onClick={() => setParam("kind", k.key)}
+              className={`min-h-[36px] shrink-0 rounded-sm px-3 font-mono text-[11px] uppercase tracking-[0.1em] transition-colors ${kind === k.key ? "bg-foreground text-background" : "bg-secondary text-muted-foreground hover:text-foreground"}`}
+            >
+              {k.label}
             </button>
           ))}
         </div>
