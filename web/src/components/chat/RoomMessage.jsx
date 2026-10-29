@@ -41,7 +41,7 @@ export function RoomMessage({ post, people, admin, grouped, highlighted, onChang
       className={`group relative flex gap-3 pl-3 pr-10 pb-0.5 transition-colors duration-700 hover:bg-secondary/40 ${grouped ? "pt-0.5" : "pt-3"} ${highlighted ? "bg-brand/20 outline outline-2 -outline-offset-2 outline-brand" : ""}`}
     >
       {grouped ? (
-        <span className="h-5 w-9 shrink-0 whitespace-nowrap pt-1 text-right font-mono text-[9px] leading-4 text-transparent group-hover:text-muted-foreground" aria-hidden="true">{clock(post.created_date)}</span>
+        <span className="h-5 w-9 shrink-0 whitespace-nowrap pt-1 text-right font-mono text-[9px] leading-4 text-muted-foreground/60 md:text-transparent md:group-hover:text-muted-foreground" aria-hidden="true">{clock(post.created_date)}</span>
       ) : gone ? (
         <span className="mt-0.5 h-9 w-9 shrink-0 rounded-sm border border-dashed border-border" aria-hidden="true" />
       ) : (
@@ -121,7 +121,7 @@ export function RoomMessage({ post, people, admin, grouped, highlighted, onChang
           aria-label="Message options"
           aria-expanded={acts}
           onClick={() => setActs((v) => !v)}
-          className="absolute right-1 top-0 inline-flex h-8 w-8 items-center justify-center rounded-sm text-muted-foreground opacity-60 hover:bg-secondary hover:opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
+          className="absolute right-0 top-0 inline-flex h-10 w-10 items-center justify-center rounded-sm text-muted-foreground opacity-60 hover:bg-secondary hover:opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
         >
           <EllipsisVertical className="h-4 w-4" aria-hidden="true" />
         </button>

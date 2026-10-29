@@ -12,7 +12,7 @@ import { Composer } from "@/components/chat/Composer";
 import { ReportDialog, Spinner, iconBtn } from "@/components/chat/bits";
 import { RenderBody, nameOf } from "@/lib/chatText";
 import { api } from "@/api/client";
-import { clock, dayKey, dayLabel } from "@/lib/chatTime";
+import { clock, dayKey, dayLabel, hasKeyboard } from "@/lib/chatTime";
 
 const call = async (name, body) => (await api.functions.invoke(name, body)).data;
 export function ChatDm() {
@@ -243,13 +243,13 @@ export function ChatDm() {
             );
           })}
         </ul>
-        <div ref={bottom} />
+        <div ref={bottom} style={{ scrollMarginBottom: "190px" }} />
       </div>
       {canSend ? (
         <Composer
           id="dm-body"
           sticky
-          placeholder={`Message ${nameOf(other)}. Type @ to mention. Ctrl/Cmd+Enter sends.`}
+          placeholder={`Message ${nameOf(other)}. Type @ to mention.${hasKeyboard() ? " Ctrl/Cmd+Enter sends." : ""}`}
           buttonLabel="Send"
           candidates={candidates}
           rows={2}

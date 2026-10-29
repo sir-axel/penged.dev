@@ -189,7 +189,7 @@ export function ForumMessagesToggle({ active }) {
           role="tab"
           aria-selected={active === key}
           onClick={() => active !== key && nav(key === "forum" ? "/chat" : "/chat?tab=messages", { replace: true })}
-          className={`relative inline-flex h-9 items-center justify-center gap-1.5 px-3 font-display text-[0.55rem] uppercase tracking-[0.12em] ${active === key ? "bg-foreground text-background" : "bg-card hover:bg-secondary"}`}
+          className={`relative inline-flex h-10 items-center justify-center gap-1.5 px-3 font-display text-[0.55rem] uppercase tracking-[0.12em] ${active === key ? "bg-foreground text-background" : "bg-card hover:bg-secondary"}`}
         >
           <Icon className="h-3.5 w-3.5" aria-hidden="true" />
           {label}

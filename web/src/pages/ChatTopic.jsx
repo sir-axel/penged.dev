@@ -13,6 +13,7 @@ import { Composer } from "@/components/chat/Composer";
 import { CategoryChip, PersonLink, ReportDialog, Spinner, iconBtn } from "@/components/chat/bits";
 import { RenderBody, nameOf, tokensToPlain } from "@/lib/chatText";
 import { whenShort } from "@/components/FeedbackThread";
+import { hasKeyboard } from "@/lib/chatTime";
 import { api } from "@/api/client";
 
 const call = async (name, body) => (await api.functions.invoke(name, body)).data;
@@ -242,7 +243,7 @@ export function ChatTopic() {
             id="reply"
             sticky
             label="Reply"
-            placeholder="Write a reply. Type @ to mention someone. Ctrl/Cmd+Enter sends."
+            placeholder={`Write a reply. Type @ to mention someone.${hasKeyboard() ? " Ctrl/Cmd+Enter sends." : ""}`}
             buttonLabel="Post reply"
             onSend={async (body) => {
               await call("createPost", { topic_id: id, body });

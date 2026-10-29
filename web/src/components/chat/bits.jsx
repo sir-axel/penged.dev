@@ -26,7 +26,7 @@ export function CategoryChip({ category }) {
 export function PersonLink({ person, className = "" }) {
   if (!person) return <span className={`text-muted-foreground ${className}`}>Former player</span>;
   return (
-    <Link to={`/players/${encodeURIComponent(person.username)}`} className={`font-heading font-semibold hover:text-brand hover:underline ${className}`}>
+    <Link to={`/players/${encodeURIComponent(person.username)}`} className={`-my-1.5 inline-block py-1.5 font-heading font-semibold hover:text-brand hover:underline ${className}`}>
       {nameOf(person)}
     </Link>
   );
