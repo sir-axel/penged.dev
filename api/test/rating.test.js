@@ -75,8 +75,8 @@ describe('challenge penalties', () => {
     expect(closeness(1400, 1800)).toBeCloseTo(closeness(1800, 1400), 6);
   });
   it('rank factor', () => {
-    expect(DODGE_RANK_FACTOR).toEqual({ 1: 1.0, 2: 0.8, 3: 0.6 });
-    expect([1, 2, 3, 7].map(rankFactor)).toEqual([1, 0.8, 0.6, 0.6]);
+    expect(DODGE_RANK_FACTOR).toEqual({ 1: 1.0, 2: 0.8, 3: 0.6, 4: 0.4, 5: 0.4, 6: 0.25 });
+    expect([1, 2, 3, 4, 5, 6, 7, 40].map(rankFactor)).toEqual([1, 0.8, 0.6, 0.4, 0.4, 0.25, 0.25, 0.25]);
   });
   it('expired costs double a decline; equal adjacent first-timers: 24 vs 12', () => {
     expect(pen('expired')).toMatchObject({ penalty: 24, reason: 'expired', dropsRank: true, walkover: true });
@@ -98,6 +98,19 @@ describe('challenge penalties', () => {
     expect(g1).toBeGreaterThan(g2);
     expect(g2).toBeGreaterThan(g3);
     expect([g1, g2, g3]).toEqual([24, 19, 14]);
+  });
+  it('far gaps keep decaying: gap 4-5 and 6+ cost less than gap 3', () => {
+    expect([3, 4, 5, 6, 12].map((rankGap) => pen('expired', { rankGap }).penalty)).toEqual([14, 10, 10, 6, 6]);
+  });
+  it('downward: declining is free, ignoring costs half the upward expiry with no walkover', () => {
+    expect(pen('declined', { direction: 'down' })).toMatchObject({ penalty: 0, reason: 'declined_down', dropsRank: false, walkover: false });
+    expect(pen('expired', { direction: 'down' })).toMatchObject({ penalty: 12, reason: 'expired_down', dropsRank: true, walkover: false });
+    expect(pen('expired', { direction: 'down', rankGap: 6 }).penalty).toBe(3);
+  });
+  it('weekly cap: a second penalisable duck is free; already-free ones keep their reason', () => {
+    expect(pen('expired', { weeklyCapped: true })).toMatchObject({ penalty: 0, reason: 'weekly_penalty_cap', walkover: false, dropsRank: false });
+    expect(pen('declined', { weeklyCapped: true, recentPairMatch: true }).reason).toBe('waived_recent_match');
+    expect(pen('declined', { weeklyCapped: true, direction: 'down' }).reason).toBe('declined_down');
   });
   it('repeat meetings reduce it', () => {
     expect(pen('expired', { meetings: 2 }).penalty).toBeLessThan(pen('expired').penalty);

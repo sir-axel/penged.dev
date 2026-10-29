@@ -1,9 +1,10 @@
 -- Challenge caps, challenging down (top 3) and doubles challenges.
--- downward = 1: a top-3 player challenged someone ranked below them; declining or ignoring it costs nobody anything.
+-- direction: 'up' = challenger rated at or below the defender at creation (ducking costs the defender), 'down' = rated above
+-- (declining is free; ignoring it until it expires costs half, with no walkover). Anyone on the ladder may challenge anyone.
 -- format 'doubles': challenger + partner vs defender + defender partner. The partner and both defenders must all accept
 -- (accepted_user_ids); one decline closes it (declined_by_user_id); no penalty, no walkover. all_user_ids / all_player_ids = every participant.
 ALTER TABLE challenges ADD COLUMN format TEXT NOT NULL DEFAULT 'singles' CHECK (format IN ('singles','doubles'));
-ALTER TABLE challenges ADD COLUMN downward INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE challenges ADD COLUMN direction TEXT NOT NULL DEFAULT 'up' CHECK (direction IN ('up','down'));
 ALTER TABLE challenges ADD COLUMN challenger_partner_user_id TEXT;
 ALTER TABLE challenges ADD COLUMN challenger_partner_player_id TEXT;
 ALTER TABLE challenges ADD COLUMN challenger_partner_name TEXT;

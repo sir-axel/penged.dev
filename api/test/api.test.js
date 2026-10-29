@@ -145,9 +145,9 @@ describe('challenges', () => {
     expect((await call(e, 'createChallenge', { defender_player_id: b.player.id })).status).toBe(400);
     expect((await call(b, 'createChallenge', { defender_player_id: e.player.id })).status).toBe(400);
     await seasoned(...ps);
-    expect((await call(e, 'createChallenge', { defender_player_id: a.player.id })).status).toBe(400); // 4 above
     expect((await call(e, 'createChallenge', { defender_player_id: e.player.id })).status).toBe(400);
-    expect((await call(a, 'createChallenge', { defender_player_id: e.player.id })).status).toBe(400); // below
+    expect((await call(a, 'createChallenge', { defender_player_id: e.player.id })).status).toBe(200); // any gap, either way
+    expect((await call(d, 'createChallenge', { defender_player_id: a.player.id })).status).toBe(200);
     const ch = await call(e, 'createChallenge', { defender_player_id: b.player.id, message: 'bring it' });
     expect(ch.status).toBe(200);
     expect(ch.body.challenge).toMatchObject({ status: 'open', challenger_rank: 5, defender_rank: 2, defender_name: 'Bb2' });
@@ -373,15 +373,15 @@ describe('rating-derived ranks', () => {
     void b;
   });
 
-  it('challenge eligibility reads the rating order (1-3 places above)', async () => {
+  it('challenge direction reads the rating order (anyone can challenge anyone on the ladder)', async () => {
     const a = await mkPlayer('Aa1'); const b = await mkPlayer('Bb2'); const c = await mkPlayer('Cc3');
     await seasoned(a, b, c);
     await win(c, a); await call(c, 'syncLadder'); // order: Cc3, Bb2, Aa1
-    // a is below c now: allowed only as a (penalty-free) downward challenge, since c is in the top 3
-    expect((await call(c, 'createChallenge', { defender_player_id: a.player.id })).body.challenge).toMatchObject({ downward: true, challenger_rank: 1, defender_rank: 3 });
+    // a is rated below c now: a downward challenge
+    expect((await call(c, 'createChallenge', { defender_player_id: a.player.id })).body.challenge).toMatchObject({ direction: 'down', challenger_rank: 1, defender_rank: 3 });
     const ok = await call(a, 'createChallenge', { defender_player_id: c.player.id }); // 2 above
     expect(ok.status).toBe(200);
-    expect(ok.body.challenge).toMatchObject({ challenger_rank: 3, defender_rank: 1 });
+    expect(ok.body.challenge).toMatchObject({ challenger_rank: 3, defender_rank: 1, direction: 'up' });
     void b;
   });
 
@@ -706,8 +706,8 @@ describe('review fixes', () => {
     expect((await get('/api/entities/Challenge/' + ch.id)).body.status).toBe('completed');
     // challenger (now rank 1) can challenge again once someone is above... at least no 409 lockout:
     const r = await call(b, 'createChallenge', { defender_player_id: a.player.id });
-    expect(r.status).toBe(200); // a is now below: a downward challenge from the top 3, not the active-challenge 409
-    expect(r.body.challenge.downward).toBe(true);
+    expect(r.status).toBe(200); // a is now rated below: a downward challenge, not the active-challenge 409
+    expect(r.body.challenge.direction).toBe('down');
   });
 
   it('H1: a match submitted BEFORE acceptance does not complete the challenge; unplayed accepted challenges expire', async () => {

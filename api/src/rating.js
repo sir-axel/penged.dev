@@ -460,8 +460,11 @@ export const WALKOVER_XP = 15;
 export const CHALLENGE_CAP_DAYS = 7;
 export const CHALLENGES_RECEIVED_PER_WEEK = 2;
 export const CHALLENGES_SENT_PER_WEEK = 3;
-// The top CHALLENGE_DOWN_TOP singles ranks may also challenge 1-3 ranks below; ducking those is free (no penalty, no walkover).
-export const CHALLENGE_DOWN_TOP = 3;
+// Anyone on the ladder may challenge anyone. 'down' = the challenger was rated above the defender at creation:
+// declining is free, ignoring it costs DOWN_EXPIRE_MULT x the upward expiry penalty, with no walkover for the challenger.
+export const DOWN_EXPIRE_MULT = 0.5;
+// At most one ducking penalty per defender per rolling DUCK_PENALTY_DAYS: a second penalisable duck closes free ('weekly_penalty_cap').
+export const DUCK_PENALTY_DAYS = 7;
 
 // The defender's K for a dodge: the Glicko step a typical match (DODGE_GAMES_PER_MATCH games) would imply at their current
 // RD, kept within DODGE_K_MIN..DODGE_K_MAX (the old Elo 24..48): settled players (RD 50) 24, settling ones (RD 74+) 48.
@@ -469,10 +472,10 @@ export const DODGE_GAMES_PER_MATCH = 2.5;
 export const DODGE_K_MIN = 24;
 export const DODGE_K_MAX = 48;
 export const dodgeK = (defRd) => Math.max(DODGE_K_MIN, Math.min(DODGE_K_MAX, DODGE_GAMES_PER_MATCH * kFromRd(defRd ?? RD_START)));
-// Ladder-gap weighting: 1 place apart -> 1.0, 2 -> 0.8, 3 or more -> 0.6
-export const DODGE_RANK_FACTOR = { 1: 1.0, 2: 0.8, 3: 0.6 };
+// Ladder-gap weighting: 1 place apart -> 1.0, 2 -> 0.8, 3 -> 0.6, 4-5 -> 0.4, 6 or more -> 0.25
+export const DODGE_RANK_FACTOR = { 1: 1.0, 2: 0.8, 3: 0.6, 4: 0.4, 5: 0.4, 6: 0.25 };
 export const DODGE_BASE_MULT = 0.5;
-export const rankFactor = (rankGap) => DODGE_RANK_FACTOR[Math.max(1, Math.min(3, Math.round(rankGap || 1)))];
+export const rankFactor = (rankGap) => DODGE_RANK_FACTOR[Math.max(1, Math.min(6, Math.round(rankGap || 1)))];
 /** 1.0 when evenly matched, shrinking as the rating gap grows (~0.75 at 200, ~0.36 at 400). */
 export function closeness(defRating, chalRating) {
   const e = expectedScore(defRating, chalRating);
@@ -486,9 +489,20 @@ export function dodgeBase({ defRating, defRd, chalRating, meetings = 0, rankGap 
 
 /**
  * Penalty for a ducked challenge.
- * kind: 'expired' | 'declined'. Returns { penalty (rating points actually lost), reason, dropsRank, walkover }.
+ * kind: 'expired' | 'declined'; direction: 'up' (challenger rated below) | 'down'; weeklyCapped: the defender already paid a
+ * ducking penalty in the last DUCK_PENALTY_DAYS. Returns { penalty (rating points actually lost), reason, dropsRank, walkover }.
  */
-export function challengePenalty({ kind, defRating, defRd, chalRating, meetings = 0, rankGap = 1, recentPairMatch = false, defRecentMatches = 0 }) {
+export function challengePenalty(o) {
+  const r = duckPenalty(o);
+  return o.weeklyCapped && r.penalty > 0 ? { penalty: 0, reason: 'weekly_penalty_cap', dropsRank: false, walkover: false } : r;
+}
+function duckPenalty({ kind, direction = 'up', ...o }) {
+  if (direction === 'down') {
+    if (kind !== 'expired') return { penalty: 0, reason: 'declined_down', dropsRank: false, walkover: false };
+    const up = duckPenalty({ ...o, kind });
+    return { penalty: Math.round(DOWN_EXPIRE_MULT * up.penalty), reason: 'expired_down', dropsRank: true, walkover: false };
+  }
+  const { defRating, defRd, chalRating, meetings = 0, rankGap = 1, recentPairMatch = false, defRecentMatches = 0 } = o;
   const loss = dodgeBase({ defRating, defRd, chalRating, meetings, rankGap });
   const cap = (p) => Math.max(0, Math.min(MAX_DELTA, p, defRating - RATING_FLOOR));
   if (kind === 'expired') {

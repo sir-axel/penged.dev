@@ -14,7 +14,7 @@ import { decodeInternal, pub } from './schema.js';
 import {
   START_RATING, REPEAT_WINDOW_DAYS, rateMatch, xpForMatch, levelForXp, validateGames, summarizeGames,
   RANK_SQL, DOUBLES_RANK_SQL, rankPlayers, ACTIVE_DAYS, meetingWeight, NOVELTY_DAYS, stakes, currentRd, RATING_FLOOR, challengePenalty, WALKOVER_XP, COOLDOWN_DAYS, WAIVER_DAYS, FATIGUE_DAYS,
-  CHALLENGE_CAP_DAYS, CHALLENGES_RECEIVED_PER_WEEK, CHALLENGES_SENT_PER_WEEK, CHALLENGE_DOWN_TOP,
+  CHALLENGE_CAP_DAYS, CHALLENGES_RECEIVED_PER_WEEK, CHALLENGES_SENT_PER_WEEK, DUCK_PENALTY_DAYS,
 } from './rating.js';
 import { weekdayDeadline, cleanTimeZone, DEFAULT_TZ } from './weekdays.js';
 import { withCtx } from './email.js';
@@ -86,9 +86,9 @@ const rankRows = (env) =>
  */
 export const flagsStmt = (env) => {
   // Only challenges the defender never responded to count (responded_at IS NULL excludes accepted-then-unplayed).
-  // Penalty-free challenges (challenged down, doubles) never count.
+  // Doubles challenges (never penalised) don't count.
   const un = `(SELECT count(*) FROM challenges c WHERE c.defender_player_id = players.id AND c.status = 'expired' AND c.responded_at IS NULL AND c.reversed = 0
-    AND c.format = 'singles' AND c.downward = 0)`;
+    AND c.format = 'singles')`;
   const ur = `CASE WHEN ${un} >= 2 OR (last_active_at IS NOT NULL AND last_active_at < ?
          AND EXISTS (SELECT 1 FROM matches m WHERE m.status = 'disputed'
                      AND EXISTS (SELECT 1 FROM json_each(m.all_player_ids) WHERE value = players.id))) THEN 1 ELSE 0 END`;
@@ -100,8 +100,8 @@ export const flagsStmt = (env) => {
 };
 
 // ---------- challenge penalties ----------
-/** Challenged down (a top-3 player picked someone below) or doubles: declining or ignoring it just closes it. */
-const penaltyFree = (c) => c.format === 'doubles' || !!c.downward;
+/** Doubles: declining or ignoring it just closes it. */
+const penaltyFree = (c) => c.format === 'doubles';
 /** Meeting count (180d), recent pair match (7d) and defender fatigue (verified matches in 7d) for a challenge. */
 async function penaltyFacts(env, c) {
   const ids = [c.challenger_player_id, c.defender_player_id];
@@ -118,7 +118,11 @@ async function penaltyFacts(env, c) {
   const defRecentMatches = (await first(env,
     `SELECT count(*) AS n FROM matches WHERE status = 'verified' AND ranked = 1 AND verified_at > ?
        AND EXISTS (SELECT 1 FROM json_each(all_player_ids) WHERE value = ?)`, daysAgoIso(FATIGUE_DAYS), c.defender_player_id)).n;
-  return { meetings, recentPairMatch, defRecentMatches };
+  // One ducking penalty per defender per rolling DUCK_PENALTY_DAYS.
+  const weeklyCapped = !!(await first(env,
+    `SELECT 1 AS x FROM challenges WHERE defender_player_id = ? AND penalty_rating > 0 AND reversed = 0 AND penalized_at > ? AND id <> ? LIMIT 1`,
+    c.defender_player_id, daysAgoIso(DUCK_PENALTY_DAYS), c.id));
+  return { meetings, recentPairMatch, defRecentMatches, weeklyCapped, direction: c.direction || 'up' };
 }
 /** A player's current singles/doubles RD (stored RD grown by the days since it was last updated). */
 const rdOf = (p, fmt, nowMs = Date.now()) =>
@@ -151,6 +155,7 @@ async function penaltyPlan(env, challenges, kind, now, lv) {
     return pl[id];
   };
   let changed = 0;
+  const paid = new Set(); // defenders penalised earlier in this same plan (weekly cap)
   for (const c of challenges) {
     if (penaltyFree(c)) {
       guards.push(guardRow(env, 'challenges', c.id, c.version, 'open'));
@@ -166,7 +171,9 @@ async function penaltyPlan(env, challenges, kind, now, lv) {
     const ranks = ranksNow();
     const before = ranks[def.id] ?? null;
     const gap = ranks[def.id] != null && ranks[chal.id] != null ? Math.abs(ranks[chal.id] - ranks[def.id]) : 1;
-    const res = penaltyOf(kind, def, chal, gap, await penaltyFacts(env, c));
+    const facts = await penaltyFacts(env, c);
+    const res = penaltyOf(kind, def, chal, gap, { ...facts, weeklyCapped: facts.weeklyCapped || paid.has(def.id) });
+    if (res.penalty > 0) paid.add(def.id);
     let gain = 0;
     if (res.penalty > 0) {
       def.singles_rating -= res.penalty; dirty.add(def.id); byId[def.id].rating = def.singles_rating;
@@ -678,13 +685,8 @@ fns.createChallenge = ({ env, user }, body) =>
     const def = (await getPlayers(env, [body.defender_player_id]))[0];
     if (!def) throw new HttpError(404, 'That player does not exist.');
     if (me.singles_rank == null || def.singles_rank == null) throw bad('Both players need a ladder position.');
-    const gap = me.singles_rank - def.singles_rank;
-    // Up 1-3 ranks; the top CHALLENGE_DOWN_TOP may also go down 1-3 (penalty-free for the defender).
-    const canDown = me.singles_rank <= CHALLENGE_DOWN_TOP;
-    const downward = gap < 0;
-    if (gap > 3 || gap < -3 || gap === 0 || (downward && !canDown)) {
-      throw bad(canDown ? 'You can challenge players 1–3 ranks above or below you.' : 'You can only challenge players 1–3 ranks above you.');
-    }
+    // Anyone on the ladder; 'down' (challenger rated above) is free to decline, see challengePenalty.
+    const direction = me.singles_rating > def.singles_rating ? 'down' : 'up';
     const cool = await first(env,
       `SELECT penalized_at FROM challenges WHERE challenger_player_id = ? AND defender_player_id = ? AND penalized_at > ? AND reversed = 0
          ORDER BY penalized_at DESC LIMIT 1`, me.id, def.id, daysAgoIso(COOLDOWN_DAYS));
@@ -705,11 +707,11 @@ fns.createChallenge = ({ env, user }, body) =>
       stmt(env,
         `INSERT INTO challenges (id, challenger_user_id, challenger_player_id, challenger_name, challenger_rank, defender_user_id,
            defender_player_id, defender_name, defender_rank, message, status, expires_at, created_date, updated_date, created_by_id,
-           format, downward, all_user_ids, all_player_ids)
+           format, direction, all_user_ids, all_player_ids)
          VALUES (?,?,?,?,?,?,?,?,?,?,'open',?,?,?,?,'singles',?,?,?)`,
         id, user.id, me.id, nameOf(me), me.singles_rank, def.user_id, def.id, nameOf(def), def.singles_rank, message,
         weekdayDeadline(Date.parse(now), CHALLENGE_MS, [me.timezone, def.timezone]), now, now, user.id,
-        downward ? 1 : 0, J([user.id, def.user_id]), J([me.id, def.id])),
+        direction, J([user.id, def.user_id]), J([me.id, def.id])),
       touch(env, me.id, now),
     ]);
     await notify(env, 'challenge_received', { challenge_id: id, actor_user_id: user.id });
@@ -747,6 +749,7 @@ async function createDoublesChallenge(env, user, body) {
       weekdayDeadline(Date.parse(now), CHALLENGE_MS, four.map((p) => p.timezone)), now, now, user.id),
     touch(env, me.id, now),
   ]);
+  await notify(env, 'challenge_received', { challenge_id: id, actor_user_id: user.id });
   return { challenge: pub('Challenge', await getChallenge(env, id)) };
 }
 
@@ -777,7 +780,9 @@ async function respondDoublesChallenge(env, user, c, decision) {
     }
   }
   await commit(env, stmts);
-  return { challenge: pub('Challenge', await getChallenge(env, c.id)) };
+  const after = await getChallenge(env, c.id);
+  if (after.status !== 'open') await notify(env, after.status === 'accepted' ? 'challenge_accepted' : 'challenge_declined', { challenge_id: c.id, actor_user_id: user.id });
+  return { challenge: pub('Challenge', after) };
 }
 
 fns.respondChallenge = ({ env, user }, body) =>
@@ -820,7 +825,7 @@ fns.challengePenaltyPreview = async ({ env, user }, body) => {
   if (c.defender_user_id !== user.id) throw new HttpError(403, 'Only the challenged player can see this.');
   if (c.status !== 'open') throw bad('This challenge is no longer open.');
   if (penaltyFree(c)) {
-    const free = { penalty: 0, reason: c.format === 'doubles' ? 'doubles' : 'challenged_down', drops_rank: false, rank_after: c.defender_rank, challenger_gain: 0 };
+    const free = { penalty: 0, reason: 'doubles', drops_rank: false, rank_after: c.defender_rank, challenger_gain: 0 };
     return { decline: free, expire: free };
   }
   const [def, chal] = await Promise.all([getPlayers(env, [c.defender_player_id]), getPlayers(env, [c.challenger_player_id])]).then((r) => [r[0][0], r[1][0]]);
@@ -846,7 +851,7 @@ fns.challengePenaltyPreview = async ({ env, user }, body) => {
 
 /**
  * Weekly allowance for the signed-in player (both formats): sends left, when the next send frees up, and which players
- * are at their weekly receive limit ({ player_id: when they free up }). Plus the caps and CHALLENGE_DOWN_TOP for the UI.
+ * are at their weekly receive limit ({ player_id: when they free up }). Plus the caps for the UI.
  */
 fns.challengeLimits = async ({ env, user }) => {
   const me = await getPlayerByUser(env, user.id);
@@ -864,7 +869,7 @@ fns.challengeLimits = async ({ env, user }) => {
   return {
     sent: sent.length, sent_cap: CHALLENGES_SENT_PER_WEEK, sends_left: Math.max(0, CHALLENGES_SENT_PER_WEEK - sent.length),
     send_again_at: freesAt(sent, CHALLENGES_SENT_PER_WEEK), received_cap: CHALLENGES_RECEIVED_PER_WEEK, at_limit: atLimit,
-    down_top: CHALLENGE_DOWN_TOP, window_days: CHALLENGE_CAP_DAYS,
+    window_days: CHALLENGE_CAP_DAYS,
   };
 };
 

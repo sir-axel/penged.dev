@@ -76,13 +76,57 @@ function message(env, r, { subject, heading, lines, button, path }) {
   };
 }
 
+// Doubles challenges: everyone involved hears about it; nobody is ever penalised.
+const pairs = (c) => `${c.challenger_name} & ${c.challenger_partner_name} vs ${c.defender_name} & ${c.defender_partner_name}`;
+const everyone = (c) => [c.challenger_user_id, c.challenger_partner_user_id, c.defender_user_id, c.defender_partner_user_id];
+const nameOfUser = (c, uid) => ({
+  [c.challenger_user_id]: c.challenger_name, [c.challenger_partner_user_id]: c.challenger_partner_name,
+  [c.defender_user_id]: c.defender_name, [c.defender_partner_user_id]: c.defender_partner_name,
+})[uid] || 'Someone';
+const doublesMsgs = {
+  challenge_received(env, c, rs) {
+    return everyone(c).slice(1).map((uid) => rs[uid]).filter(Boolean).map((r) => {
+      const lines = [r.user_id === c.challenger_partner_user_id
+        ? `${c.challenger_name} wants you as their partner in a doubles challenge: ${pairs(c)}.`
+        : `${c.challenger_name} challenged you to doubles: ${pairs(c)}.`];
+      if (c.message) lines.push(`Their message: "${c.message}"`);
+      lines.push(`All three invited players need to accept by ${when(c.expires_at, r.tz)} (weekdays only). Saying no costs nothing.`);
+      return message(env, r, { subject: `${c.challenger_name} challenged you to doubles`, heading: 'Doubles challenge', lines, button: 'ANSWER THE CHALLENGE', path: '/challenges' });
+    });
+  },
+  challenge_accepted(env, c, rs) {
+    return everyone(c).map((uid) => rs[uid]).filter(Boolean).map((r) => message(env, r, {
+      subject: 'Doubles challenge on', heading: 'Everyone accepted',
+      lines: [`Everyone accepted the doubles challenge: ${pairs(c)}.`, `Play by ${when(c.expires_at, r.tz)} (weekdays only) and log the result.`],
+      button: 'SEE THE CHALLENGE', path: '/challenges',
+    }));
+  },
+  challenge_declined(env, c, rs) {
+    const who = nameOfUser(c, c.declined_by_user_id);
+    return everyone(c).map((uid) => rs[uid]).filter(Boolean).map((r) => message(env, r, {
+      subject: `${who} declined the doubles challenge`, heading: 'Doubles challenge declined',
+      lines: [`${who} declined the doubles challenge: ${pairs(c)}.`, 'No rating changed.'],
+      button: 'SEE CHALLENGES', path: '/challenges',
+    }));
+  },
+  challenge_expired(env, c, rs) {
+    return everyone(c).map((uid) => rs[uid]).filter(Boolean).map((r) => message(env, r, {
+      subject: 'Doubles challenge expired', heading: 'Challenge expired',
+      lines: [`The doubles challenge ${pairs(c)} ran out of time.`, 'No rating changed.'],
+      button: 'SEE CHALLENGES', path: '/challenges',
+    }));
+  },
+};
+
 const challengeMsgs = {
   challenge_received(env, c, rs) {
     const r = rs[c.defender_user_id];
     if (!r) return [];
     const lines = [`${c.challenger_name} (#${c.challenger_rank}) challenged you (#${c.defender_rank}).`];
     if (c.message) lines.push(`Their message: "${c.message}"`);
-    lines.push(`Accept or decline by ${when(c.expires_at, r.tz)}. The clock only runs on weekdays. Letting it run out can cost you rating.`);
+    lines.push(`Accept or decline by ${when(c.expires_at, r.tz)}. The clock only runs on weekdays. ${c.direction === 'down'
+      ? "They're rated above you, so declining is free, but letting it run out costs you rating."
+      : 'Letting it run out can cost you rating.'}`);
     return [message(env, r, { subject: `${c.challenger_name} challenged you`, heading: 'You have been challenged', lines, button: 'ANSWER THE CHALLENGE', path: '/challenges' })];
   },
   challenge_accepted(env, c, rs) {
@@ -206,8 +250,8 @@ export async function compose(env, event, data = {}) {
     const ids = data.challenge_ids || (data.challenge_id ? [data.challenge_id] : []);
     if (!ids.length) return [];
     const cs = (await env.DB.prepare(`SELECT * FROM challenges WHERE id IN (${ids.map(() => '?').join(',')})`).bind(...ids).all()).results;
-    const rs = await recipients(env, cs.flatMap((c) => [c.challenger_user_id, c.defender_user_id]));
-    return cs.flatMap((c) => challengeMsgs[event](env, c, rs).filter((msg) => msg.user_id !== data.actor_user_id));
+    const rs = await recipients(env, cs.flatMap(everyone));
+    return cs.flatMap((c) => (c.format === 'doubles' ? doublesMsgs : challengeMsgs)[event](env, c, rs).filter((msg) => msg.user_id !== data.actor_user_id));
   }
   if (matchMsgs[event]) {
     const row = data.match_id ? await env.DB.prepare('SELECT * FROM matches WHERE id = ?').bind(data.match_id).first() : null;
