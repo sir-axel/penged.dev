@@ -1,3 +1,4 @@
+import { PROVISIONAL } from './tiers.js';
 import { all, first, stmt, guardRow, commit, retrying, uuid, nowIso } from './db.js';
 import { HttpError, bad } from './errors.js';
 import { pub } from './schema.js';
@@ -11,7 +12,7 @@ export const MAX_MEMBERS = 3;
 export const COLORS = ['red', 'orange', 'yellow', 'green', 'teal', 'blue', 'purple', 'pink'];
 const MAX_REQUESTS_PER_PLAYER = 5;
 const MAX_REQUESTS_PER_GUILD = 20;
-const RATED_MIN = 5; // singles matches before a member counts toward the guild's average rating
+const RATED_MIN = PROVISIONAL; // placed in singles before a member counts toward the guild's average rating
 
 const isStr = (v) => typeof v === 'string';
 

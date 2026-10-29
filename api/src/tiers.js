@@ -1,5 +1,5 @@
 // Tiers are DERIVED from rating (no stored field). Keep in sync with api/src/tiers.js (api test asserts they match).
-export const PROVISIONAL = 5; // matches in a format before a tier is shown (mirrors PROVISIONAL_MATCHES)
+export const PROVISIONAL = 3; // matches in a format before a tier is shown (mirrors PROVISIONAL_MATCHES)
 export const TIERS = [
   { key: "dirt", name: "Dirt", min: -Infinity }, // the 100 floor up
   { key: "wood", name: "Wood", min: 900 },

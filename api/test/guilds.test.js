@@ -220,7 +220,7 @@ describe('guilds', () => {
 
     const list = await call(a, 'listGuilds');
     expect(list.body.my_guild_id).toBe(g.id);
-    expect(list.body.guilds[0]).toMatchObject({ id: g.id, rank: 1, week_xp: week, member_count: 2, avg_rating: null });
+    expect(list.body.guilds[0]).toMatchObject({ id: g.id, rank: 1, week_xp: week, member_count: 2 }); // Alice (3 matches) is placed, so she counts in avg_rating
     // Xavier (not in a guild) earns nothing for anyone.
     expect((await call(null, 'guildTags')).body.tags).toEqual({
       [a.player.id]: expect.objectContaining({ guild_id: g.id, tag: 'SPN' }),

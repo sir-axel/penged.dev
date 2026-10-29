@@ -26,9 +26,9 @@ describe('tiers', () => {
     expect(T.tierChange(1460, 1440)).toEqual({ tier_before: 'gold', tier_after: 'silver' });
     expect(T.tierChange(1460, 1480)).toBeNull();
   });
-  it('placement until 5 matches', () => {
-    expect(T.placementState(3)).toEqual({ placing: true, played: 3, needed: 5 });
-    expect(T.placementState(5).placing).toBe(false);
+  it('placement until 3 matches', () => {
+    expect(T.placementState(2)).toEqual({ placing: true, played: 2, needed: 3 });
+    expect(T.placementState(3).placing).toBe(false);
     expect(T.placementState(0).placing).toBe(true);
   });
   const run = async (wRating, lRating, wWins, lLosses) => {

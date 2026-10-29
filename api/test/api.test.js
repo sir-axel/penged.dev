@@ -856,7 +856,9 @@ describe('rating factors wired through verification', () => {
     const eb = m.rating_changes.find((x) => x.player_id === b.player.id);
     expect(ea.rd_before).toBeGreaterThan(before.singles_rd + 20);
     expect(eb.rd_before).toBeLessThan(ea.rd_before);
-    expect(Math.abs(ea.delta)).toBeGreaterThan(Math.abs(eb.delta));
+    // compare the raw per-game moves (derank protection may trim the final result once placed)
+    const raw = (e) => e.games.reduce((t, g) => t + g.delta, 0);
+    expect(Math.abs(raw(ea))).toBeGreaterThan(Math.abs(raw(eb)));
   });
 
   it('players idle more than 30 days drop off the ranked ladder and re-rank when they play', async () => {

@@ -98,7 +98,7 @@ export const STAKES_NARROW = { 11: [[11, 9], [9, 11], [11, 9]], 21: [[21, 19], [
 export const STAKES_DOMINANT = { 11: [[11, 4], [11, 5]], 21: [[21, 8], [21, 10]] };
 // Ladder: no verified match in this many days = off the ranked ladder (listed as inactive); < PROVISIONAL_MATCHES = provisional.
 export const ACTIVE_DAYS = 30;
-export const PROVISIONAL_MATCHES = 5;
+export const PROVISIONAL_MATCHES = 3;
 // XP
 export const XP_PLAYED = 25;
 export const XP_WIN = 25;

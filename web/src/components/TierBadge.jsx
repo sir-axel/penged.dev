@@ -14,7 +14,7 @@ const SIZES = {
 };
 /**
  * <TierBadge rating={1500} /> or <TierBadge tier="gold" />. With `played` (matches in that format)
- * under the placement threshold it shows "Placement · 3/5" instead. Leave `played` undefined to skip placement.
+ * under the placement threshold it shows "Placement · 2/3" instead. Leave `played` undefined to skip placement.
  */
 export function TierBadge({ rating, tier, played, size = "sm", className = "" }) {
   const place = played === undefined ? null : placementState(played);

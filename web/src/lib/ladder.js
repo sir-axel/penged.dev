@@ -95,7 +95,7 @@ export function playerName(e) {
   return e?.display_name || e?.username || "Player";
 }
 
-export const PROVISIONAL_MATCHES = 5;
+export const PROVISIONAL_MATCHES = 3;
 export const ACTIVE_DAYS = 30;
 export const isProvisional = (player, format) => matchesPlayed(player, format) < PROVISIONAL_MATCHES;
 /** Singles only: played at least once but off the ranked ladder (no verified match for 30 days). */

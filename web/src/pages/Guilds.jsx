@@ -118,7 +118,7 @@ export function Guilds() {
         )}
         <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
           Week points are the XP members earn in verified matches, ranked or unranked, since Monday 12:00am Central. XP only counts from the day
-          someone joins. All-time is the same since each member joined. Average rating uses members with 5+ singles matches.
+          someone joins. All-time is the same since each member joined. Average rating uses members who have finished singles placement (3 matches).
         </p>
       </div>
     </>
