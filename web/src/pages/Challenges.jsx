@@ -9,6 +9,17 @@ import { timeLeft } from "@/lib/ladder";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/EmptyState";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { api } from "@/api/client";
 
 const minus = (n) => `−${Math.abs(n)}`;
@@ -50,14 +61,25 @@ export function DeclineButton({ challenge, busy, onDecline }) {
       ? `Declining costs ${d.penalty} rating${d.drops_rank ? ` and drops you to #${d.rank_after}` : ""}. Staying silent for 72 hours would cost ${data.expire.penalty} and pay the challenger. Decline anyway?`
       : "Declining is free this time — you played this challenger this week. Decline?";
   return (
-    <Button
-      onClick={() => window.confirm(confirmText) && onDecline()}
-      disabled={busy}
-      variant="outline"
-      className="h-11 rounded-sm"
-    >
-      {label}
-    </Button>
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <Button disabled={busy} variant="outline" className="h-11 rounded-sm">
+          {label}
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent className="w-[calc(100%-2rem)] rounded-sm">
+        <AlertDialogHeader>
+          <AlertDialogTitle>Decline this challenge?</AlertDialogTitle>
+          <AlertDialogDescription>{confirmText}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel className="min-h-10 rounded-sm">Keep it</AlertDialogCancel>
+          <AlertDialogAction className="min-h-10 rounded-sm" onClick={onDecline}>
+            Decline
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 
@@ -140,7 +162,15 @@ export function Challenges() {
     outgoing = challenges.filter(
       (t) => t.challenger_user_id === user?.id && ["open", "accepted"].includes(t.status),
     ),
-    recent = challenges.filter((e) => !incoming.includes(e) && !outgoing.includes(e)).slice(0, 8);
+    // The list is public; only show challenges this person was part of.
+    recent = challenges
+      .filter(
+        (e) =>
+          (e.challenger_user_id === user?.id || e.defender_user_id === user?.id) &&
+          !incoming.includes(e) &&
+          !outgoing.includes(e),
+      )
+      .slice(0, 8);
   return (
     <>
       <PageHeader
@@ -256,7 +286,11 @@ export function Challenges() {
           </h2>
           {playerLoading ? (
             <p className="mt-2 text-sm text-muted-foreground">Loading the ladder…</p>
-          ) : myRank <= 1 ? (
+          ) : myRank === 0 ? (
+            <p className="mt-2 text-sm text-muted-foreground">
+              You are not on the ranked ladder right now — play a verified singles match to get back on it.
+            </p>
+          ) : myRank === 1 ? (
             <p className="mt-2 text-sm text-muted-foreground">
               You are top of the ladder — there is nobody above you to challenge.
             </p>
@@ -301,7 +335,7 @@ export function Challenges() {
                   rows={2}
                   maxLength={200}
                   placeholder="Add a note (optional) — e.g. 'Court at 4pm?'"
-                  className="w-full rounded-sm border border-input bg-card px-3 py-2 text-base outline-none focus:border-foreground/40 sm:text-sm"
+                  className="w-full rounded-sm border border-input bg-card px-3 py-2 text-base outline-none focus:border-foreground/40 lg:text-sm"
                 />
                 <Button
                   onClick={async () => {
