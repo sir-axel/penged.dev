@@ -55,4 +55,9 @@ describe('tiers', () => {
     expect(w.after).toBeGreaterThanOrEqual(1450);
     expect(w.tier_before).toBeUndefined();
   });
+  it('records matches played in the format, including this match, for the placement badge', async () => {
+    const { w, l } = await run(1400, 1400, 1, 6);
+    expect(w.matches_played).toBe(2);
+    expect(l.matches_played).toBe(7);
+  });
 });

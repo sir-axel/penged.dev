@@ -30,7 +30,13 @@ export function SideCard({ side, gamesWon: gamesWon, winner: winner, label: labe
               >
                 {e.display_name || e.username}
               </Link>
-              {tiers[e.player_id] && <TierBadge tier={tiers[e.player_id]} className="mb-1.5 sm:mb-0" />}
+              {tiers[e.player_id] && (
+                <TierBadge
+                  tier={tiers[e.player_id].tier ?? tiers[e.player_id]}
+                  played={tiers[e.player_id].played}
+                  className="mb-1.5 sm:mb-0"
+                />
+              )}
               <span className="mb-1.5 shrink-0 rounded-sm border border-border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.08em] text-muted-foreground sm:mb-0">
                 {paddleLabel(e.paddle)}
               </span>

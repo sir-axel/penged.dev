@@ -83,6 +83,17 @@ export function MatchDetail() {
       queryFn: async () =>
         api.entities.Match.get(id).catch((e) => (e.status === 404 ? null : Promise.reject(e))),
     });
+  // Matches verified before rating_changes carried matches_played: fall back to each player's current count.
+  const legacyIds = (match?.rating_changes || []).filter((c) => c.matches_played == null).map((c) => c.player_id);
+  const { data: playedNow = {} } = useQuery({
+    queryKey: ["match-played-now", id, legacyIds.join(",")],
+    enabled: legacyIds.length > 0,
+    queryFn: async () => {
+      const f = match.format === "doubles" ? "doubles" : "singles";
+      const { items = [] } = await api.entities.Player.filter({ id: { $in: legacyIds } }, { limit: 10 });
+      return Object.fromEntries(items.map((p) => [p.id, (Number(p[`${f}_wins`]) || 0) + (Number(p[`${f}_losses`]) || 0)]));
+    },
+  });
   useEffect(() => {
     if (!isLoading && !match) {
       let e = document.createElement("meta");
@@ -132,7 +143,16 @@ export function MatchDetail() {
     sideEntries = [...(match.side_a || []), ...(match.side_b || [])],
     tiersAfter =
       match.status === "verified"
-        ? Object.fromEntries((match.rating_changes || []).map((c) => [c.player_id, c.tier_after || tierFor(c.after).key]))
+        ? Object.fromEntries(
+            (match.rating_changes || []).map((c) => [
+              c.player_id,
+              {
+                tier: c.tier_after || tierFor(c.after).key,
+                // Matches before this field existed: use the player's current count in this format.
+                played: c.matches_played ?? playedNow[c.player_id],
+              },
+            ]),
+          )
         : {},
     promoChips = tierChips(match),
     nameFor = (e) => {

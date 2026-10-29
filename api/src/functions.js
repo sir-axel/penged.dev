@@ -404,6 +404,7 @@ async function verifyPlan(env, m, now) {
         challenge: g.challenge,
       })),
       xp_gained: xpGain, xp_parts: xpRes.parts, win_streak: streak,
+      matches_played: p[wc] + p[lc] + 1, // in this format, including this match (placement badge)
       // Tier crossing (derived from rating); only once placed (5+ matches in this format before this one).
       ...(p[wc] + p[lc] >= PROVISIONAL ? tierChange(res.before, res.after) : null),
     });
