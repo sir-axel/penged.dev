@@ -362,6 +362,11 @@ export function MatchDetail() {
                   {e.bounty_paid > 0 && (
                     <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.08em] text-destructive">{`Bounty paid: −${e.bounty_paid} rating`}</p>
                   )}
+                  {e.matched && (
+                    <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.08em] text-brand" data-testid="matched-softened">
+                      {`Matched game: loss softened ×${Number(e.matched.loss_factor.toFixed(2))}${e.matched.unsoftened != null ? ` (${e.matched.unsoftened} → ${e.delta})` : ""}`}
+                    </p>
+                  )}
                   {(e.games || []).length > 0 ? <GameLines change={e} /> : e.mov != null && <FactorLines change={e} />}
                   {(e.xp_parts || []).length > 0 && (
                     <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.08em] text-brand">

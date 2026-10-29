@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, LoaderCircle } from "lucide-react";
 import { useMyPlayer } from "@/hooks/useMyPlayer";
 import { Avatar } from "@/components/Avatar";
+import { TierEmblem } from "@/components/TierEmblem";
 import { Button } from "@/components/ui/button";
 import { challengeClock, playerName } from "@/lib/ladder";
 import {
@@ -54,6 +55,7 @@ export function MatchedChip({ challenge }) {
 
 const STATE = {
   open: { label: "Your call", tone: "text-brand" },
+  declined: { label: "Declined", tone: "text-destructive" },
   waiting: { label: "Sent", tone: "text-warning" },
   accepted: { label: "On", tone: "text-success" },
   unplayed: { label: "Play it", tone: "text-warning" },
@@ -63,7 +65,7 @@ const STATE = {
   missed: { label: "Missed", tone: "text-destructive" },
 };
 const incomingText = {
-  open: "hasn't said yes yet",
+  open: "hasn't accepted yet",
   waiting: "challenged you",
   accepted: "on — play it",
   unplayed: "accepted, not played yet",
@@ -71,22 +73,37 @@ const incomingText = {
   played: "played",
   backed_out: "backed out",
   missed: "missed it",
+  declined: "declined",
 };
 
 const Eyebrow = ({ children }) => (
   <p className="font-display text-[0.58rem] uppercase tracking-[0.22em] text-muted-foreground">{children}</p>
 );
 
-function Stake({ label, value, tone, testId }) {
+function Stake({ label, value, tone, testId, big = false }) {
   return (
-    <div className="rounded-sm border border-border bg-secondary/50 px-3 py-2" data-testid={testId}>
+    <div className={`min-w-0 rounded-sm border px-3 py-2 ${big ? "border-success/40 bg-success/10" : "border-border bg-secondary/50"}`} data-testid={testId}>
       <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">{label}</p>
-      <p className={`font-heading text-3xl font-bold leading-none tabular-nums ${tone}`}>{value}</p>
+      <p className={`font-heading font-bold leading-none tabular-nums ${big ? "text-4xl" : "text-2xl"} ${tone}`}>{value}</p>
     </div>
   );
 }
 
-function Confirm({ trigger, title, body, action, onConfirm }) {
+/** The mystery opponent's face: the pixel question mark (the unranked emblem) in a dashed tile. */
+function MysteryFace({ size = 48 }) {
+  return (
+    <span
+      className="inline-flex shrink-0 items-center justify-center rounded-sm border border-dashed border-muted-foreground/60 bg-secondary"
+      style={{ width: size, height: size }}
+      aria-hidden="true"
+      data-testid="matchup-mystery-face"
+    >
+      <TierEmblem tierKey="unranked" size={Math.round(size * 0.7)} />
+    </span>
+  );
+}
+
+function Confirm({ trigger, title, body, action, onConfirm, cancel = "Not yet", destructive = false }) {
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild>{trigger}</AlertDialogTrigger>
@@ -96,8 +113,11 @@ function Confirm({ trigger, title, body, action, onConfirm }) {
           <AlertDialogDescription>{body}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel className="min-h-10 rounded-sm">Not yet</AlertDialogCancel>
-          <AlertDialogAction className="min-h-10 rounded-sm" onClick={onConfirm}>
+          <AlertDialogCancel className="min-h-10 rounded-sm">{cancel}</AlertDialogCancel>
+          <AlertDialogAction
+            className={`min-h-10 rounded-sm ${destructive ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : ""}`}
+            onClick={onConfirm}
+          >
             {action}
           </AlertDialogAction>
         </AlertDialogFooter>
@@ -107,8 +127,10 @@ function Confirm({ trigger, title, body, action, onConfirm }) {
 }
 
 /**
- * "This week's match": your assigned opponent, why them, max win / max loss, the deadline and I'm in / Back out,
- * plus who was matched with you. `onRecord(opponentId)`: on Record a match, pre-fill in place instead of linking.
+ * "This week's match". Before you accept it is a mystery: a "?" face, max win (big) and max loss, what declining or
+ * ignoring costs, and Accept / Decline. After you accept: the opponent, why them, the challenge state, Record result and
+ * Back out. Plus who was matched with you (only players who accepted). `onRecord(opponentId)`: on Record a match,
+ * pre-fill in place instead of linking.
  */
 export function MatchupCard({ onRecord, className = "" }) {
   const { player } = useMyPlayer();
@@ -179,14 +201,92 @@ export function MatchupCard({ onRecord, className = "" }) {
     );
   }
 
+  const st = STATE[m.status] || STATE.open;
+  const deadline = weekDeadline(data.deadline);
+  const header = (
+    <div className="flex items-center justify-between gap-2">
+      <Eyebrow>This week's match</Eyebrow>
+      <span className={`inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.12em] ${st.tone}`} data-testid="matchup-status">
+        {(m.status === "played" || m.status === "cleared") && <Check className="h-3 w-3" aria-hidden="true" />}
+        {st.label}
+      </span>
+    </div>
+  );
+  const errorBox = error && (
+    <p className="mt-2 rounded-sm border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>
+  );
+
+  if (m.mystery) {
+    const open = m.status === "open";
+    return shell(
+      <>
+        {header}
+        <div className="mt-2 flex min-w-0 items-center gap-3" data-testid="matchup-mystery">
+          <MysteryFace size={48} />
+          <span className="min-w-0">
+            <span className="block truncate font-heading text-lg font-semibold leading-tight">Mystery opponent</span>
+            <span className="block font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+              {open ? "Accept to reveal" : "Never revealed"}
+            </span>
+          </span>
+        </div>
+        <div className="mt-3 grid grid-cols-[3fr_2fr] gap-2">
+          <Stake label="Max win" value={`+${m.max_win}`} tone="text-success" testId="matchup-max-win" big />
+          <Stake label="Max loss" value={minus(m.max_loss)} tone="text-destructive" testId="matchup-max-loss" />
+        </div>
+        <p className="mt-1.5 text-[11px] text-muted-foreground">
+          Max win is a dominant 2-0, played as a challenge. Lose the matched game and your loss is softened to stay under the win.
+        </p>
+        {open ? (
+          <p className="mt-2 rounded-sm border border-warning/40 bg-warning/10 px-2.5 py-1.5 text-xs font-medium text-warning" data-testid="matchup-deadline">
+            {`Decline now: ${minus(m.decline_cost)} · Ignore it: ${minus(m.miss_cost)} at week end (${deadline})`}
+          </p>
+        ) : (
+          <p className="mt-2 text-sm">
+            {m.status === "declined" ? `You declined: ${minus(m.penalty_rating)} rating. See you next Monday.` : `Not answered this week: ${minus(m.penalty_rating)} rating.`}
+          </p>
+        )}
+        {errorBox}
+        {open && (
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <Confirm
+              trigger={
+                <Button disabled={!!busy} variant="outline" className="h-12 w-full rounded-sm border-destructive/40 text-destructive hover:bg-destructive/10" data-testid="matchup-decline">
+                  {busy === "matchupDecline" && <LoaderCircle className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
+                  Decline
+                </Button>
+              }
+              title="Decline this week's match?"
+              body={`Decline: you lose ${m.decline_cost} rating right now. You won't find out who it was.`}
+              action={`Decline · ${minus(m.decline_cost)}`}
+              cancel="Keep it"
+              destructive
+              onConfirm={() => act("matchupDecline")}
+            />
+            <Confirm
+              trigger={
+                <Button disabled={!!busy} className="h-12 w-full rounded-sm" data-testid="matchup-yes">
+                  {busy === "matchupYes" && <LoaderCircle className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
+                  Accept
+                </Button>
+              }
+              title="Accept this week's match?"
+              body={`Accept: you'll see who it is and the challenge goes to them. Backing out after that costs ${minus(m.backout_cost)}.`}
+              action="Accept"
+              onConfirm={() => act("matchupYes")}
+            />
+          </div>
+        )}
+        {incomingList}
+      </>,
+    );
+  }
+
   const opp = m.opponent;
   const name = playerName(opp);
-  const st = STATE[m.status] || STATE.open;
   const ch = m.challenge;
-  const deadline = weekDeadline(data.deadline);
-  const settled = ["played", "backed_out", "missed"].includes(m.status);
+  const settled = ["played", "backed_out", "missed", "declined"].includes(m.status);
   const canBackOut = m.status === "waiting" || m.status === "accepted";
-  const theyAsked = m.status === "open" && incoming.some((x) => x.player?.id === opp?.id && x.status === "waiting");
   const record = (m.status === "accepted" || m.status === "unplayed") && (
     onRecord ? (
       <Button onClick={() => onRecord(opp.id)} className="h-11 w-full rounded-sm">
@@ -202,12 +302,10 @@ export function MatchupCard({ onRecord, className = "" }) {
     )
   );
   const statusLine = {
-    open: theyAsked
-      ? `${name} already said yes. Say I'm in to accept their challenge.`
-      : `Say I'm in and the challenge goes to ${name}.`,
+    open: `Accept and the challenge goes to ${name}.`,
     waiting: `Waiting for ${name} to answer${ch?.expires_at ? ` · ${challengeClock(ch.expires_at)}` : ""}.`,
     accepted: `${name} is in. Play it by ${deadline} and record the result.`,
-    unplayed: `The challenge window closed, but the week hasn't: play ${name} by ${deadline} or lose ${m.max_loss}.`,
+    unplayed: `The challenge window closed, but the week hasn't: play ${name} by ${deadline} or lose ${m.miss_cost}.`,
     cleared: `${name} didn't take it, so you're cleared for this week.`,
     played: "Played. See you next Monday.",
     backed_out: `You backed out: ${minus(m.penalty_rating)} rating.`,
@@ -216,13 +314,7 @@ export function MatchupCard({ onRecord, className = "" }) {
 
   return shell(
     <>
-      <div className="flex items-center justify-between gap-2">
-        <Eyebrow>This week's match</Eyebrow>
-        <span className={`inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.12em] ${st.tone}`} data-testid="matchup-status">
-          {(m.status === "played" || m.status === "cleared") && <Check className="h-3 w-3" aria-hidden="true" />}
-          {st.label}
-        </span>
-      </div>
+      {header}
       <Link to={`/players/${encodeURIComponent(opp.username || "")}`} className="mt-2 flex min-w-0 items-center gap-3">
         <Avatar name={name} src={opp.avatar_url} size={48} player={opp} />
         <span className="min-w-0">
@@ -239,12 +331,13 @@ export function MatchupCard({ onRecord, className = "" }) {
           {m.why}
         </p>
       )}
-      <div className="mt-3 grid grid-cols-2 gap-2">
-        <Stake label="Max win" value={`+${m.max_win}`} tone="text-success" testId="matchup-max-win" />
+      <div className="mt-3 grid grid-cols-[3fr_2fr] gap-2">
+        <Stake label="Max win" value={`+${m.max_win}`} tone="text-success" testId="matchup-max-win" big />
         <Stake label="Max loss" value={minus(m.max_loss)} tone="text-destructive" testId="matchup-max-loss" />
       </div>
       <p className="mt-1.5 text-[11px] text-muted-foreground">
-        A 2-0 either way, played as a challenge{m.frozen && !settled ? " · frozen when you said yes" : ""}.
+        A dominant 2-0 either way, played as a challenge
+        {m.loss_factor != null && m.loss_factor < 1 ? ` · a loss in this game is softened ×${Number(m.loss_factor.toFixed(2))}` : ""}.
       </p>
       {!settled && (
         <p className="mt-2 rounded-sm border border-warning/40 bg-warning/10 px-2.5 py-1.5 text-xs font-medium text-warning" data-testid="matchup-deadline">
@@ -256,25 +349,7 @@ export function MatchupCard({ onRecord, className = "" }) {
         </p>
       )}
       <p className="mt-2 text-sm">{statusLine}</p>
-      {error && (
-        <p className="mt-2 rounded-sm border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>
-      )}
-      {m.status === "open" && (
-        <div className="mt-3">
-          <Confirm
-            trigger={
-              <Button disabled={!!busy} className="h-12 w-full rounded-sm" data-testid="matchup-yes">
-                {busy === "matchupYes" && <LoaderCircle className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
-                I'm in
-              </Button>
-            }
-            title={`Play ${name} this week?`}
-            body={`Once you say yes you can't back out without losing 2x the max loss (${minus(m.backout_cost)}).${theyAsked ? ` It accepts ${name}'s challenge.` : ` It sends ${name} a challenge.`}`}
-            action="I'm in"
-            onConfirm={() => act("matchupYes")}
-          />
-        </div>
-      )}
+      {errorBox}
       {record && <div className="mt-3">{record}</div>}
       {canBackOut && (
         <div className="mt-2 text-right">
@@ -290,7 +365,7 @@ export function MatchupCard({ onRecord, className = "" }) {
               </button>
             }
             title="Back out of this week's match?"
-            body={`You said yes, so backing out costs ${m.backout_cost} rating (2x your max loss) and cancels the challenge.`}
+            body={`You accepted, so backing out costs ${m.backout_cost} rating (2x your max loss) and cancels the challenge.`}
             action={`Back out · ${minus(m.backout_cost)}`}
             onConfirm={() => act("matchupBackOut")}
           />
@@ -333,8 +408,15 @@ export function WeekMatchesList() {
         {items.map((x) => (
           <li key={x.id} className="flex min-w-0 items-center justify-between gap-2 px-3 py-2 text-sm">
             <span className="min-w-0 truncate">
-              {x.player_name} <span className="text-muted-foreground">→</span> {x.opponent_name}
-              {x.opponent_rank ? <span className="text-muted-foreground"> #{x.opponent_rank}</span> : null}
+              {x.player_name} <span className="text-muted-foreground">→</span>{" "}
+              {x.mystery ? (
+                <span className="text-muted-foreground" title="Hidden until they accept">?</span>
+              ) : (
+                <>
+                  {x.opponent_name}
+                  {x.opponent_rank ? <span className="text-muted-foreground"> #{x.opponent_rank}</span> : null}
+                </>
+              )}
             </span>
             <span className={`shrink-0 font-mono text-[10px] uppercase tracking-[0.1em] ${(STATE[x.status] || STATE.open).tone}`}>
               {x.status === "open" ? "Not yet" : (STATE[x.status] || STATE.open).label}

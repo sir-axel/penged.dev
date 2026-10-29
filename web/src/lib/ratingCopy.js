@@ -82,10 +82,12 @@ export const CHALLENGE_POINTS = [
 export const MATCHUP_POINTS = [
   "Every Monday at midnight (Chicago time) everyone on the singles ladder gets one matched opponent for the week. Your first ranked singles match puts you in. Nobody sits out unless they are the only one on the ladder.",
   "Who you get: the player you most need to play. Never played them: +100. Otherwise +1 for every day since you last met, counting at most 60 days. Each ducked singles challenge between you in the last 90 days, either way round: +25 (up to 4 count). The top of the ladder pulls: +30 for #1, 24 for #2, 18 for #3, 12 for #4, 6 for #5. Last week's pick again: −40. How close your ratings are never counts: the point is to play across the board.",
-  "Several people can be matched with the same player, so #1 may have a queue. A matched challenge you receive is a regular challenge for you: decline it or let it run out and the normal penalties apply.",
-  "Before you say yes you see your max win (a dominant 2-0 win) and your max loss (a dominant 2-0 loss), played as a challenge (×1.25), bounties included.",
-  "Say \"I'm in\" and the challenge goes to them. It skips the weekly limits, the one-open-challenge rule and the 7-day cooldown, and it doesn't use up anyone's weekly limits. Your max loss is frozen when you say yes.",
-  "Once you say yes you can't back out without losing 2x your max loss (at most 80).",
-  "Play it by Sunday night or lose your max loss (at most 80). If you said yes and they decline it, ignore it or haven't answered by the end of the week, you owe nothing. Accepted but never played: you still pay.",
+  "It's a mystery match: you don't see who it is until you accept. Before that you only see your max win, your max loss and the deadline. Nobody else sees who you got either, and they don't see you on their list until you accept.",
+  "Max win is a dominant 2-0 win, played as a challenge (×1.25), bounties included. Your max win is always bigger than your max loss: your loss in the matched game is softened so it is at most 75% of the max win (a loss is scaled by min(1, 0.75 × max win ÷ the full loss)). If a win is worth +1 or less for you, nothing is at stake: no max loss. Both numbers are fixed on Monday.",
+  "Accept and you see who it is, and the challenge goes to them. It skips the weekly limits, the one-open-challenge rule and the 7-day cooldown, and it doesn't use up anyone's weekly limits. Lose the matched game and your loss is softened as above; win it and it counts as normal. The other player's result is never softened.",
+  "Decline and you lose your max loss (at most 80) right away, without finding out who it was. That settles your week.",
+  "Once you accept you can't back out without losing 2x your max loss (at most 80).",
+  "Ignore it, or accept and not play it by Sunday night, and you lose your max loss (at most 80) at the end of the week. If you accepted and they decline it, ignore it or haven't answered by the end of the week, you owe nothing.",
+  "A matched challenge you receive is a regular challenge for you: decline it or let it run out and the normal penalties apply. Several people can be matched with the same player, so #1 may have a queue.",
   "Any verified ranked singles match between you two that week counts. Matched with each other? One match covers you both.",
 ];
