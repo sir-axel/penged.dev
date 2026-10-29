@@ -3,7 +3,7 @@ import { Avatar } from "@/components/Avatar";
 import { playerName } from "@/lib/ladder";
 import { TierBadge } from "@/components/TierBadge";
 
-export function LadderRow({ rank, player, rating: rating, wins = 0, losses = 0, provisional = false, inactive = false, streak = 0 }) {
+export function LadderRow({ rank, player, rating: rating, wins = 0, losses = 0, provisional = false, inactive = false, unrated = false, streak = 0 }) {
   return (
     <li className="border-b border-border last:border-0">
       <Link
@@ -11,7 +11,7 @@ export function LadderRow({ rank, player, rating: rating, wins = 0, losses = 0, 
         className="flex min-h-[52px] items-center gap-3 px-3 py-2.5 transition-colors hover:bg-secondary/60"
       >
         <span className="w-7 shrink-0 font-mono text-xs tabular-nums text-muted-foreground">
-          {inactive ? "—" : String(rank).padStart(2, "0")}
+          {inactive || unrated ? "—" : String(rank).padStart(2, "0")}
         </span>
         <Avatar name={playerName(player)} src={player.avatar_url} size={30} />
         <span className="min-w-0 flex-1">
@@ -19,7 +19,7 @@ export function LadderRow({ rank, player, rating: rating, wins = 0, losses = 0, 
             <span className="line-clamp-2 min-w-0 break-words font-heading text-sm font-semibold">
               {playerName(player)}
             </span>
-            <TierBadge rating={rating} played={wins + losses} />
+            {!unrated && <TierBadge rating={rating} played={wins + losses} />}
             {player.under_review && (
               <span className="shrink-0 rounded-sm border border-destructive/40 px-1 font-mono text-[9px] uppercase tracking-[0.08em] text-destructive">
                 review
@@ -36,7 +36,9 @@ export function LadderRow({ rank, player, rating: rating, wins = 0, losses = 0, 
             )}
           </span>
         </span>
-        <span className="w-12 shrink-0 text-right font-mono text-sm tabular-nums">{rating}</span>
+        <span className={`w-12 shrink-0 text-right font-mono text-sm tabular-nums${unrated ? " text-muted-foreground" : ""}`}>
+          {unrated ? "nil" : rating}
+        </span>
       </Link>
     </li>
   );

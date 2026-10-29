@@ -1,6 +1,6 @@
 // "What's on the line" range preview, novelty and New rival XP: pure functions and the matchStakes endpoint end to end.
 import { describe, it, expect, beforeEach, afterAll } from 'vitest';
-import { env, dispose, reset, call, get, mkPlayer } from './helpers.js';
+import { env, dispose, reset, call, get, mkPlayer, seasoned } from './helpers.js';
 import {
   stakes, stakesGames, rateMatch, xpForMatch, NOVELTY_BONUS, NOVELTY_DAYS, XP_NEW_RIVAL, RATING_FLOOR, MAX_DELTA,
   STAKES_NARROW, STAKES_DOMINANT, CHALLENGE_STAKES, meetingWeight,
@@ -160,6 +160,7 @@ describe('matchStakes endpoint', () => {
   });
   it('challenge preview: singles, challenge stakes, only the two players', async () => {
     const [a, b, c] = [await mkPlayer('Aa1'), await mkPlayer('Bb2'), await mkPlayer('Cc3')];
+    await seasoned(a, b, c);
     await sql('UPDATE players SET singles_rd = 60');
     const ch = (await call(c, 'createChallenge', { defender_player_id: a.player.id })).body.challenge;
     const r = await call(a, 'matchStakes', { challenge_id: ch.id });

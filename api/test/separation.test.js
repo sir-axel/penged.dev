@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterAll } from 'vitest';
-import { env, dispose, reset, call, get, mkPlayer } from './helpers.js';
+import { env, dispose, reset, call, get, mkPlayer, seasoned } from './helpers.js';
 import { repeatFactor } from '../src/rating.js';
 
 beforeEach(reset);
@@ -103,6 +103,7 @@ describe('singles and doubles are separate ladders', () => {
 
   it('doubles_rank orders by doubles rating, then doubles games, then join order', async () => {
     const [a, b, c, d] = await four();
+    await seasoned(a, b, c, d); await seasoned(a, b, c, d, 'doubles'); // a first verified match in each format puts them on its ladder
     await sql('UPDATE players SET singles_rating = 1600 WHERE id = ?', a.player.id); // singles lead must not leak
     await sql('UPDATE players SET doubles_rating = 1500 WHERE id = ?', d.player.id);
     await sql('UPDATE players SET doubles_rating = 1450, doubles_wins = 3 WHERE id = ?', c.player.id);
@@ -117,6 +118,7 @@ describe('singles and doubles are separate ladders', () => {
 
   it('inactivity is per format', async () => {
     const [a, b] = await four();
+    await seasoned(a, b); await seasoned(a, b, 'doubles');
     const old = new Date(Date.now() - 40 * 86400000).toISOString();
     await sql('UPDATE players SET doubles_wins = 2, doubles_last_verified_at = ? WHERE id = ?', old, a.player.id);
     await sql('UPDATE players SET singles_wins = 2, singles_last_verified_at = ? WHERE id = ?', old, b.player.id);

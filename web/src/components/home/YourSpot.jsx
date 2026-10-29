@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { formatRecord, playerName, overallRating, rankFor, ratingFor, streakFor, isProvisional, isInactive, settlingHint } from "@/lib/ladder";
+import { formatRecord, matchesPlayed, playerName, overallRating, rankFor, ratingFor, streakFor, isProvisional, isInactive, settlingHint } from "@/lib/ladder";
 import { LevelBar } from "@/components/LevelBar";
 import { TierBadge } from "@/components/TierBadge";
 import { nextTier } from "@/lib/tiers";
@@ -27,7 +27,7 @@ export function YourSpot({ player, toConfirm = 0 }) {
                     </p>
                     <p className="font-heading text-2xl font-bold leading-none">{rank ? `#${rank}` : "—"}</p>
                     <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
-                      {ratingFor(player, fmt)}
+                      {matchesPlayed(player, fmt) ? ratingFor(player, fmt) : "nil"}
                       {" · "}
                       {`Matches ${formatRecord(player[`${fmt}_wins`], player[`${fmt}_losses`])}`}
                     </p>

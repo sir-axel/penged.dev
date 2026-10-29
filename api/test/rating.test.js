@@ -151,7 +151,7 @@ describe('validateGames', () => {
 });
 
 describe('rankPlayers', () => {
-  const P = (id, rating, played = 0, created_date = '2026-01-01T00:00:00.000Z') => ({ id, rating, played, created_date });
+  const P = (id, rating, played = 1, created_date = '2026-01-01T00:00:00.000Z') => ({ id, rating, played, created_date });
   it('orders by rating, highest first, ranks 1..N', () => {
     expect(rankPlayers([P('a', 1400), P('b', 1500), P('c', 1300)])).toEqual({ b: 1, a: 2, c: 3 });
   });
@@ -165,13 +165,18 @@ describe('rankPlayers', () => {
     rankPlayers(list);
     expect(list.map((x) => x.id)).toEqual(['a', 'b']);
   });
+  it('players with no verified match get no rank, whatever their rating', () => {
+    const r = rankPlayers([P('a', 1400, 3), P('fresh', 1500, 0), P('b', 1350, 1)]);
+    expect(r).toEqual({ a: 1, b: 2 });
+    expect(r.fresh).toBeUndefined();
+  });
 });
 
 
 
 describe('active ranking', () => {
   const P = (id, rating, last) => ({ id, rating, played: 3, created_date: '2026-01-01', last_verified_at: last });
-  it('inactive players (last verified match older than cutoff) get no rank; never-played stay ranked', () => {
+  it('inactive players (last verified match older than cutoff) get no rank', () => {
     const r = rankPlayers([P('a', 1500, '2026-01-01T00:00:00Z'), P('b', 1400, '2026-03-01T00:00:00Z'), P('c', 1300, null), P('d', 1450, '2026-03-02T00:00:00Z')], '2026-02-01T00:00:00Z');
     expect(r).toEqual({ d: 1, b: 2, c: 3 });
     expect(r.a).toBeUndefined();
@@ -182,6 +187,7 @@ describe('active ranking', () => {
   it('SQL mirrors it', () => {
     expect(RANK_SQL).toContain('singles_last_verified_at');
     expect(RANK_SQL).toContain('PARTITION BY active');
+    expect(RANK_SQL).toContain('(singles_wins + singles_losses) > 0');
   });
 });
 

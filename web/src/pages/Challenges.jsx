@@ -299,7 +299,9 @@ export function Challenges() {
             <p className="mt-2 text-sm text-muted-foreground">Loading the ladder…</p>
           ) : myRank === 0 ? (
             <p className="mt-2 text-sm text-muted-foreground">
-              You are not on the ranked ladder right now — play a verified singles match to get back on it.
+              {(Number(player?.singles_wins) || 0) + (Number(player?.singles_losses) || 0) === 0
+                ? "You are not ranked yet. Play your first verified singles match to get a ladder position, then you can challenge upward."
+                : "You are not on the ranked ladder right now — play a verified singles match to get back on it."}
             </p>
           ) : myRank === 1 ? (
             <p className="mt-2 text-sm text-muted-foreground">

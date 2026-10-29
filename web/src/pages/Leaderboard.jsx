@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useMyPlayer } from "@/hooks/useMyPlayer";
-import { matchesPlayed, overallRating, PROVISIONAL_MATCHES, ACTIVE_DAYS, isInactive, rankFor, ratingFor, streakFor } from "@/lib/ladder";
+import { matchesPlayed, overallRating, playerName, PROVISIONAL_MATCHES, ACTIVE_DAYS, isInactive, rankFor, ratingFor, streakFor } from "@/lib/ladder";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { LadderRow } from "@/components/LadderRow";
@@ -51,10 +51,19 @@ export function Leaderboard() {
               })),
       [players, view],
     ),
+    // Never played this format (or anything, for Overall): no rank, rating shown as "nil", listed last.
+    unratedRows = useMemo(() => {
+      const played = (p) => (view === "overall" ? matchesPlayed(p, "singles") + matchesPlayed(p, "doubles") : matchesPlayed(p, view));
+      return players
+        .filter((p) => played(p) === 0)
+        .sort((a, b) => playerName(a).localeCompare(playerName(b)))
+        .map((e) => ({ player: e, rank: 0, rating: null, wins: 0, losses: 0, streak: 0 }));
+    }, [players, view]),
     rows = useMemo(() => {
       if (view === "overall") {
         // Display-only blend of two independent ratings; computed here, never stored or fed back.
-        return [...players]
+        return players
+          .filter((e) => matchesPlayed(e, "singles") + matchesPlayed(e, "doubles") > 0)
           .sort((e, t) => overallRating(t) - overallRating(e))
           .map((e, t) => ({
             player: e,
@@ -108,7 +117,7 @@ export function Leaderboard() {
           <div className="flex justify-center py-16">
             <div className="h-7 w-7 animate-spin rounded-full border-2 border-border border-t-foreground" />
           </div>
-        ) : rows.length === 0 ? (
+        ) : rows.length === 0 && unratedRows.length === 0 ? (
           <EmptyState
             title="Nobody on the ladder yet"
             body="Create a profile and record the first match to open the table."
@@ -135,6 +144,9 @@ export function Leaderboard() {
               {rows.map((e) => (
                 <LadderRow {...e} provisional={e.wins + e.losses < PROVISIONAL_MATCHES} key={e.player.id} />
               ))}
+              {unratedRows.map((e) => (
+                <LadderRow {...e} unrated key={e.player.id} />
+              ))}
             </ul>
           </div>
         )}
@@ -155,9 +167,9 @@ export function Leaderboard() {
         )}
         <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
           {view === "singles"
-            ? "Singles rank is rating order for active players (a verified singles match in the last 30 days). Ties go to whoever has played more."
+            ? "Singles rank is rating order for active players (a verified singles match in the last 30 days). Ties go to whoever has played more. Players with no singles match yet show nil and sit at the bottom until their first verified result."
             : view === "doubles"
-              ? "Doubles is its own ladder: doubles rating, doubles rank, doubles activity. It only moves on verified doubles results and never touches singles."
+              ? "Doubles is its own ladder: doubles rating, doubles rank, doubles activity. It only moves on verified doubles results and never touches singles. No doubles match yet = nil, at the bottom."
               : "Overall is only a blend of your two separate ratings, weighted by how much you have played each. It is not used for any rating or rank."}
         </p>
         <Link to="/rules" className="inline-flex min-h-10 items-center text-xs text-brand underline underline-offset-2">

@@ -418,11 +418,12 @@ export function summarizeGames(games) {
 /**
  * Leaderboard order: rating DESC, then games played DESC, then created_date ASC, then id.
  * `players`: [{ id, rating, played, created_date, last_verified_at? }]. Returns { id: rank } with ranks 1..N.
- * With `activeSince` (ISO), players whose LAST verified match is older than that get no rank (inactive);
- * players with no verified match at all stay ranked. Must mirror RANK_SQL below.
+ * Players who have not played a verified match in the format get no rank (unrated: "nil", listed last).
+ * With `activeSince` (ISO), players whose LAST verified match is older than that get no rank (inactive).
+ * Must mirror RANK_SQL below.
  */
 export function rankPlayers(players, activeSince = null) {
-  const active = (p) => !activeSince || !p.last_verified_at || p.last_verified_at >= activeSince;
+  const active = (p) => p.played > 0 && (!activeSince || !p.last_verified_at || p.last_verified_at >= activeSince);
   const sorted = players.filter(active).sort((a, b) =>
     b.rating - a.rating || b.played - a.played ||
     (a.created_date < b.created_date ? -1 : a.created_date > b.created_date ? 1 : 0) ||
@@ -436,10 +437,11 @@ export function rankPlayers(players, activeSince = null) {
 const rankSqlFor = (fmt) => `UPDATE players SET ${fmt}_rank = r.rk FROM (
   SELECT id, CASE WHEN active THEN ROW_NUMBER() OVER (PARTITION BY active
     ORDER BY ${fmt}_rating DESC, (${fmt}_wins + ${fmt}_losses) DESC, created_date ASC, id ASC) END AS rk
-  FROM (SELECT *, (${fmt}_last_verified_at IS NULL OR ${fmt}_last_verified_at >= ?) AS active FROM players)) AS r
+  FROM (SELECT *, ((${fmt}_wins + ${fmt}_losses) > 0
+    AND (${fmt}_last_verified_at IS NULL OR ${fmt}_last_verified_at >= ?)) AS active FROM players)) AS r
   WHERE players.id = r.id AND players.${fmt}_rank IS NOT r.rk`;
 
-/** Rewrites players.singles_rank from singles ratings (same order as rankPlayers); bind ONE param: the activeSince ISO cutoff. Inactive = NULL. */
+/** Rewrites players.singles_rank from singles ratings (same order as rankPlayers); bind ONE param: the activeSince ISO cutoff. Inactive or unplayed = NULL. */
 export const RANK_SQL = rankSqlFor('singles');
 /** Rewrites players.doubles_rank from doubles ratings / doubles games / doubles activity only. Same single param. */
 export const DOUBLES_RANK_SQL = rankSqlFor('doubles');

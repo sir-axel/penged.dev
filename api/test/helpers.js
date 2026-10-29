@@ -1,5 +1,6 @@
 import { getPlatformProxy } from 'wrangler';
 import { createApp } from '../src/app.js';
+import { RANK_SQL, DOUBLES_RANK_SQL, ACTIVE_DAYS } from '../src/rating.js';
 
 const proxy = await getPlatformProxy({ configPath: 'wrangler.test.toml', persist: { path: '.wrangler/test-state/v3' } });
 // Real local D1 + R2 (miniflare); config values pinned for determinism.
@@ -66,3 +67,18 @@ export const appWith = (overrides) => {
 
 /** Promote a signed-up user to admin (what `npm run make-admin` does). */
 export const makeAdmin = (u) => env.DB.prepare(`UPDATE "user" SET role = 'admin' WHERE id = ?`).bind(u.id).run();
+
+/**
+ * Put players on the ladder: one prior verified match on record in the format (a loss, so rating is untouched),
+ * then recompute ranks the way the app does. created_date is untouched, so join-order tie-breaks stay as before.
+ */
+export async function seasoned(...args) {
+  const fmt = typeof args[args.length - 1] === 'string' ? args.pop() : 'singles';
+  const now = new Date().toISOString();
+  for (const p of args) {
+    await env.DB.prepare(`UPDATE players SET ${fmt}_losses = ${fmt}_losses + 1, ${fmt}_last_verified_at = ? WHERE id = ?`).bind(now, p.player.id).run();
+  }
+  const cut = new Date(Date.now() - ACTIVE_DAYS * 86400000).toISOString();
+  await env.DB.prepare(RANK_SQL).bind(cut).run();
+  await env.DB.prepare(DOUBLES_RANK_SQL).bind(cut).run();
+}

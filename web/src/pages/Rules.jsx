@@ -42,7 +42,7 @@ export const RULE_SECTIONS = [
   {
     title: "Ranking",
     items: [
-      "Rank is your place in the rating order. New players start at 1400 and slot in by rating.",
+      "Rank is your place in the rating order. New players start at 1400 but are unranked (shown as nil, at the bottom of the board) until their first verified match in that format, then slot in by rating.",
       "Win and your rating rises, so you pass everyone you now out-rate. Ties go to whoever has played more, then whoever joined first.",
       "Stay active: with no verified match of a format in 30 days you move to that format's Inactive list (singles and doubles are tracked separately), keeping your rating, and are ranked again when you next play it. Under 5 matches is marked provisional.",
       "Beating someone far below you earns little rating, so it barely moves you.",

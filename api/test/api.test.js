@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterAll } from 'vitest';
-import { app, appWith, env, dispose, reset, signUp, call, get, mkPlayer, makeAdmin } from './helpers.js';
+import { app, appWith, env, dispose, reset, signUp, call, get, mkPlayer, makeAdmin, seasoned } from './helpers.js';
 import worker from '../src/worker.js';
 import { hashPassword, verifyPassword } from '../src/password.js';
 
@@ -38,14 +38,14 @@ describe('auth + health', () => {
 describe('players', () => {
   it('create, uniqueness, validation, update', async () => {
     const a = await mkPlayer('Alice');
-    expect(a.player).toMatchObject({ singles_rating: 1400, doubles_rating: 1400, singles_rank: 1, xp: 0, level: 1, display_name: 'Alice' });
+    expect(a.player).toMatchObject({ singles_rating: 1400, doubles_rating: 1400, singles_rank: null, doubles_rank: null, xp: 0, level: 1, display_name: 'Alice' });
     const b = await signUp('b@x.test', 'bob');
     expect((await call(b, 'createPlayer', { username: 'alice' })).status).toBe(409);
     expect((await call(b, 'createPlayer', { username: 'x' })).status).toBe(400);
     expect((await call(b, 'createPlayer', { username: 'bad name' })).status).toBe(400);
     expect((await call(b, 'createPlayer', { username: 'Bobby', avatar_url: 'javascript:alert(1)' })).status).toBe(400);
     const ok = await call(b, 'createPlayer', { username: 'Bobby' });
-    expect(ok.body.player.singles_rank).toBe(2);
+    expect(ok.body.player.singles_rank).toBeNull(); // unranked until the first verified match
     expect((await call(b, 'createPlayer', { username: 'Bobby2' })).status).toBe(409);
     const up = await call(b, 'updatePlayer', { bio: 'hi', display_name: 'Bob B' });
     expect(up.body.player).toMatchObject({ bio: 'hi', display_name: 'Bob B' });
@@ -56,9 +56,10 @@ describe('players', () => {
 
 describe('match flow', () => {
   it('submit, accept, verify with ratings, xp and rating-derived ranks', async () => {
-    const a = await mkPlayer('Alice'); // rank 1
-    const b = await mkPlayer('Bobby'); // rank 2
-    // Bob (rank 2) submits and wins; Alice must confirm
+    const a = await mkPlayer('Alice'); // unranked until a verified match
+    const b = await mkPlayer('Bobby');
+    expect(b.player.singles_rank).toBeNull();
+    // Bob submits and wins; Alice must confirm
     const sub = await call(b, 'submitMatch', {
       format: 'singles', target: 11, side_a: [{ player_id: b.player.id }], side_b: [{ player_id: a.player.id }], games,
     });
@@ -78,9 +79,9 @@ describe('match flow', () => {
     expect(rc.find((x) => x.player_id === b.player.id)).toMatchObject({ before: 1400, after: 1480, delta: 80, xp_gained: 25 + 25 + 10 + 10 + 10 }); // +10 new rival
     expect(rc.find((x) => x.player_id === a.player.id)).toMatchObject({ delta: -80, xp_gained: 25 + 10 + 10 });
     const players = (await get('/api/entities/Player?sort=singles_rank')).body.items;
-    expect(players.map((p) => [p.username, p.singles_rank])).toEqual([['Bobby', 1], ['Carol', 2], ['Alice', 3]]);
+    expect(players.map((p) => [p.username, p.singles_rank])).toEqual([['Bobby', 1], ['Alice', 2], ['Carol', null]]); // only those who played are ranked; unplayed Carol sorts last
     expect(players[0]).toMatchObject({ singles_wins: 1, xp: 80, level: 2, singles_rating: 1480, singles_win_streak: 1, singles_best_streak: 1 });
-    expect(players[2]).toMatchObject({ singles_losses: 1, xp: 45, singles_rating: 1320, singles_win_streak: 0 });
+    expect(players[1]).toMatchObject({ singles_losses: 1, xp: 45, singles_rating: 1320, singles_win_streak: 0 });
     // second response after verification is rejected
     expect((await call(a, 'respondMatch', { match_id: m.id, decision: 'accept' })).status).toBe(400);
   });
@@ -128,8 +129,9 @@ describe('match flow', () => {
     expect((await call(b, 'respondMatch', { match_id: id, decision: 'accept' })).body.match.status).toBe('pending');
     const last = await call(c, 'respondMatch', { match_id: id, decision: 'accept' });
     expect(last.body.match.status).toBe('verified');
-    const ps = (await get('/api/entities/Player?sort=singles_rank')).body.items;
+    const ps = (await get('/api/entities/Player?sort=created_date')).body.items;
     expect(ps.map((p) => p.username)).toEqual(['Aa1', 'Bb2', 'Cc3', 'Dd4']);
+    expect(ps.every((p) => p.singles_rank === null)).toBe(true); // a doubles match does not put anyone on the singles ladder
     expect(ps.find((p) => p.username === 'Dd4')).toMatchObject({ doubles_wins: 1, doubles_game_wins: 1, doubles_game_losses: 0, singles_game_wins: 0, doubles_rating: 1440, singles_rating: 1400 });
   });
 });
@@ -139,6 +141,10 @@ describe('challenges', () => {
     const ps = [];
     for (const n of ['Aa1', 'Bb2', 'Cc3', 'Dd4', 'Ee5']) ps.push(await mkPlayer(n));
     const [a, b, c, d, e] = ps;
+    // a fresh player has no ladder position: cannot challenge, cannot be challenged
+    expect((await call(e, 'createChallenge', { defender_player_id: b.player.id })).status).toBe(400);
+    expect((await call(b, 'createChallenge', { defender_player_id: e.player.id })).status).toBe(400);
+    await seasoned(...ps);
     expect((await call(e, 'createChallenge', { defender_player_id: a.player.id })).status).toBe(400); // 4 above
     expect((await call(e, 'createChallenge', { defender_player_id: e.player.id })).status).toBe(400);
     expect((await call(a, 'createChallenge', { defender_player_id: e.player.id })).status).toBe(400); // below
@@ -173,7 +179,9 @@ describe('challenge penalties', () => {
   const trio = async () => {
     const admin = await signUp('admin@penged.test', 'boss');
     await makeAdmin(admin);
-    return { admin, a: await mkPlayer('Aa1'), b: await mkPlayer('Bb2'), c: await mkPlayer('Cc3') };
+    const ps = { a: await mkPlayer('Aa1'), b: await mkPlayer('Bb2'), c: await mkPlayer('Cc3') };
+    await seasoned(ps.a, ps.b, ps.c); // on the ladder (a fresh player has no rank until a verified match)
+    return { admin, ...ps };
   };
   /** Insert a verified singles match between two players, `ago` ms in the past. */
   const verified = (p, q, ago = 3600e3, format = 'singles') => sql(
@@ -317,6 +325,7 @@ describe('rating-derived ranks', () => {
 
   it('a win moves you past everyone you now out-rate, not just the opponent', async () => {
     const a = await mkPlayer('Aa1'); const b = await mkPlayer('Bb2'); const c = await mkPlayer('Cc3');
+    await seasoned(a, b, c);
     await win(c, a); // c 1480, a 1320, b 1400
     expect(await ranks()).toEqual([['Cc3', 1, 1480], ['Bb2', 2, 1400], ['Aa1', 3, 1320]]);
     void b;
@@ -324,6 +333,7 @@ describe('rating-derived ranks', () => {
 
   it('a lower-rated winner who stays below the loser does not take the loser spot', async () => {
     const a = await mkPlayer('Aa1'); const b = await mkPlayer('Bb2');
+    await seasoned(a, b);
     await sql('UPDATE players SET singles_rating = 1600 WHERE id = ?', a.player.id);
     await sql('UPDATE players SET singles_rating = 1400 WHERE id = ?', b.player.id);
     await call(a, 'syncLadder'); // recompute
@@ -333,18 +343,29 @@ describe('rating-derived ranks', () => {
     expect(r[0][2]).toBeGreaterThan(r[1][2]);
   });
 
-  it('new players join at 1400 in the right position; deleting leaves no gaps', async () => {
+  it('new players have no rank until their first verified match; deleting leaves no gaps', async () => {
     const a = await mkPlayer('Aa1'); const b = await mkPlayer('Bb2');
-    await win(a, b); // a 1480, b 1320
-    const c = await mkPlayer('Cc3'); // 1400 -> between them
-    expect(await ranks()).toEqual([['Aa1', 1, 1480], ['Cc3', 2, 1400], ['Bb2', 3, 1320]]);
-    expect(c.player.singles_rank).toBe(2); // derived in the same batch as the insert
+    expect(a.player.singles_rank).toBeNull();
+    expect(b.player.singles_rank).toBeNull();
+    await win(a, b); // a 1480, b 1320: only players with a verified match are ranked
+    const c = await mkPlayer('Cc3'); // 1400 but unplayed -> no rank, listed last
+    expect(c.player.singles_rank).toBeNull();
+    expect(await ranks()).toEqual([['Aa1', 1, 1480], ['Bb2', 2, 1320], ['Cc3', null, 1400]]);
+    // a fresh player can neither challenge nor be challenged until they have played
+    expect((await call(c, 'createChallenge', { defender_player_id: a.player.id })).status).toBe(400);
+    expect((await call(b, 'createChallenge', { defender_player_id: c.player.id })).status).toBe(400);
+    await win(c, b); // c's first verified match: 1400 -> 1480ish, b drops further
+    const r = await ranks();
+    expect(r.map((x) => x[1])).toEqual([1, 2, 3]);
+    expect(r.map((x) => x[0]).slice(-1)).toEqual(['Bb2']);
     await call(c, 'deleteAccount', { confirm: 'DELETE' });
-    expect(await ranks()).toEqual([['Aa1', 1, 1480], ['Bb2', 2, 1320]]);
+    expect(await ranks()).toEqual([['Aa1', 1, 1480], ['Bb2', 2, expect.any(Number)]]);
   });
 
   it('ties are deterministic: more games played first, then earlier joiner', async () => {
     const a = await mkPlayer('Aa1'); const b = await mkPlayer('Bb2'); const c = await mkPlayer('Cc3');
+    expect((await ranks()).map((x) => x[1])).toEqual([null, null, null]); // nobody has played
+    await seasoned(a, b, c);
     expect((await ranks()).map((x) => x[0])).toEqual(['Aa1', 'Bb2', 'Cc3']);
     await sql('UPDATE players SET singles_wins = 3 WHERE id = ?', c.player.id);
     await call(a, 'syncLadder');
@@ -354,6 +375,7 @@ describe('rating-derived ranks', () => {
 
   it('challenge eligibility reads the rating order (1-3 places above)', async () => {
     const a = await mkPlayer('Aa1'); const b = await mkPlayer('Bb2'); const c = await mkPlayer('Cc3');
+    await seasoned(a, b, c);
     await win(c, a); await call(c, 'syncLadder'); // order: Cc3, Bb2, Aa1
     expect((await call(c, 'createChallenge', { defender_player_id: a.player.id })).status).toBe(400); // a is below c now
     const ok = await call(a, 'createChallenge', { defender_player_id: c.player.id }); // 2 above
@@ -364,6 +386,7 @@ describe('rating-derived ranks', () => {
 
   it('ranks swap when an expiry walkover makes the points cross', async () => {
     const a = await mkPlayer('Aa1'); const b = await mkPlayer('Bb2');
+    await seasoned(a, b);
     await sql('UPDATE players SET singles_rating = 1405 WHERE id = ?', a.player.id);
     await call(a, 'syncLadder');
     const ch = (await call(b, 'createChallenge', { defender_player_id: a.player.id })).body.challenge;
@@ -381,12 +404,14 @@ describe('rating-derived ranks', () => {
 
   it('migration/recompute SQL equals the pure helper on a mixed roster', async () => {
     const ps = [];
-    for (const n of ['Aa1', 'Bb2', 'Cc3', 'Dd4']) ps.push(await mkPlayer(n));
+    for (const n of ['Aa1', 'Bb2', 'Cc3', 'Dd4', 'Ee5']) ps.push(await mkPlayer(n));
+    await seasoned(...ps.slice(0, 4)); // Ee5 never played: unranked
     await sql('UPDATE players SET singles_rating = 1500 WHERE id = ?', ps[3].player.id);
     await sql('UPDATE players SET singles_rating = 1300, singles_wins = 2 WHERE id = ?', ps[0].player.id);
     await sql('UPDATE players SET singles_rating = 1300, singles_wins = 4 WHERE id = ?', ps[1].player.id);
     await call(ps[0], 'syncLadder');
-    expect((await ranks()).map((x) => x[0])).toEqual(['Dd4', 'Cc3', 'Bb2', 'Aa1']);
+    expect((await ranks()).map((x) => x[0])).toEqual(['Dd4', 'Cc3', 'Bb2', 'Aa1', 'Ee5']);
+    expect((await ranks()).map((x) => x[1])).toEqual([1, 2, 3, 4, null]);
   });
 });
 
@@ -448,6 +473,9 @@ describe('entity layer', () => {
   it('filters, operators, sorting, arrays, counts, errors', async () => {
     const ps = [];
     for (const n of ['Aa1', 'Bb2', 'Cc3', 'Dd4']) ps.push(await mkPlayer(n));
+    // fresh players are unranked, and NULL ranks sort last in both directions
+    expect((await get('/api/entities/Player?sort=singles_rank')).body.items.map((p) => p.singles_rank)).toEqual([null, null, null, null]);
+    await seasoned(...ps);
     const q = (e, f, extra = '') => get(`/api/entities/${e}?filter=${encodeURIComponent(JSON.stringify(f))}${extra}`);
     const range = await q('Player', { singles_rank: { $gte: 2, $lte: 3 } }, '&sort=singles_rank');
     expect(range.body.items.map((p) => p.username)).toEqual(['Bb2', 'Cc3']);
@@ -512,6 +540,7 @@ describe('deleteAccount', () => {
     const a = await mkPlayer('Alice');
     const b = await mkPlayer('Bobby');
     const c = await mkPlayer('Carol');
+    await seasoned(a, b, c);
     const done = (await submit(b, b.player, a.player)).body.match;
     await call(a, 'respondMatch', { match_id: done.id, decision: 'accept' });
     const pending = (await submit(a, a.player, c.player)).body.match;
@@ -535,7 +564,7 @@ describe('deleteAccount', () => {
 describe('atomicity / races (D1 batch guards)', () => {
   it('concurrent challenges from one challenger: exactly one succeeds', async () => {
     const [a, b, c] = [await mkPlayer('Aa1'), await mkPlayer('Bb2'), await mkPlayer('Cc3')];
-    void a;
+    await seasoned(a, b, c);
     const rs = await Promise.all([
       call(c, 'createChallenge', { defender_player_id: a.player.id }),
       call(c, 'createChallenge', { defender_player_id: b.player.id }),
@@ -617,6 +646,7 @@ describe('scheduled handler', () => {
   it('expires overdue challenges via the cron entry', async () => {
     const a = await mkPlayer('Aa1');
     const b = await mkPlayer('Bb2');
+    await seasoned(a, b);
     await call(b, 'createChallenge', { defender_player_id: a.player.id });
     await sql('UPDATE challenges SET expires_at = ?', past());
     const pending = [];
@@ -666,6 +696,7 @@ describe('review fixes', () => {
   it('H1: playing an accepted challenge completes it and frees the challenger', async () => {
     const a = await mkPlayer('Aa1');
     const b = await mkPlayer('Bb2');
+    await seasoned(a, b);
     const ch = (await call(b, 'createChallenge', { defender_player_id: a.player.id })).body.challenge;
     await call(a, 'respondChallenge', { challenge_id: ch.id, decision: 'accept' });
     expect((await call(b, 'createChallenge', { defender_player_id: a.player.id })).status).toBe(409);
@@ -680,6 +711,7 @@ describe('review fixes', () => {
   it('H1: a match submitted BEFORE acceptance does not complete the challenge; unplayed accepted challenges expire', async () => {
     const a = await mkPlayer('Aa1');
     const b = await mkPlayer('Bb2');
+    await seasoned(a, b);
     const m = (await single(b, b.player, a.player)).body.match; // submitted first
     const ch = (await call(b, 'createChallenge', { defender_player_id: a.player.id })).body.challenge;
     await call(a, 'respondChallenge', { challenge_id: ch.id, decision: 'accept' });
@@ -828,14 +860,16 @@ describe('rating factors wired through verification', () => {
   it('players idle more than 30 days drop off the ranked ladder and re-rank when they play', async () => {
     const a = await mkPlayer('Aa1'); const b = await mkPlayer('Bb2'); const c = await mkPlayer('Cc3');
     await play(a, b);
+    expect((await get('/api/entities/Player/' + c.player.id)).body.singles_rank).toBeNull(); // never played: no rank
     await sql('UPDATE players SET singles_last_verified_at = ? WHERE id = ?', new Date(Date.now() - 40 * 86400e3).toISOString(), b.player.id);
     await call(a, 'syncLadder');
     const rows = (await get('/api/entities/Player?sort=singles_rank')).body.items;
     const rk = Object.fromEntries(rows.map((p) => [p.username, p.singles_rank]));
     expect(rk.Bb2).toBeNull();
     expect(rk.Aa1).toBe(1);
-    expect(rk.Cc3).toBe(2); // never played: stays ranked
+    expect(rk.Cc3).toBeNull(); // never played: no rank
     expect((await call(c, 'createChallenge', { defender_player_id: b.player.id })).status).toBe(400); // not ranked
+    expect((await call(b, 'createChallenge', { defender_player_id: a.player.id })).status).toBe(400); // idle challenger is unranked too
     await play(b, a);
     const rows2 = (await get('/api/entities/Player?sort=singles_rank')).body.items;
     expect(rows2.find((p) => p.username === 'Bb2').singles_rank).toBeGreaterThan(0);
@@ -843,6 +877,7 @@ describe('rating factors wired through verification', () => {
 
   it('a match that plays an accepted challenge counts x1.25', async () => {
     const [a, b, c] = [await mkPlayer('Aa1'), await mkPlayer('Bb2'), await mkPlayer('Cc3')];
+    await seasoned(a, b, c);
     const ch = (await call(c, 'createChallenge', { defender_player_id: b.player.id })).body.challenge;
     await call(b, 'respondChallenge', { challenge_id: ch.id, decision: 'accept' });
     await new Promise((r) => setTimeout(r, 5));

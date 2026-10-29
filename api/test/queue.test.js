@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterAll } from 'vitest';
-import { env, dispose, reset, call, mkPlayer } from './helpers.js';
+import { env, dispose, reset, call, mkPlayer, seasoned } from './helpers.js';
 
 beforeEach(reset);
 afterAll(() => dispose());
@@ -16,6 +16,7 @@ describe('myQueueCount', () => {
     const a = await mkPlayer('Alice');
     const b = await mkPlayer('Bobby');
     const c = await mkPlayer('Carol');
+    await seasoned(a, b, c); // on the ladder, so Carol can challenge up
     expect((await call(b, 'myQueueCount')).body).toEqual({ matches: 0, challenges: 0, total: 0 });
     const m = (await submit(a, a.player, b.player)).body.match;
     expect((await call(a, 'myQueueCount')).body.total).toBe(0); // submitter already accepted
