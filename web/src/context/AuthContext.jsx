@@ -23,6 +23,7 @@ export function AuthProvider({ children }) {
 
   // Patch the cached user after a preference change so effects don't re-apply a stale server value.
   const setUserTheme = useCallback((theme) => setUser((u) => (u ? { ...u, theme } : u)), []);
+  const patchUser = useCallback((fields) => setUser((u) => (u ? { ...u, ...fields } : u)), []);
 
   const logout = useCallback(async (redirect = true) => {
     setUser(null);
@@ -31,8 +32,8 @@ export function AuthProvider({ children }) {
   }, []);
 
   const value = useMemo(
-    () => ({ user, isAuthenticated: !!user, isLoadingAuth, logout, checkUserAuth, setUserTheme }),
-    [user, isLoadingAuth, logout, checkUserAuth, setUserTheme],
+    () => ({ user, isAuthenticated: !!user, isLoadingAuth, logout, checkUserAuth, setUserTheme, patchUser }),
+    [user, isLoadingAuth, logout, checkUserAuth, setUserTheme, patchUser],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
