@@ -880,13 +880,14 @@ fns.createChallenge = ({ env, user }, body) =>
 
 /**
  * What taking back your own regular singles challenge `c` would cost you: the same as ducking that player (you as the
- * defender, them as the challenger; half when they are rated above you), waived if you played them this week.
+ * defender, them as the challenger; half when they are rated above you). Always costs something.
  */
 async function revokeCost(env, c, me, def) {
   const ranks = rankPlayers(await rankRows(env), activeCut());
   const gap = ranks[me.id] != null && ranks[def.id] != null ? Math.abs(ranks[me.id] - ranks[def.id]) : 1;
   const facts = await penaltyFacts(env, c);
-  return penaltyOf('declined', me, def, gap, { ...facts, direction: def.singles_rating > me.singles_rating ? 'down' : 'up' });
+  // Never waived: the "played them this week" pass is for answering someone else's challenge, not for taking back your own.
+  return penaltyOf('declined', me, def, gap, { ...facts, recentPairMatch: false, direction: def.singles_rating > me.singles_rating ? 'down' : 'up' });
 }
 
 async function ownLiveChallenge(env, user, id) {

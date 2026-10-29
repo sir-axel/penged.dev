@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, LoaderCircle, Undo2 } from "lucide-react";
+import { Check, LoaderCircle, Search, Undo2 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useMyPlayer } from "@/hooks/useMyPlayer";
 import { PageHeader } from "@/components/PageHeader";
@@ -215,7 +215,14 @@ function RevokeButton({ challenge, targets, atLimit, busy, onSwap, onRevoke }) {
     queryFn: async () => (await api.functions.invoke("revokeQuote", { challenge_id: challenge.id })).data,
   });
   const cost = data?.revoke?.penalty ?? null;
-  const options = targets.filter((p) => p.id !== challenge.defender_player_id && !atLimit[p.id]);
+  const [q, setQ] = useState("");
+  const needle = q.trim().toLowerCase();
+  const options = targets.filter(
+    (p) =>
+      p.id !== challenge.defender_player_id &&
+      !atLimit[p.id] &&
+      (!needle || playerName(p).toLowerCase().includes(needle) || String(p.username || "").toLowerCase().includes(needle)),
+  );
   const bountyOf = useBounties("singles");
   return (
     <AlertDialog open={open} onOpenChange={setOpen}>
@@ -242,6 +249,17 @@ function RevokeButton({ challenge, targets, atLimit, busy, onSwap, onRevoke }) {
             <p className="text-sm font-medium">
               Swap to someone else <span className="font-mono text-xs text-success">· free</span>
             </p>
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+              <input
+                type="search"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Search players"
+                aria-label="Search players to swap to"
+                className="h-11 w-full rounded-sm border border-input bg-card pl-9 pr-3 text-base outline-none focus:border-foreground/40 lg:text-sm"
+              />
+            </div>
             <ul
               id={`swap-${challenge.id}`}
               role="listbox"
@@ -271,7 +289,11 @@ function RevokeButton({ challenge, targets, atLimit, busy, onSwap, onRevoke }) {
                   </li>
                 );
               })}
-              {!options.length && <li className="px-2 py-4 text-center text-sm text-muted-foreground">Nobody else can take a challenge right now.</li>}
+              {!options.length && (
+                <li className="px-2 py-4 text-center text-sm text-muted-foreground">
+                  {needle ? `Nobody matches "${q.trim()}".` : "Nobody else can take a challenge right now."}
+                </li>
+              )}
             </ul>
             <Button className="h-11 w-full rounded-sm" disabled={!swapTo || busy} onClick={async () => (await onSwap(swapTo), setOpen(false))}>
               {swapTo ? `Swap to ${playerName(options.find((p) => p.id === swapTo) || {})}` : "Pick a player to swap to"}

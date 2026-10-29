@@ -64,3 +64,15 @@ describe('taking back a challenge you sent', () => {
     expect((await ent('Challenge', ch.id)).status).toBe('open');
   });
 });
+
+describe('revoking for good always costs', () => {
+  it('even right after playing them this week', async () => {
+    const [a, , c] = await ladder('Aa1', 'Bb2', 'Cc3');
+    const s = await call(c, 'submitMatch', { format: 'singles', target: 11, side_a: [{ player_id: c.player.id }], side_b: [{ player_id: a.player.id }], games: [{ a: 11, b: 9 }, { a: 11, b: 9 }] });
+    await call(a, 'respondMatch', { match_id: s.body.match.id, decision: 'accept' });
+    const ch = (await single(c, a)).body.challenge;
+    const q = (await call(c, 'revokeQuote', { challenge_id: ch.id })).body;
+    expect(q.revoke.penalty).toBeGreaterThan(0);
+    expect((await call(c, 'revokeChallenge', { challenge_id: ch.id })).body.penalty).toBe(q.revoke.penalty);
+  });
+});
