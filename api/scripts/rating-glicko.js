@@ -12,7 +12,7 @@
 import {
   movMultiplier, autocorrMultiplier, evidenceWeight, repeatFactor, teammateFactor, paddleEdge, gameDominance,
   dominance as matchDominance, CHALLENGE_STAKES, MAX_GAME_DELTA, MAX_DELTA, RATING_FLOOR, START_RATING,
-} from '../src/rating.js';
+} from './rating-elo.js';
 
 export const Q = 400 / Math.LN10; // 173.7178: Glicko-2 scale
 export const DEFAULTS = {

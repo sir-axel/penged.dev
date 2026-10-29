@@ -3,7 +3,7 @@
 // Usage: node scripts/simulate.js [--seeds 200] [--matches 600] [--out path.md]            full comparison tables
 //        node scripts/simulate.js --sweep [--seeds 60]                                      GAME_K_SCALE x K_DECAY_GAMES grid
 import { writeFileSync } from 'node:fs';
-import { rateMatch as rateGame, expectedScore, paddleEdge, meetingWeight, REPEAT_WINDOW_DAYS, GAME_K_SCALE, K_DECAY_GAMES } from '../src/rating.js';
+import { rateMatch as rateGame, expectedScore, paddleEdge, meetingWeight, REPEAT_WINDOW_DAYS, GAME_K_SCALE, K_DECAY_GAMES } from './rating-elo.js';
 import { rateMatch as rateOld } from './rating-match-level.js';
 
 // ---------------- original legacy rules (verbatim behaviour before the paddle-edge / smooth-K work) ----------------

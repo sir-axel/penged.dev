@@ -2,8 +2,9 @@
 // Every system replays the SAME generated schedule per seed (common random numbers): the world (who plays whom, scores)
 // never depends on ratings, so differences are purely the rating rules.
 // Run via: node scripts/simulate.js --scenarios [--seeds 100] [--out ../../penged-qa/elo-glicko.md] [--systems a,b]
-import { rateMatch, expectedScore, paddleEdge, REPEAT_WINDOW_DAYS } from '../src/rating.js';
+import { rateMatch, expectedScore, paddleEdge, REPEAT_WINDOW_DAYS } from './rating-elo.js';
 import { rateMatchGlicko, predictGlicko, DEFAULTS as G2 } from './rating-glicko.js';
+import { rateMatch as rateShipped, predictGame, RD_START, VOL_START } from '../src/rating.js';
 
 // ---------------- helpers ----------------
 export function rng(seed) { let s = seed >>> 0; return () => { s = (s + 0x6D2B79F5) >>> 0; let t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
@@ -148,18 +149,10 @@ export const PICK = { volMode: 'momentum', scale: 0.5, formAlpha: 0.06, formFree
 export const BASELINE = { kind: 'cur', decay: 30, rustFirstGameOnly: true, rustMax: 0.5, rustRamp2: 120 };
 export const SYSTEMS = {
   CURRENT: BASELINE,
-  'CURRENT K x1.4': { ...BASELINE, scale: 0.7 },
-  'TUNED w/o novelty': { kind: 'cur' },
-  'TUNED (shipped)': { kind: 'cur', novel: true },
-  'G2 tau.3': { kind: 'g2', cfg: { tau: 0.3 } },
-  'G2 tau.5': { kind: 'g2', cfg: { tau: 0.5 } },
-  'G2 tau1.0': { kind: 'g2', cfg: { tau: 1.0 } },
-  'G2 no-sigma': { kind: 'g2', cfg: { volFixed: true } },
+  'TUNED Elo': { kind: 'cur', novel: true },
   'G2 s.6': { kind: 'g2', cfg: { scale: 0.6 } },
-  'GLICKO2+': { kind: 'g2', cfg: PICK },
-  '+ novelty1.1': { kind: 'g2', cfg: { ...PICK, novelty: 1.1 } },
-  '- upset': { kind: 'g2', cfg: { ...PICK, ac: false } },
-  'rd0 150': { kind: 'g2', cfg: { ...PICK, rd0: 150 } },
+  'G2 s.6 + momentum': { kind: 'g2', cfg: { ...PICK, scale: 0.6 } },
+  'SHIPPED': { kind: 'ship' },
 };
 
 function runSystem(sys, world) {
@@ -205,6 +198,16 @@ function runSystem(sys, world) {
       const p0 = expectedScore(st.r[i] + eA, st.r[j] + eB);
       matchPred.push({ p: bestOfProb(p0, m.bestOf), won: m.winner === 'a', k: m.k });
       res[0].games.forEach((g, gi) => gamePred.push({ p: expectedScore(g.before + eA, res[1].games[gi].before + eB), won: m.games[gi].a > m.games[gi].b, k: m.k }));
+    } else if (sys.kind === 'ship') {
+      // the production code (src/rating.js): RD/vol per player, new rival x1.1 when not met in 30+ days
+      const novel = daysSinceMet == null || daysSinceMet >= 30;
+      res = rateShipped(parts.map((p) => ({ ...p, novel })), m.winner, m.games, { target: m.target });
+      const p0 = predictGame(st.r[i], res[0].rd_before, st.r[j], res[1].rd_before, eA, eB);
+      matchPred.push({ p: bestOfProb(p0, m.bestOf), won: m.winner === 'a', k: m.k });
+      res[0].games.forEach((g, gi) => {
+        const o = res[1].games[gi];
+        gamePred.push({ p: predictGame(g.before, g.rd_before, o.before, o.rd_before, eA, eB), won: m.games[gi].a > m.games[gi].b, k: m.k });
+      });
     } else {
       res = rateMatchGlicko(parts, m.winner, m.games, { target: m.target }, cfg);
       // predictive RD includes the idle growth the match itself applies
@@ -240,7 +243,7 @@ function runSystem(sys, world) {
         else if (t > rs.to && rs.post.length < 10) rs.post.push(Math.abs(after - f));
       }
       st.r[x] = after;
-      if (rr.rd_after != null) { st.rd[x] = rr.rd_after; st.vol[x] = rr.vol_after; st.form[x] = rr.form_after; }
+      if (rr.rd_after != null) { st.rd[x] = rr.rd_after; st.vol[x] = rr.vol_after; st.form[x] = rr.form_after ?? 0; }
       st.last[x] = t; st.gp[x] += m.games.length; st.mp[x]++;
     }
     hist.push(t);
