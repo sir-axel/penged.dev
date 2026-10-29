@@ -1044,7 +1044,7 @@ for (const n of [
   'dmMarkRead', 'mentionsList', 'mentionsMarkRead', 'chatUnread', 'playerSearch', 'block', 'unblock', 'report', 'adminReports', 'adminResolveReport',
 ]) fns[n] = chat[n];
 for (const n of [
-  'listGuilds', 'getGuild', 'guildTags', 'createGuild', 'updateGuild', 'joinGuild', 'requestJoinGuild', 'cancelJoinRequest', 'respondJoinRequest',
+  'listGuilds', 'getGuild', 'guildTags', 'createGuild', 'updateGuild', 'requestJoinGuild', 'cancelJoinRequest', 'respondJoinRequest',
   'leaveGuild', 'kickMember', 'transferLeadership',
 ]) fns[n] = guilds[n];
 

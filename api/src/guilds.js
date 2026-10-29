@@ -6,9 +6,8 @@ import { DEFAULT_TZ } from './weekdays.js';
 // Guilds: teams of up to MAX_MEMBERS players, one guild per player. The tables (migration 0021) are NOT in the
 // entity whitelist: reads and writes go through the functions below. Every membership change bumps guilds.version
 // and is guarded on the version that was read, so the member cap, leader checks and transfers never race.
-export const MAX_MEMBERS = 10;
+export const MAX_MEMBERS = 3;
 export const COLORS = ['red', 'orange', 'yellow', 'green', 'teal', 'blue', 'purple', 'pink'];
-export const JOIN_MODES = ['open', 'invite'];
 const MAX_REQUESTS_PER_PLAYER = 5;
 const MAX_REQUESTS_PER_GUILD = 20;
 const RATED_MIN = 5; // singles matches before a member counts toward the guild's average rating
@@ -59,10 +58,6 @@ function cleanDescription(v) {
   const d = v.replace(/\s+/g, ' ').trim();
   if (d.length > 140) throw bad('Descriptions are at most 140 characters.');
   return d || null;
-}
-function cleanJoinMode(v) {
-  if (!JOIN_MODES.includes(v)) throw bad('Join mode must be "open" or "invite".');
-  return v;
 }
 const needId = (v, what) => {
   if (!isStr(v) || !v) throw bad(`Missing ${what}.`);
@@ -140,7 +135,7 @@ async function rankedGuilds(env, weekStart) {
 }
 
 const pubGuild = (g) => ({
-  id: g.id, name: g.name, tag: g.tag, color: g.color, description: g.description, join_mode: g.join_mode,
+  id: g.id, name: g.name, tag: g.tag, color: g.color, description: g.description,
   leader_player_id: g.leader_player_id, member_count: g.member_count, created_date: g.created_date, updated_date: g.updated_date,
 });
 
@@ -249,7 +244,6 @@ export const createGuild = ({ env, user }, body) =>
     const tag = cleanTag(body.tag);
     const color = cleanColor(body.color);
     const description = cleanDescription(body.description);
-    const joinMode = body.join_mode == null ? 'open' : cleanJoinMode(body.join_mode);
     if (await membershipOf(env, me.id)) throw new HttpError(409, 'You are already in a guild. Leave it first.');
     if (await nameTaken(env, name.toLowerCase())) throw new HttpError(409, 'That guild name is taken.');
     if (await tagTaken(env, tag)) throw new HttpError(409, 'That tag is taken.');
@@ -257,9 +251,9 @@ export const createGuild = ({ env, user }, body) =>
     const now = nowIso();
     await commit(env, [
       stmt(env,
-        `INSERT INTO guilds (id, created_date, updated_date, created_by_id, name, name_lower, tag, color, description, join_mode, leader_player_id, member_count)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,1)`,
-        id, now, now, user.id, name, name.toLowerCase(), tag, color, description, joinMode, me.id),
+        `INSERT INTO guilds (id, created_date, updated_date, created_by_id, name, name_lower, tag, color, description, leader_player_id, member_count)
+         VALUES (?,?,?,?,?,?,?,?,?,?,1)`,
+        id, now, now, user.id, name, name.toLowerCase(), tag, color, description, me.id),
       ...addMemberStmts(env, { id }, me.id, now, 'leader'),
     ]);
     return { guild: pubGuild(await getGuildRow(env, id)) };
@@ -282,7 +276,6 @@ export const updateGuild = ({ env, user }, body) =>
     }
     if (body.color !== undefined) set.color = cleanColor(body.color);
     if (body.description !== undefined) set.description = cleanDescription(body.description);
-    if (body.join_mode !== undefined) set.join_mode = cleanJoinMode(body.join_mode);
     const keys = Object.keys(set);
     if (keys.length) {
       await commit(env, [
@@ -294,30 +287,11 @@ export const updateGuild = ({ env, user }, body) =>
     return { guild: pubGuild(await getGuildRow(env, g.id)) };
   });
 
-export const joinGuild = ({ env, user }, body) =>
-  retrying(async () => {
-    const me = await requirePlayer(env, user);
-    const g = await requireGuild(env, body.guild_id);
-    const mem = await membershipOf(env, me.id);
-    if (mem?.guild_id === g.id) return { guild: pubGuild(g) };
-    if (mem) throw new HttpError(409, 'You are already in a guild. Leave it first.');
-    if (g.join_mode !== 'open') throw new HttpError(403, 'This guild is invite only. Send a request instead.');
-    if (g.member_count >= MAX_MEMBERS) throw new HttpError(409, `This guild is full (${MAX_MEMBERS} members).`);
-    const now = nowIso();
-    await commit(env, [
-      guardRow(env, 'guilds', g.id, g.version),
-      ...addMemberStmts(env, g, me.id, now),
-      stmt(env, 'UPDATE guilds SET member_count = member_count + 1, updated_date = ?, version = version + 1 WHERE id = ?', now, g.id),
-    ]);
-    return { guild: pubGuild(await getGuildRow(env, g.id)) };
-  });
-
 export const requestJoinGuild = ({ env, user }, body) =>
   retrying(async () => {
     const me = await requirePlayer(env, user);
     const g = await requireGuild(env, body.guild_id);
     if (await membershipOf(env, me.id)) throw new HttpError(409, 'You are already in a guild. Leave it first.');
-    if (g.join_mode === 'open') throw bad('This guild is open. Just join.');
     if (await first(env, 'SELECT 1 AS x FROM guild_requests WHERE guild_id = ? AND player_id = ?', g.id, me.id)) {
       return { requested: true };
     }

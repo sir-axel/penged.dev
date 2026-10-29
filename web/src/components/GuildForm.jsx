@@ -4,18 +4,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { GuildBadge, GuildTag, GUILD_COLORS, guildColor } from "@/components/GuildBadge";
 
-const MODES = [
-  { key: "open", label: "Open", hint: "Anyone can join right away." },
-  { key: "invite", label: "Invite only", hint: "Players ask, you say yes or no." },
-];
-
 /** Create / edit a guild. `onSubmit(values)` returns a promise; its error message is shown under the form. */
 export function GuildForm({ initial = {}, submitLabel, onSubmit, onCancel }) {
   const [name, setName] = useState(initial.name || "");
   const [tag, setTag] = useState(initial.tag || "");
   const [color, setColor] = useState(initial.color || "blue");
   const [description, setDescription] = useState(initial.description || "");
-  const [joinMode, setJoinMode] = useState(initial.join_mode || "open");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const cleanTag = tag.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4);
@@ -25,7 +19,7 @@ export function GuildForm({ initial = {}, submitLabel, onSubmit, onCancel }) {
     setBusy(true);
     setError("");
     try {
-      await onSubmit({ name: name.trim(), tag: cleanTag, color, description: description.trim(), join_mode: joinMode });
+      await onSubmit({ name: name.trim(), tag: cleanTag, color, description: description.trim() });
     } catch (err) {
       setError(err.response?.data?.error || err.message || "Something went wrong.");
     } finally {
@@ -99,24 +93,6 @@ export function GuildForm({ initial = {}, submitLabel, onSubmit, onCancel }) {
         />
         <p className="text-right font-mono text-[10px] text-muted-foreground">{description.length}/140</p>
       </div>
-
-      <fieldset className="space-y-1.5">
-        <legend className="text-sm font-medium">Who can join</legend>
-        <div className="grid gap-2 pt-1 sm:grid-cols-2">
-          {MODES.map((m) => (
-            <label
-              key={m.key}
-              className={`flex min-h-11 cursor-pointer items-start gap-2 rounded-sm border p-3 ${joinMode === m.key ? "border-foreground bg-secondary" : "border-border bg-card"}`}
-            >
-              <input type="radio" name="join_mode" value={m.key} checked={joinMode === m.key} onChange={() => setJoinMode(m.key)} className="mt-1" />
-              <span>
-                <span className="block text-sm font-medium">{m.label}</span>
-                <span className="block text-xs text-muted-foreground">{m.hint}</span>
-              </span>
-            </label>
-          ))}
-        </div>
-      </fieldset>
 
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       <div className="flex flex-wrap gap-2">

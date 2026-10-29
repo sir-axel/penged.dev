@@ -161,12 +161,6 @@ export function GuildPage() {
     );
   } else if (full) {
     joinArea = <p className="text-sm text-muted-foreground">{`This guild is full (${max} members).`}</p>;
-  } else if (g.join_mode === "open") {
-    joinArea = (
-      <button type="button" className={PRIMARY} disabled={!!busy} onClick={() => act("join", "joinGuild", { guild_id: gid })}>
-        {busy === "join" ? "Joining…" : "Join guild"}
-      </button>
-    );
   } else if (me.requested) {
     joinArea = (
       <div className="flex flex-wrap items-center gap-2">
@@ -201,7 +195,7 @@ export function GuildPage() {
               </h1>
               {g.description && <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">{g.description}</p>}
               <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
-                {g.join_mode === "open" ? "Open · anyone can join" : "Invite only · ask the leader"}
+                {`Ask to join · the leader approves · up to ${max} members`}
               </p>
             </div>
           </div>

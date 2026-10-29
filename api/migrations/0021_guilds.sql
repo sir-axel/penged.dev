@@ -1,4 +1,4 @@
--- Guilds: small teams of up to 10 players. One guild per player (guild_members.player_id is UNIQUE).
+-- Guilds: small teams of up to 3 players. One guild per player (guild_members.player_id is UNIQUE). Joining is always a request the leader approves.
 -- Every write goes through the guild functions (src/guilds.js), guarded on guilds.version.
 -- Names live on players only (members are joined at read time), so username/display name changes need no fix-up.
 -- Guild score = members' xp_gained from verified matches, counted only from each member's joined_at.
@@ -13,9 +13,8 @@ CREATE TABLE guilds (
   tag TEXT NOT NULL UNIQUE CHECK (length(tag) BETWEEN 2 AND 4),
   color TEXT NOT NULL CHECK (color IN ('red','orange','yellow','green','teal','blue','purple','pink')),
   description TEXT CHECK (description IS NULL OR length(description) <= 140),
-  join_mode TEXT NOT NULL DEFAULT 'open' CHECK (join_mode IN ('open','invite')),
   leader_player_id TEXT NOT NULL,
-  member_count INTEGER NOT NULL DEFAULT 1 CHECK (member_count BETWEEN 0 AND 10),
+  member_count INTEGER NOT NULL DEFAULT 1 CHECK (member_count BETWEEN 0 AND 3),
   version INTEGER NOT NULL DEFAULT 0
 );
 

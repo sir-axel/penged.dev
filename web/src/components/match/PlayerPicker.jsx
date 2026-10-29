@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { ChevronsUpDown, Search } from "lucide-react";
-import { playerName } from "@/lib/ladder";
+import { playerName, rankFor, ratingFor, streakFor } from "@/lib/ladder";
+import { BountyChip } from "@/components/BountyChip";
 import { Avatar } from "@/components/Avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
@@ -10,7 +11,10 @@ export function PlayerPicker({
   value: value,
   onChange: onChange,
   excludeIds = [],
+  format = "singles",
+  bounty = false, // an opponent picker: show each top-3 player's bounty
 }) {
+  const chip = (e) => (bounty ? <BountyChip rank={rankFor(e, format)} streak={streakFor(e, format)} /> : null);
   let [open, setOpen] = useState(false),
     [query, setQuery] = useState(""),
     selected = players.find((e) => e.id === value),
@@ -39,8 +43,9 @@ export function PlayerPicker({
         {selected ? (
           <>
             <Avatar name={playerName(selected)} src={selected.avatar_url} size={26} />
-            <span className="min-w-0 flex-1 truncate font-heading text-sm font-medium">
-              {playerName(selected)}
+            <span className="min-w-0 flex-1">
+              <span className="block truncate font-heading text-sm font-medium">{playerName(selected)}</span>
+              {chip(selected) && <span className="mt-0.5 block">{chip(selected)}</span>}
             </span>
           </>
         ) : (
@@ -87,18 +92,19 @@ export function PlayerPicker({
                   }}
                   className={`flex min-h-[52px] w-full items-center gap-2.5 px-4 py-2 text-left hover:bg-secondary ${value === e.id ? "bg-secondary" : ""}`}
                 >
-                  <Avatar name={playerName(e)} src={e.avatar_url} size={30} player={e} />
+                  <Avatar name={playerName(e)} src={e.avatar_url} size={30} player={e} format={format} />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-heading text-sm font-medium">
                       {playerName(e)}
                     </span>
                     <span className="block font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
-                      {"rank "}
-                      {e.singles_rank || "—"}
+                      {`${format} rank `}
+                      {rankFor(e, format) || "—"}
                       {" · "}
-                      {e.singles_rating || 1400}
+                      {ratingFor(e, format) || 1400}
                     </span>
                   </span>
+                  {chip(e)}
                 </button>
               </li>
             ))}

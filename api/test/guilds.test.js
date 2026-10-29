@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterAll } from 'vitest';
-import { env, dispose, reset, call, mkPlayer } from './helpers.js';
+import { env, dispose, reset, call, mkPlayer as mkUser } from './helpers.js';
 import { weekStartIso, MAX_MEMBERS } from '../src/guilds.js';
 
 beforeEach(reset);
@@ -12,6 +12,22 @@ const play = async (w, l, extra = {}) => {
   const r = await call(l, 'respondMatch', { match_id: s.body.match.id, decision: 'accept' });
   expect(r.body.match.status).toBe('verified');
   return r.body.match;
+};
+// Every user made here, by player id, so a test can act as a guild's leader.
+const users = {};
+const mkPlayer = async (n) => {
+  const u = await mkUser(n);
+  users[u.player.id] = u;
+  return u;
+};
+/** Ask to join, then the guild's leader approves. Returns the first failing response, else the approval. */
+const join = async (who, guildId) => {
+  const rq = await call(who, 'requestJoinGuild', { guild_id: guildId });
+  if (rq.status !== 200) return rq;
+  const g = await env.DB.prepare('SELECT leader_player_id FROM guilds WHERE id = ?').bind(guildId).first();
+  const lead = users[g.leader_player_id];
+  const req = (await call(lead, 'getGuild', { guild_id: guildId })).body.requests.find((r) => r.player.id === who.player.id);
+  return call(lead, 'respondJoinRequest', { request_id: req.id, decision: 'approve' });
 };
 const xpOf = (m, p) => m.rating_changes.find((c) => c.player_id === p.player.id).xp_gained;
 const mkGuild = async (who, extra = {}) => {
@@ -28,7 +44,7 @@ describe('guilds', () => {
     const a = await mkPlayer('Alice');
     const b = await mkPlayer('Bobby');
     const g = await mkGuild(a, { description: '  Top   spin only  ' });
-    expect(g).toMatchObject({ name: 'Spin Doctors', tag: 'SPN', color: 'blue', join_mode: 'open', member_count: 1, leader_player_id: a.player.id, description: 'Top spin only' });
+    expect(g).toMatchObject({ name: 'Spin Doctors', tag: 'SPN', color: 'blue', member_count: 1, leader_player_id: a.player.id, description: 'Top spin only' });
     expect(await memberRow(a)).toMatchObject({ guild_id: g.id, role: 'leader' });
 
     expect((await call(b, 'createGuild', { name: 'spin DOCTORS', tag: 'ZZ', color: 'red' })).status).toBe(409);
@@ -40,22 +56,25 @@ describe('guilds', () => {
     expect((await call(b, 'createGuild', { name: 'Okay Name', tag: 'ABCDE', color: 'red' })).status).toBe(400);
     expect((await call(b, 'createGuild', { name: 'Okay Name', tag: 'AB', color: 'chartreuse' })).status).toBe(400);
     expect((await call(b, 'createGuild', { name: 'Okay Name', tag: 'AB', color: 'red', description: 'x'.repeat(141) })).status).toBe(400);
-    expect((await call(b, 'createGuild', { name: 'Okay Name', tag: 'AB', color: 'red', join_mode: 'secret' })).status).toBe(400);
     expect((await call(null, 'createGuild', { name: 'Okay Name', tag: 'AB', color: 'red' })).status).toBe(401);
 
     // Joined one guild: cannot create or join another.
-    expect((await call(b, 'joinGuild', { guild_id: g.id })).status).toBe(200);
+    expect((await join(b, g.id)).status).toBe(200);
     expect((await call(b, 'createGuild', { name: 'Okay Name', tag: 'AB', color: 'red' })).status).toBe(409);
   });
 
-  it('open guilds: anyone joins instantly, up to the cap of 10', async () => {
+  it('joining takes the leader saying yes; capped at MAX_MEMBERS', async () => {
     const lead = await mkPlayer('Leader');
     const g = await mkGuild(lead);
     const others = [];
     for (let i = 0; i < MAX_MEMBERS; i++) others.push(await mkPlayer(`Mem${i}`));
-    for (const p of others.slice(0, MAX_MEMBERS - 1)) expect((await call(p, 'joinGuild', { guild_id: g.id })).status).toBe(200);
+    for (const p of others.slice(0, MAX_MEMBERS - 1)) expect((await join(p, g.id)).status).toBe(200);
     expect((await guildRow(g.id)).member_count).toBe(MAX_MEMBERS);
-    const full = await call(others[MAX_MEMBERS - 1], 'joinGuild', { guild_id: g.id });
+    // Before the leader says yes, a request is only a request.
+    const pending = await mkPlayer('Pending');
+    expect((await call(pending, 'requestJoinGuild', { guild_id: g.id })).status).toBe(409); // already full: no point asking
+    expect(await memberRow(pending)).toBeNull();
+    const full = await join(others[MAX_MEMBERS - 1], g.id);
     expect(full.status).toBe(409);
     expect(full.body.error).toMatch(/full/);
     const v = await view(lead, g);
@@ -63,26 +82,28 @@ describe('guilds', () => {
     expect(v.members[0]).toMatchObject({ role: 'leader', player: { id: lead.player.id } });
   });
 
-  it('two players racing for the last spot: exactly one gets in', async () => {
+  it('two requests approved at once for the last spot: exactly one gets in', async () => {
     const lead = await mkPlayer('Leader');
     const g = await mkGuild(lead);
-    for (let i = 0; i < MAX_MEMBERS - 2; i++) await call(await mkPlayer(`Mem${i}`), 'joinGuild', { guild_id: g.id });
+    for (let i = 0; i < MAX_MEMBERS - 2; i++) await join(await mkPlayer(`Mem${i}`), g.id);
     const [p, q] = [await mkPlayer('Racer1'), await mkPlayer('Racer2')];
-    const res = await Promise.all([call(p, 'joinGuild', { guild_id: g.id }), call(q, 'joinGuild', { guild_id: g.id })]);
+    await call(p, 'requestJoinGuild', { guild_id: g.id });
+    await call(q, 'requestJoinGuild', { guild_id: g.id });
+    const reqs = (await view(lead, g)).requests;
+    const res = await Promise.all(reqs.map((r) => call(lead, 'respondJoinRequest', { request_id: r.id, decision: 'approve' })));
     expect(res.map((r) => r.status).sort()).toEqual([200, 409]);
     expect((await guildRow(g.id)).member_count).toBe(MAX_MEMBERS);
     expect((await env.DB.prepare('SELECT count(*) AS n FROM guild_members WHERE guild_id = ?').bind(g.id).first()).n).toBe(MAX_MEMBERS);
   });
 
-  it('invite only: request, approve, decline; joining clears other requests', async () => {
+  it('requests: approve, decline; joining clears other requests', async () => {
     const lead = await mkPlayer('Leader');
     const c = await mkPlayer('Carol');
     const d = await mkPlayer('Dave');
     const other = await mkPlayer('Other');
-    const g = await mkGuild(lead, { join_mode: 'invite' });
-    const g2 = await mkGuild(other, { name: 'Net Cords', tag: 'NET', join_mode: 'invite' });
+    const g = await mkGuild(lead, {});
+    const g2 = await mkGuild(other, { name: 'Net Cords', tag: 'NET' });
 
-    expect((await call(c, 'joinGuild', { guild_id: g.id })).status).toBe(403);
     expect((await call(c, 'requestJoinGuild', { guild_id: g.id })).body).toEqual({ requested: true });
     expect((await call(c, 'requestJoinGuild', { guild_id: g2.id })).status).toBe(200);
     expect((await call(d, 'requestJoinGuild', { guild_id: g.id })).status).toBe(200);
@@ -104,21 +125,17 @@ describe('guilds', () => {
     expect((await view(d, g)).me.requested).toBe(false);
     expect((await guildRow(g.id)).member_count).toBe(2);
 
-    // An open guild needs no request.
-    const o = await mkPlayer('Opener');
-    const g3 = await mkGuild(o, { name: 'Open House', tag: 'OPN' });
-    expect((await call(d, 'requestJoinGuild', { guild_id: g3.id })).status).toBe(400);
   });
 
   it('approving someone who joined elsewhere fails cleanly', async () => {
     const lead = await mkPlayer('Leader');
     const c = await mkPlayer('Carol');
     const o = await mkPlayer('Opener');
-    const g = await mkGuild(lead, { join_mode: 'invite' });
+    const g = await mkGuild(lead, {});
     const g2 = await mkGuild(o, { name: 'Open House', tag: 'OPN' });
     await call(c, 'requestJoinGuild', { guild_id: g.id });
     const [rq] = (await view(lead, g)).requests;
-    await call(c, 'joinGuild', { guild_id: g2.id });
+    await join(c, g2.id);
     expect((await call(lead, 'respondJoinRequest', { request_id: rq.id, decision: 'approve' })).status).toBe(404);
   });
 
@@ -127,8 +144,8 @@ describe('guilds', () => {
     const b = await mkPlayer('Bobby');
     const c = await mkPlayer('Carol');
     const g = await mkGuild(lead);
-    await call(b, 'joinGuild', { guild_id: g.id });
-    await call(c, 'joinGuild', { guild_id: g.id });
+    await join(b, g.id);
+    await join(c, g.id);
 
     expect((await call(b, 'kickMember', { guild_id: g.id, player_id: c.player.id })).status).toBe(403);
     expect((await call(lead, 'kickMember', { guild_id: g.id, player_id: lead.player.id })).status).toBe(400);
@@ -144,8 +161,8 @@ describe('guilds', () => {
     expect((await memberRow(lead)).role).toBe('member');
     // Old leader lost their powers; the new one can edit.
     expect((await call(lead, 'updateGuild', { guild_id: g.id, name: 'Hijack' })).status).toBe(403);
-    const up = await call(b, 'updateGuild', { guild_id: g.id, name: 'Loop Gang', tag: 'lg', color: 'pink', description: '', join_mode: 'invite' });
-    expect(up.body.guild).toMatchObject({ name: 'Loop Gang', tag: 'LG', color: 'pink', description: null, join_mode: 'invite' });
+    const up = await call(b, 'updateGuild', { guild_id: g.id, name: 'Loop Gang', tag: 'lg', color: 'pink', description: '' });
+    expect(up.body.guild).toMatchObject({ name: 'Loop Gang', tag: 'LG', color: 'pink', description: null });
   });
 
   it('leader leaving passes the lead to the longest-standing member; last one out deletes the guild', async () => {
@@ -153,14 +170,13 @@ describe('guilds', () => {
     const b = await mkPlayer('Bobby');
     const c = await mkPlayer('Carol');
     const d = await mkPlayer('Dave');
-    const g = await mkGuild(lead, { join_mode: 'invite' });
-    await call(lead, 'updateGuild', { guild_id: g.id, join_mode: 'open' });
-    await call(c, 'joinGuild', { guild_id: g.id });
-    await call(b, 'joinGuild', { guild_id: g.id });
+    const g = await mkGuild(lead, {});
+    await join(c, g.id);
+    await join(b, g.id);
     // Carol joined first, but make the order explicit.
     await env.DB.prepare('UPDATE guild_members SET joined_at = ? WHERE player_id = ?').bind('2026-01-01T00:00:00.000Z', c.player.id).run();
     await env.DB.prepare('UPDATE guild_members SET joined_at = ? WHERE player_id = ?').bind('2026-02-01T00:00:00.000Z', b.player.id).run();
-    await call(lead, 'updateGuild', { guild_id: g.id, join_mode: 'invite' });
+    await call(lead, 'updateGuild', { guild_id: g.id });
     await call(d, 'requestJoinGuild', { guild_id: g.id });
 
     expect((await call(lead, 'leaveGuild')).body).toEqual({ ok: true, deleted: false });
@@ -183,7 +199,7 @@ describe('guilds', () => {
     const x = await mkPlayer('Xavier');
     const before = await play(a, x); // Alice is in no guild yet
     const g = await mkGuild(b);
-    expect((await call(a, 'joinGuild', { guild_id: g.id })).status).toBe(200);
+    expect((await join(a, g.id)).status).toBe(200);
     const m2 = await play(a, x);
     const m3 = await play(x, b, { ranked: false }); // unranked: XP only, still counts
     const old = await play(a, x);
@@ -216,7 +232,7 @@ describe('guilds', () => {
     const a = await mkPlayer('Alice');
     const b = await mkPlayer('Bobby');
     const g = await mkGuild(a);
-    await call(b, 'joinGuild', { guild_id: g.id });
+    await join(b, g.id);
     await env.DB.prepare('UPDATE players SET singles_wins = 5, singles_rating = 1500 WHERE id = ?').bind(a.player.id).run();
     await env.DB.prepare('UPDATE players SET singles_wins = 2, singles_rating = 900 WHERE id = ?').bind(b.player.id).run();
     expect((await view(null, g)).guild).toMatchObject({ avg_rating: 1500, rated_members: 1 });
@@ -238,11 +254,11 @@ describe('guilds', () => {
     const b = await mkPlayer('Bobby');
     const c = await mkPlayer('Carol');
     const g = await mkGuild(a);
-    await call(b, 'joinGuild', { guild_id: g.id });
-    const solo = await mkGuild(c, { name: 'Solo Act', tag: 'SOLO', join_mode: 'invite' });
+    await join(b, g.id);
+    const solo = await mkGuild(c, { name: 'Solo Act', tag: 'SOLO' });
     await call(b, 'leaveGuild');
     await call(b, 'requestJoinGuild', { guild_id: solo.id });
-    await call(b, 'joinGuild', { guild_id: g.id });
+    await join(b, g.id);
     // b's request was cleared on join; re-create one directly to check erasure.
     await env.DB.prepare('INSERT INTO guild_requests (id, guild_id, player_id, created_date) VALUES (?,?,?,?)').bind('rq1', solo.id, b.player.id, new Date().toISOString()).run();
 

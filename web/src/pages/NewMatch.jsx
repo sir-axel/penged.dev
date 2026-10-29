@@ -160,6 +160,7 @@ export function NewMatch() {
                 <div className="min-w-0 flex-1">
                   <PlayerPicker
                     label="Pick your partner"
+                    format={format}
                     players={players}
                     value={partnerId}
                     onChange={setPartnerId}
@@ -184,6 +185,8 @@ export function NewMatch() {
               <div className="min-w-0 flex-1">
                 <PlayerPicker
                   label="Pick an opponent"
+                  format={format}
+                  bounty={ranked}
                   players={players}
                   value={opponentId}
                   onChange={setOpponentId}
@@ -201,6 +204,8 @@ export function NewMatch() {
                 <div className="min-w-0 flex-1">
                   <PlayerPicker
                     label="Pick the second opponent"
+                    format={format}
+                    bounty={ranked}
                     players={players}
                     value={opponent2Id}
                     onChange={setOpponent2Id}

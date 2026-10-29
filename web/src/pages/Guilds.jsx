@@ -44,7 +44,6 @@ function GuildRow({ guild: g, mine, max }) {
           <span className="mt-0.5 block font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
             {`${g.member_count}/${max} · ${num(g.total_xp)} all-time`}
             {g.avg_rating != null && ` · avg ${g.avg_rating}`}
-            {g.join_mode === "invite" && " · invite"}
           </span>
         </span>
         <span className="w-14 shrink-0 text-right font-mono text-sm tabular-nums">{num(g.week_xp)}</span>
@@ -57,7 +56,7 @@ export function Guilds() {
   const { player: me } = useMyPlayer();
   const { data, isLoading } = useGuildList();
   const guilds = data?.guilds || [];
-  const max = data?.max_members || 10;
+  const max = data?.max_members || 3;
   const myId = data?.my_guild_id || null;
   const mine = guilds.find((g) => g.id === myId);
   const createBtn = (
@@ -74,7 +73,7 @@ export function Guilds() {
       <PageHeader
         eyebrow="Ladder"
         title="Guilds"
-        description="Team up with up to 10 players. Every verified match your members play earns the guild points."
+        description="Team up with up to 3 players. Every verified match your members play earns the guild points."
         action={!myId && createBtn}
       />
       <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
@@ -134,7 +133,7 @@ export function GuildNew() {
   return (
     <>
       <BackButton fallback="/guilds" />
-      <PageHeader eyebrow="Guilds" title="Create a guild" description="You will be the leader. One guild per player, up to 10 members." />
+      <PageHeader eyebrow="Guilds" title="Create a guild" description="You will be the leader. One guild per player, up to 3 members." />
       <div className="mx-auto max-w-xl px-4 py-6 sm:px-6">
         {myId ? (
           <EmptyState

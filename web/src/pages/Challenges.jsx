@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/EmptyState";
 import { SegmentedControl } from "@/components/match/SegmentedControl";
 import { PlayerPicker } from "@/components/match/PlayerPicker";
+import { BountyChip } from "@/components/BountyChip";
 import { StakesLine } from "@/components/match/StakesLine";
 import {
   AlertDialog,
@@ -524,7 +525,10 @@ export function Challenges() {
                         >
                           <span className="w-6 shrink-0 font-mono text-xs text-muted-foreground">{e.singles_rank}</span>
                           <span className="min-w-0 flex-1">
-                            <span className="block truncate font-heading text-sm font-semibold">{playerName(e)}</span>
+                            <span className="flex min-w-0 items-center gap-1.5">
+                              <span className="truncate font-heading text-sm font-semibold">{playerName(e)}</span>
+                              <BountyChip rank={e.singles_rank} streak={e.singles_win_streak} />
+                            </span>
                             <span className="block font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
                               {e.singles_rating}
                               {" rating"}
@@ -571,6 +575,7 @@ export function Challenges() {
                 <p className="font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">Your partner</p>
                 <PlayerPicker
                   label="Pick your partner"
+                  format="doubles"
                   players={others}
                   value={partnerId}
                   onChange={setPartnerId}
@@ -579,6 +584,8 @@ export function Challenges() {
                 <p className="pt-1 font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">Opponents</p>
                 <PlayerPicker
                   label="Pick an opponent"
+                  format="doubles"
+                  bounty
                   players={others}
                   value={opp1Id}
                   onChange={setOpp1Id}
@@ -586,6 +593,8 @@ export function Challenges() {
                 />
                 <PlayerPicker
                   label="Pick the second opponent"
+                  format="doubles"
+                  bounty
                   players={others}
                   value={opp2Id}
                   onChange={setOpp2Id}
