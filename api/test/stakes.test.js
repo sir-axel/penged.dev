@@ -59,7 +59,9 @@ describe('stakes range (pure)', () => {
     const s = stakes({ format: 'singles', target: 11, sides: { a: [pl('a', { rating: 1440 })], b: [pl('b', { rating: 1460 })] } }, tierChange);
     expect(s[0].tier_win).toEqual({ tier_before: 'silver', tier_after: 'gold' });
     expect(s[0].tier_lose).toBeNull();
-    expect(s[1].tier_lose).toEqual({ tier_before: 'gold', tier_after: 'silver' });
+    expect(s[1].tier_lose).toBeNull(); // derank protection: 1460 Gold can only fall to the Gold floor (1450)
+    const onFloor = stakes({ format: 'singles', target: 11, sides: { a: [pl('a', { rating: 1440 })], b: [pl('b', { rating: 1450 })] } }, tierChange);
+    expect(onFloor[1].tier_lose).toEqual({ tier_before: 'gold', tier_after: 'silver' });
     const placing = stakes({ format: 'singles', target: 11, sides: { a: [pl('a', { rating: 1440, matchesPlayed: 2 })], b: [pl('b', { rating: 1460 })] } }, tierChange);
     expect(placing[0]).toMatchObject({ placing: true, tier_win: null });
   });

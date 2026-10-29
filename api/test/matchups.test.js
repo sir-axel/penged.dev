@@ -336,9 +336,10 @@ describe('the matched game', () => {
     await call(low, 'respondChallenge', { challenge_id: v.challenge.id, decision: 'accept' });
     const done = await play(top, low);
     const ownerCh = done.rating_changes.find((x) => x.player_id === top.player.id);
-    expect(ownerCh.matched).toBeUndefined();
+    // Diamond vs Bronze: the favourite's win is +0..+3, and the matched game tops a win up to +5 (never a loss factor)
+    expect(ownerCh.matched?.loss_factor).toBeUndefined();
     expect(ownerCh.delta).toBe(ownerCh.after - ownerCh.before);
-    expect(ownerCh.delta).toBeGreaterThan(0);
+    expect(ownerCh.delta).toBe(5);
   });
 });
 

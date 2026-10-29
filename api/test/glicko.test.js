@@ -8,7 +8,7 @@ import {
 } from '../src/rating.js';
 
 const pl = (id, side, o = {}) => ({ id, side, rating: 1400, rd: 60, vol: VOL_START, earlierMeetings: 0, daysSinceLast: 3, ...o });
-const duel = (a, b, games, ctx = { target: 11 }) => {
+const duel = (a, b, games, ctx = { target: 11, tierShield: false }) => {
   const r = rateMatch([pl('w', 'a', a), pl('l', 'b', b)], 'a', games, ctx);
   return { w: r[0], l: r[1] };
 };

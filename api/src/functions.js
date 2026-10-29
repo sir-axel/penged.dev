@@ -13,7 +13,7 @@ import { avatarOwner, removeAvatar } from './uploads.js';
 import { tierChange, PROVISIONAL } from './tiers.js';
 import { decodeInternal, pub } from './schema.js';
 import {
-  START_RATING, REPEAT_WINDOW_DAYS, rateMatch, xpForMatch, levelForXp, validateGames, summarizeGames,
+  START_RATING, REPEAT_WINDOW_DAYS, rateMatch, tierShield, xpForMatch, levelForXp, validateGames, summarizeGames,
   RANK_SQL, DOUBLES_RANK_SQL, rankPlayers, ACTIVE_DAYS, meetingWeight, NOVELTY_DAYS, stakes, currentRd, RATING_FLOOR, challengePenalty, WALKOVER_XP, COOLDOWN_DAYS, WAIVER_DAYS, FATIGUE_DAYS,
   CHALLENGE_CAP_DAYS, CHALLENGES_RECEIVED_PER_WEEK, CHALLENGES_SENT_PER_WEEK, MATCHUP_DODGE_DAYS,
 } from './rating.js';
@@ -659,6 +659,8 @@ async function verifyPlan(env, m, now) {
     const bountyDelta = got.reduce((t, c) => t + c.rating, 0) - paid.reduce((t, c) => t + c.rating, 0);
     if (bountyDelta) {
       res.after = Math.max(RATING_FLOOR, res.after + bountyDelta);
+      // bounty paid can't break derank protection either
+      res.after = tierShield(res.before, res.after, p[wc] + p[lc] >= PROVISIONAL);
       res.delta = res.after - res.before;
     }
     // This week's matched game: the owner's loss is softened by the row's frozen factor (after everything else).
@@ -718,7 +720,7 @@ function withBounties(out, claims) {
     const gets = claims[x.side].filter((c) => c.to === x.id);
     const pays = sum(claims[x.side === 'a' ? 'b' : 'a'].filter((c) => c.from === x.id));
     const bw = sum(gets);
-    const lose = (v) => Math.max(RATING_FLOOR - x.rating, v - pays);
+    const lose = (v) => tierShield(x.rating, Math.max(RATING_FLOOR, x.rating + v - pays), !x.placing) - x.rating;
     if (bw) {
       x.win = x.win.map((v) => v + bw); x.narrow.win += bw; x.dominant.win += bw; x.win_after += bw;
       if (!x.placing) x.tier_win = tierChange(x.rating, x.win_after);
@@ -800,7 +802,9 @@ fns.matchStakes = async ({ env, user }, body) => {
     ? Object.fromEntries(rateMatch(parts.map((p) => ({ ...p, paddle: paddles[p.id] || 'default' })), match.winner_side, match.games,
       { target, challenge }).map((r) => {
         const cs = claims[match.winner_side];
-        const after0 = Math.max(RATING_FLOOR, r.after + sum(cs.filter((c) => c.to === r.id)) - sum(cs.filter((c) => c.from === r.id)));
+        const pre = Math.max(RATING_FLOOR, r.after + sum(cs.filter((c) => c.to === r.id)) - sum(cs.filter((c) => c.from === r.id)));
+        const placed = (parts.find((p) => p.id === r.id)?.matchesPlayed ?? PROVISIONAL) >= PROVISIONAL;
+        const after0 = pre === r.after ? pre : tierShield(r.before, pre, placed);
         const won = sideOf(r.id) === match.winner_side;
         const raw = after0 - r.before;
         const delta = soften[r.id] == null ? raw : won ? topUpWin(raw) : softenLoss(r.before, raw, soften[r.id]);

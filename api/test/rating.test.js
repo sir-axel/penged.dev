@@ -218,14 +218,16 @@ describe('close-loss credit', () => {
     expect(R.expectedPointShare(R.expectedScore(1250, 1700))).toBeCloseTo(0.351, 3);
     expect(R.expectedPointShare(0.07, 21)).toBeGreaterThan(R.expectedPointShare(0.07, 11)); // longer games: closer to 50%
   });
-  it('a close loss to a much stronger player is a gain, and the winner pays the same', () => {
+  it('a close loss to a much stronger player is a gain; the favourite\'s win is worth +0..+3', () => {
     const r = run([[11, 9], [11, 9]]);
     expect(r.low.delta).toBe(15);
-    expect(r.top.delta).toBe(-15);
     expect(r.low.close_loss).toMatchObject({ credit: 15, gap: 450 });
-    expect(r.top.close_loss.credit).toBe(-15);
+    expect(r.top.delta).toBe(0); // across a class gap the favourite's win is worth +0 (close) to +3 (blowout)
     const mid = run([[11, 7], [11, 8]]);
-    expect([mid.low.delta, mid.top.delta]).toEqual([8, -8]);
+    expect([mid.low.delta, mid.top.delta]).toEqual([8, 0]);
+    const blow = run([[11, 2], [11, 1]]);
+    expect(blow.top.delta).toBe(3);
+    expect(blow.low.delta).toBeLessThan(0);
   });
   it('a clear beating is an ordinary loss; peers (gap < 100) get nothing extra', () => {
     const r = run([[11, 5], [11, 6]]);
@@ -263,14 +265,35 @@ describe('close-loss credit needs a class gap (Platinum vs Bronze); a win always
     expect(r.top.delta).toBeGreaterThan(0);
     expect(r.low.delta).toBeLessThan(0);
   });
-  it('Platinum vs Bronze: the credit applies, a close win costs the favourite', () => {
+  it('Platinum vs Bronze: the credit applies to the underdog, the favourite wins +0..+3', () => {
     const r = run([[11, 9], [11, 9]], 1580, 1300);
     expect(r.low.close_loss).toBeDefined();
-    expect(r.top.delta).toBeLessThan(0);
+    expect(r.top.delta).toBe(0);
+    expect(run([[11, 2], [11, 1]], 1580, 1300).top.delta).toBe(3);
+  });
+  it('Bronze beating Platinum is a big upset: both changes x1.5', () => {
+    const r = Object.fromEntries(R.rateMatch([P('top', 'a', 1580), P('low', 'b', 1300)], 'b', G([[9, 11], [9, 11]]), { tierShield: false }).map((x) => [x.id, x]));
+    expect(r.low.class_gap).toMatchObject({ upset_mult: 1.5 });
+    expect(r.low.delta).toBe(Math.round(r.low.class_gap.raw * 1.5));
+    expect(r.top.delta).toBe(-Math.round(-r.top.class_gap.raw * 1.5));
   });
   it('a 3-2 win with two close losses still gains at least +3', () => {
     const r = run([[10, 12], [11, 5], [9, 11], [11, 6], [11, 5]], 1557, 1399);
     expect(r.top.delta).toBe(R.MATCH_WIN_MIN);
     expect(r.top.win_floor).toBe(R.MATCH_WIN_MIN);
+  });
+});
+
+describe('derank protection', () => {
+  it('a loss lands you on your tier floor; only a loss from the floor drops you, and never more than one tier', () => {
+    expect(R.tierShield(1580, 1520)).toBe(1550); // Platinum 1580 -> Platinum 0
+    expect(R.tierShield(1550, 1494)).toBe(1494); // from the floor: into Gold
+    expect(R.tierShield(1550, 1300)).toBe(1450); // never two tiers in one match
+    expect(R.tierShield(1580, 1560)).toBe(1560); // stays in the tier: untouched
+    expect(R.tierShield(1580, 1520, false)).toBe(1520); // still placing: no protection
+    const P = (id, side, rating) => ({ id, side, rating, rd: 60, vol: 0.06, daysSinceLast: 3, gamesPlayed: 60, matchesPlayed: 30, earlierMeetings: 0, novel: false });
+    const r = R.rateMatch([P('plat', 'a', 1580), P('dog', 'b', 1280)], 'b', [{ a: 5, b: 11 }, { a: 4, b: 11 }], {});
+    expect(r[0].after).toBe(1550);
+    expect(r[0].tier_shield).toMatchObject({ tier: 'platinum' });
   });
 });

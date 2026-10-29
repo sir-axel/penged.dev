@@ -1,4 +1,4 @@
-import { tierIndex } from './tiers.js';
+import { tierIndex, TIERS } from './tiers.js';
 // Pure rules module: ratings, XP, game validation, rating-derived ranking. No DB access.
 //
 // Rating = Glicko-2 per player per format (singles and doubles never share anything), applied GAME BY GAME in play order,
@@ -69,6 +69,21 @@ export const CLOSE_GAP_MIN = 100;
 // ...and only across a real class gap: the sides' tiers (by rating, team mean in doubles) at least CLOSE_TIER_GAP apart,
 // e.g. Platinum vs Bronze. Closer than that, the normal rules apply (and a win always gains, see MATCH_WIN_MIN).
 export const CLOSE_TIER_GAP = 3;
+// Across that gap the favourite's win is worth only TIER_FAV_WIN_MIN..TIER_FAV_WIN_MAX (a close win +0, a blowout +3),
+// and an upset is a big deal: both sides' changes x TIER_UPSET_MULT (match cap and rating floor still apply).
+export const TIER_FAV_WIN_MIN = 0;
+export const TIER_FAV_WIN_MAX = 3;
+export const TIER_UPSET_MULT = 1.5;
+// Derank protection: once placed, a loss that would take you out of your tier lands you at that tier's floor (0 progress)
+// instead; only a loss from the floor itself drops you a tier. One match never costs you more than one tier.
+export const TIER_SHIELD = true;
+/** Derank protection for a placed player's match result: the rating they end on (see TIER_SHIELD). */
+export function tierShield(before, after, placed = true) {
+  const ti = tierIndex(before);
+  if (!TIER_SHIELD || !placed || ti === 0 || after >= TIERS[ti].min) return after;
+  if (before > TIERS[ti].min) return TIERS[ti].min; // above the floor: land on it
+  return Math.max(after, TIERS[ti - 1].min); // on the floor: drop at most one tier
+}
 // Win a match and you gain at least MATCH_WIN_MIN, unless the close-loss credit above makes you pay for letting them close.
 export const MATCH_WIN_MIN = 3;
 export const CLOSE_CREDIT_PER = 150;
@@ -361,7 +376,9 @@ export function rateMatch(participants, winnerSide, games = [], ctx = {}) {
   // Close-loss credit (from pre-match ratings): a narrow loss to a much stronger side becomes a small gain.
   const loserSide = winnerSide === 'a' ? 'b' : 'a';
   const effOf = (sd) => average(side(sd).map((p) => p.rating)) + edge[sd];
-  const farApart = tierIndex(average(side(winnerSide).map((p) => p.rating))) - tierIndex(average(side(loserSide).map((p) => p.rating))) >= CLOSE_TIER_GAP;
+  const tierOf = (sd) => tierIndex(average(side(sd).map((p) => p.rating)));
+  const farApart = tierOf(winnerSide) - tierOf(loserSide) >= CLOSE_TIER_GAP; // the favourite won across a class gap
+  const upset = games.length && tierOf(loserSide) - tierOf(winnerSide) >= CLOSE_TIER_GAP; // the underdog did
   const close = games.length && ctx.closeCredit !== false && farApart
     ? closeLossCredit({ loserEff: effOf(loserSide), winnerEff: effOf(winnerSide), games, loserSide, target: ctx.target || 11 })
     : null;
@@ -377,14 +394,33 @@ export function rateMatch(participants, winnerSide, games = [], ctx = {}) {
       credit = { ...close, credit: -c }; // the favourite let them get too close: pays what the underdog earned
       s.r = Math.max(RATING_FLOOR, p.rating - c);
     }
-    // A win always gains a little, unless the close-loss credit just charged this winner.
     let winFloor = false;
-    if (games.length && p.side === winnerSide && !(credit && credit.credit < 0) && s.r - p.rating < MATCH_WIN_MIN) {
+    let classGap = null;
+    if (games.length && farApart && p.side === winnerSide) {
+      // Favourite across a class gap: +0 (close) to +3 (blowout), never a loss for a win.
+      const d = Math.max(TIER_FAV_WIN_MIN, Math.min(TIER_FAV_WIN_MAX, s.r - p.rating));
+      classGap = { favourite_win: d, raw: s.r - p.rating };
+      s.r = p.rating + d;
+    } else if (upset) {
+      // Underdog beats a side 3+ tiers up: both changes x TIER_UPSET_MULT.
+      const raw = s.r - p.rating;
+      const d = Math.sign(raw) * Math.min(MAX_DELTA, Math.round(Math.abs(raw) * TIER_UPSET_MULT));
+      s.r = Math.max(RATING_FLOOR, p.rating + d);
+      classGap = { upset_mult: TIER_UPSET_MULT, raw };
+    } else if (games.length && p.side === winnerSide && s.r - p.rating < MATCH_WIN_MIN) {
+      // Any other win gains a little.
       s.r = p.rating + MATCH_WIN_MIN;
       winFloor = true;
     }
+    let shield = null;
+    if (games.length && ctx.tierShield !== false) {
+      const kept = tierShield(p.rating, s.r, (p.matchesPlayed ?? PROVISIONAL_MATCHES) >= PROVISIONAL_MATCHES);
+      if (kept !== s.r) { shield = { tier: TIERS[tierIndex(p.rating)].key, raw: s.r - p.rating }; s.r = kept; }
+    }
     return {
       ...(winFloor ? { win_floor: MATCH_WIN_MIN } : null),
+      ...(classGap ? { class_gap: classGap } : null),
+      ...(shield ? { tier_shield: shield } : null),
       ...(credit ? { close_loss: { credit: credit.credit, gap: credit.gap, share: +credit.share.toFixed(3), expected: +credit.expected.toFixed(3) } } : null),
       id: p.id, before: p.rating, after: s.r, delta: s.r - p.rating, rd_before: s.rdStart, rd_after: s.phi * Q,
       vol_before: s.volStart, vol_after: s.vol, dominance: md, repeat: s.games[0]?.repeat ?? repeatFactor(p.earlierMeetings || 0),
