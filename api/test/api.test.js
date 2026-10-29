@@ -377,7 +377,8 @@ describe('rating-derived ranks', () => {
     const a = await mkPlayer('Aa1'); const b = await mkPlayer('Bb2'); const c = await mkPlayer('Cc3');
     await seasoned(a, b, c);
     await win(c, a); await call(c, 'syncLadder'); // order: Cc3, Bb2, Aa1
-    expect((await call(c, 'createChallenge', { defender_player_id: a.player.id })).status).toBe(400); // a is below c now
+    // a is below c now: allowed only as a (penalty-free) downward challenge, since c is in the top 3
+    expect((await call(c, 'createChallenge', { defender_player_id: a.player.id })).body.challenge).toMatchObject({ downward: true, challenger_rank: 1, defender_rank: 3 });
     const ok = await call(a, 'createChallenge', { defender_player_id: c.player.id }); // 2 above
     expect(ok.status).toBe(200);
     expect(ok.body.challenge).toMatchObject({ challenger_rank: 3, defender_rank: 1 });
@@ -705,7 +706,8 @@ describe('review fixes', () => {
     expect((await get('/api/entities/Challenge/' + ch.id)).body.status).toBe('completed');
     // challenger (now rank 1) can challenge again once someone is above... at least no 409 lockout:
     const r = await call(b, 'createChallenge', { defender_player_id: a.player.id });
-    expect(r.status).toBe(400); // rule violation (a is now below), not the active-challenge 409
+    expect(r.status).toBe(200); // a is now below: a downward challenge from the top 3, not the active-challenge 409
+    expect(r.body.challenge.downward).toBe(true);
   });
 
   it('H1: a match submitted BEFORE acceptance does not complete the challenge; unplayed accepted challenges expire', async () => {

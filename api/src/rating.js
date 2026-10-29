@@ -59,7 +59,7 @@ export const REPEAT_FLOOR = 0.3;
 export const TEAMMATE_SLOPE = 0.25;
 export const TEAMMATE_MIN = 0.75;
 export const TEAMMATE_MAX = 1.25;
-// A verified singles match that completes an accepted challenge is worth more.
+// A verified match (singles or doubles) that completes an accepted challenge is worth more.
 export const CHALLENGE_STAKES = 1.25;
 // Novelty: an opponent you have not played (this format) in NOVELTY_DAYS, or ever, is fresh evidence: x NOVELTY_BONUS.
 export const NOVELTY_DAYS = 30;
@@ -334,7 +334,7 @@ export function stakes({ format = 'singles', target = 11, sides, paddles = {}, c
   const size = format === 'doubles' ? 2 : 1;
   if (!sides || sides.a?.length !== size || sides.b?.length !== size) throw new Error('stakes: wrong side sizes');
   const parts = ['a', 'b'].flatMap((s) => sides[s].map((p) => ({ ...p, side: s, paddle: paddles[p.id] || p.paddle || 'default' })));
-  const ctx = { target, challenge: !!challenge && format === 'singles' };
+  const ctx = { target, challenge: !!challenge };
   const run = (winner, kind) => rateMatch(parts, winner, stakesGames(target, winner, kind), ctx);
   const R = { a: { narrow: run('a', 'narrow'), dominant: run('a', 'dominant') }, b: { narrow: run('b', 'narrow'), dominant: run('b', 'dominant') } };
   return parts.map((p, i) => {
@@ -456,6 +456,12 @@ export const FATIGUE_MATCHES = 3; // this many verified matches in FATIGUE_DAYS 
 export const FATIGUE_DAYS = 7;
 export const COOLDOWN_DAYS = 7; // after a decline/expiry the challenger can't re-challenge the same defender
 export const WALKOVER_XP = 15;
+// Weekly caps (rolling CHALLENGE_CAP_DAYS, both formats combined, any status, reversed ones excluded).
+export const CHALLENGE_CAP_DAYS = 7;
+export const CHALLENGES_RECEIVED_PER_WEEK = 2;
+export const CHALLENGES_SENT_PER_WEEK = 3;
+// The top CHALLENGE_DOWN_TOP singles ranks may also challenge 1-3 ranks below; ducking those is free (no penalty, no walkover).
+export const CHALLENGE_DOWN_TOP = 3;
 
 // The defender's K for a dodge: the Glicko step a typical match (DODGE_GAMES_PER_MATCH games) would imply at their current
 // RD, kept within DODGE_K_MIN..DODGE_K_MAX (the old Elo 24..48): settled players (RD 50) 24, settling ones (RD 74+) 48.

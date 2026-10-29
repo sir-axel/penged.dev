@@ -47,13 +47,13 @@ describe('stakes range (pure)', () => {
     expect(s[0].lose[1]).toBeLessThan(s[1].lose[1]);
     expect(() => stakes({ format: 'doubles', target: 11, sides: { a: [pl('a')], b: [pl('b')] } })).toThrow();
   });
-  it('a challenge raises the range; challenges are singles only', () => {
+  it('a challenge raises the range, in singles and doubles', () => {
     const base = stakes({ format: 'singles', target: 11, sides: { a: [pl('a')], b: [pl('b')] } })[0];
     const ch = stakes({ format: 'singles', target: 11, sides: { a: [pl('a')], b: [pl('b')] }, challenge: true })[0];
     expect(ch.win[1]).toBeGreaterThan(base.win[1]);
     expect(ch.win[1] / base.win[1]).toBeCloseTo(CHALLENGE_STAKES, 0);
     const d = (challenge) => stakes({ format: 'doubles', target: 11, sides: { a: [pl('a'), pl('c')], b: [pl('b'), pl('d')] }, challenge })[0].win;
-    expect(d(true)).toEqual(d(false));
+    expect(d(true)[1]).toBeGreaterThan(d(false)[1]);
   });
   it('tier crossings (best win / worst loss) only for placed players', () => {
     const s = stakes({ format: 'singles', target: 11, sides: { a: [pl('a', { rating: 1440 })], b: [pl('b', { rating: 1460 })] } }, tierChange);
