@@ -393,7 +393,9 @@ function GameLines({ change }) {
           </li>
         ))}
         <p className="font-mono text-[10px] text-muted-foreground">
-          each game: ½ × K × (result − expected) × the factors above, rounded, at most 40 a game; the match total never exceeds 80
+          {games[0]?.change?.rd_before != null
+            ? "each game: step size (from both confidences) × (result − expected) × the factors above, rounded, at most 40 a game; the match total never exceeds 80; every game firms your confidence up"
+            : "each game: ½ × K × (result − expected) × the factors above, rounded, at most 40 a game; the match total never exceeds 80"}
         </p>
       </ol>
     </details>
@@ -423,7 +425,9 @@ function FactorLines({ change, compactOnly = false }) {
               </div>
             ))}
             <p className="font-mono text-[10px] text-muted-foreground">
-              change = K × (result − expected) × the factors above, rounded, never more than 80
+              {change.rd_before != null
+                ? "change = step size (from both confidences) × (result − expected) × the factors above, rounded, never more than 80"
+                : "change = K × (result − expected) × the factors above, rounded, never more than 80"}
             </p>
           </dl>
         </details>

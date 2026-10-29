@@ -3,6 +3,8 @@ import { tierByKey } from "@/lib/tiers";
 import { api } from "@/api/client";
 
 const signed = (n) => (n > 0 ? `+${n}` : n < 0 ? `−${Math.abs(n)}` : "±0");
+/** [low, high] -> "+6 to +19" (one number when both ends agree). */
+export const rangeText = (r) => (!Array.isArray(r) ? signed(r) : r[0] === r[1] ? signed(r[0]) : `${signed(r[0])} to ${signed(r[1])}`);
 const tierName = (t) => tierByKey(t?.tier_after)?.name;
 
 /** Fetches the matchStakes preview for `request` (null = not ready yet). Same request, same cache entry. */
@@ -16,7 +18,7 @@ export function useStakes(request) {
 }
 
 /**
- * "On the line: Win +18 · Lose −14 · Gold if you win" for the signed-in player.
+ * "On the line: Win +6 to +19 · Lose −6 to −19 · Gold if you win" for the signed-in player: a narrow 2-1 up to a dominant 2-0.
  * `request`: a matchStakes body ({ format, target, side_a, side_b } | { match_id } | { challenge_id }).
  * `showResult`: for a pending match, also say what confirming the entered scores does.
  */
@@ -26,8 +28,8 @@ export function StakesLine({ request, showResult = false, className = "" }) {
   const me = data?.players?.find((p) => p.you);
   const bits = me
     ? [
-        `Win ${signed(me.win)}`,
-        `Lose ${signed(me.lose)}`,
+        `Win ${rangeText(me.win)}`,
+        `Lose ${rangeText(me.lose)}`,
         me.tier_win && `${tierName(me.tier_win)} if you win`,
         me.tier_lose && `${tierName(me.tier_lose)} if you lose`,
       ].filter(Boolean)
@@ -37,7 +39,7 @@ export function StakesLine({ request, showResult = false, className = "" }) {
       className={`rounded-sm border border-border bg-secondary/50 px-2.5 py-1.5 text-xs leading-relaxed ${className}`}
       data-testid="stakes-line"
       aria-live="polite"
-      title={data?.assumed ? `Win / Lose assume ${data.assumed}` : undefined}
+      title={data?.assumed ? `From ${data.assumed}` : undefined}
     >
       {!me ? (
         <span className="text-muted-foreground">Working out what's on the line…</span>
@@ -59,7 +61,7 @@ export function StakesLine({ request, showResult = false, className = "" }) {
             {data.challenge && <span className="text-muted-foreground"> · challenge ×1.25</span>}
             {me.placing && <span className="text-muted-foreground"> · placement</span>}
           </p>
-          <p className="sr-only">Assumes {data.assumed}.</p>
+          <p className="sr-only">From {data.assumed}.</p>
         </>
       )}
     </div>

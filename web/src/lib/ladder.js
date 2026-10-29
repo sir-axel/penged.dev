@@ -64,3 +64,19 @@ export const rankFor = (player, format) => Number(player?.[format === "doubles" 
 export const ratingFor = (player, format) => Number(player?.[format === "doubles" ? "doubles_rating" : "singles_rating"]) || 1400;
 export const streakFor = (player, format) => Number(player?.[format === "doubles" ? "doubles_win_streak" : "singles_win_streak"]) || 0;
 export const bestStreakFor = (player, format) => Number(player?.[format === "doubles" ? "doubles_best_streak" : "singles_best_streak"]) || 0;
+
+// ---- Confidence (Glicko-2 RD; mirrors currentRd in api/src/rating.js) ----
+const GLICKO_Q = 400 / Math.LN10;
+/** Current RD in a format: the stored RD grown by the days since it was last updated (max 200). */
+export function confidenceFor(player, fmt, nowMs = Date.now()) {
+  const rd = Number(player?.[`${fmt}_rd`]) || 200;
+  const vol = Number(player?.[`${fmt}_vol`]) || 0.06;
+  const at = player?.[`${fmt}_rd_at`];
+  const days = at ? Math.max(0, (nowMs - Date.parse(at)) / 86400000) : 0;
+  return Math.min(200, Math.sqrt(rd * rd + (vol * GLICKO_Q) ** 2 * days));
+}
+/** "settling ±120" while the rating is still settling (RD 90+), else null. Plain words, shown small. */
+export function settlingHint(player, fmt, nowMs = Date.now()) {
+  const rd = confidenceFor(player, fmt, nowMs);
+  return rd >= 90 ? `settling ±${Math.round(rd / 5) * 5}` : null;
+}

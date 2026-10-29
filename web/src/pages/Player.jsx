@@ -7,7 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { BackButton } from "@/components/BackButton";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
-import { formatRecord, playerName, isInactive, isProvisional, overallRating, rankFor, ratingFor, streakFor, bestStreakFor } from "@/lib/ladder";
+import { formatRecord, playerName, isInactive, isProvisional, overallRating, rankFor, ratingFor, streakFor, bestStreakFor, settlingHint } from "@/lib/ladder";
 import { Avatar } from "@/components/Avatar";
 import { TierBadge, TIER_STYLE } from "@/components/TierBadge";
 import { tierFor, nextTier, tierProgress } from "@/lib/tiers";
@@ -85,6 +85,11 @@ function FormatBlock({ player, format }) {
         <div>
           <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Rating</p>
           <p className="font-heading text-2xl font-bold leading-none">{ratingFor(player, format)}</p>
+          {settlingHint(player, format) && (
+            <p className="mt-1 font-mono text-[10px] text-muted-foreground" title="Still settling: results move this rating more until it firms up." data-testid="settling-hint">
+              {settlingHint(player, format)}
+            </p>
+          )}
         </div>
         <div>
           <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Rank</p>

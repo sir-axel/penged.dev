@@ -5,6 +5,7 @@ const r2 = (x) => Math.round(x * 100) / 100;
 const off = (x) => x == null || r2(x) === 1;
 const times = (x) => `×${x.toFixed(2)}`;
 
+export const RD_SETTLING = 90; // mirrors api/src/rating.js
 const signed = (n) => `${n >= 0 ? "+" : "−"}${Math.abs(n)}`;
 /** Per-game summary for one rating_changes entry: [] for matches rated before per-game rating. */
 export function describeGames(e) {
@@ -38,12 +39,29 @@ export function describeChange(e) {
     });
   }
   if (e.score && e.expected != null) compact.push(`expected ${Math.round(e.expected * 100)}%`);
-  if (e.k != null) detail.push({ label: "K", value: e.k.toFixed(1), note: "how far one result can move you: 48 when new, easing toward 32 over your first ~100 games" });
+  if (e.rd_before != null) {
+    const a = Math.round(e.rd_before), b = Math.round(e.rd_after ?? e.rd_before);
+    const settling = e.rd_before >= RD_SETTLING;
+    compact.push(`confidence ±${a}→±${b}${settling ? " (still settling)" : ""}`);
+    detail.push({
+      label: "confidence",
+      value: `±${a} → ±${b}`,
+      note: settling
+        ? "your rating was still settling (new, or back after time away), so this result counted for more; every game firms it up"
+        : "your rating is well established, so one result moves it steadily; time away loosens it again",
+    });
+  }
+  if (e.k != null) {
+    detail.push(e.rd_before != null
+      ? { label: "step size", value: e.k.toFixed(1), note: "points per unit of surprise, from your confidence (wider = bigger) and how established your opponent is" }
+      : { label: "K", value: e.k.toFixed(1), note: "how far one result can move you (rated before confidence was introduced)" });
+  }
   const rows = [
     ["mov", "margin", "bigger wins move more", e.mov],
     ["ac", e.ac >= 1 ? "upset" : "favourite", e.ac >= 1 ? "beat or lost to someone who was ahead on paper" : "favourites are damped", e.ac],
-    ["rust", "back from a break", "3+ weeks away: K is higher for this whole match (up to double)", e.rust],
-    ["opp_certainty", "settling opponent", "opponent has few games behind them, so their rating is still settling", e.opp_certainty],
+    // the next two only exist on matches rated before Glicko-2 (confidence now covers both)
+    ["rust", "back from a break", "older rules: 3+ weeks away made K higher for this match", e.rust],
+    ["opp_certainty", "opponent's games", "older rules: an opponent with few games moved you a little less", e.opp_certainty],
     e.games
       ? ["evidence", "to 21", "a game to 21 is a more reliable result than one to 11", e.evidence]
       : ["evidence", "match length", "more games (or a 21 target) is a more reliable result", e.evidence],

@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { formatRecord, playerName, overallRating, rankFor, ratingFor, streakFor, isProvisional, isInactive } from "@/lib/ladder";
+import { formatRecord, playerName, overallRating, rankFor, ratingFor, streakFor, isProvisional, isInactive, settlingHint } from "@/lib/ladder";
 import { LevelBar } from "@/components/LevelBar";
 import { TierBadge } from "@/components/TierBadge";
 import { nextTier } from "@/lib/tiers";
@@ -39,6 +39,11 @@ export function YourSpot({ player, toConfirm = 0 }) {
                       {!isProvisional(player, fmt) && nextTier(ratingFor(player, fmt)) && (
                         <span className="font-mono text-[10px] text-muted-foreground">
                           {`${nextTier(ratingFor(player, fmt)).pointsToGo} to ${nextTier(ratingFor(player, fmt)).tier.name}`}
+                        </span>
+                      )}
+                      {settlingHint(player, fmt) && (
+                        <span className="font-mono text-[10px] text-muted-foreground" title="Your rating is still settling, so results move it more. Every game firms it up; time away loosens it again." data-testid="settling-hint">
+                          {settlingHint(player, fmt)}
                         </span>
                       )}
                     </div>
