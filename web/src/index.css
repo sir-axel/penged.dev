@@ -60,6 +60,15 @@
     --tier-grandmaster-bd: #b81d2a;
     --tier-gm-ring-a: #ffffff;
     --tier-gm-ring-b: #7d1219;
+    --guild-red: #c0392b;
+    --guild-orange: #b35309;
+    --guild-yellow: #a07800;
+    --guild-green: #2e7d32;
+    --guild-teal: #0f7c76;
+    --guild-blue: #2563c9;
+    --guild-purple: #7b3fc4;
+    --guild-pink: #c2337a;
+    --guild-on: #ffffff;
     --radius: 0.25rem;
     --font-heading: "Chakra Petch", ui-sans-serif, system-ui, sans-serif;
     --font-body: "Inter", ui-sans-serif, system-ui, sans-serif;
@@ -124,6 +133,15 @@
     --tier-grandmaster-bd: #f0707a;
     --tier-gm-ring-a: #141414;
     --tier-gm-ring-b: #f0707a;
+    --guild-red: #ef6b5e;
+    --guild-orange: #f08d43;
+    --guild-yellow: #e8c547;
+    --guild-green: #5fbf68;
+    --guild-teal: #45c2ba;
+    --guild-blue: #6a9cf2;
+    --guild-purple: #b48af0;
+    --guild-pink: #ee7fb5;
+    --guild-on: #141414;
   }
   * {
     border-color: hsl(var(--border));

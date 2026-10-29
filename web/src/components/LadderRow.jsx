@@ -2,8 +2,11 @@ import { Link } from "react-router-dom";
 import { Avatar } from "@/components/Avatar";
 import { playerName } from "@/lib/ladder";
 import { TierBadge } from "@/components/TierBadge";
+import { GuildTag } from "@/components/GuildBadge";
+import { useGuildTags } from "@/hooks/useGuildTags";
 
 export function LadderRow({ rank, player, rating: rating, wins = 0, losses = 0, provisional = false, inactive = false, unrated = false, streak = 0, format = "singles" }) {
+  const guild = useGuildTags()[player.id];
   return (
     <li className="border-b border-border last:border-0">
       <Link
@@ -27,6 +30,7 @@ export function LadderRow({ rank, player, rating: rating, wins = 0, losses = 0, 
             )}
           </span>
           <span className="mt-0.5 block font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+            {guild && <GuildTag tag={guild.tag} color={guild.color} title={guild.name} className="mr-1.5 align-middle" />}
             {"lvl "}
             {player.level || 1}
             {" · "}

@@ -115,6 +115,14 @@ export function Leaderboard() {
         </div>
       </div>
       <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
+        <div className="mb-4 flex gap-1" aria-label="Leaderboards">
+          <span aria-current="page" className="inline-flex min-h-[40px] flex-1 items-center justify-center rounded-sm bg-primary px-3 font-heading text-sm font-medium text-primary-foreground sm:flex-none">
+            Players
+          </span>
+          <Link to="/guilds" className="inline-flex min-h-[40px] flex-1 items-center justify-center rounded-sm px-3 font-heading text-sm font-medium text-muted-foreground hover:bg-secondary sm:flex-none">
+            Guilds
+          </Link>
+        </div>
         {isLoading ? (
           <div className="flex justify-center py-16">
             <div className="h-7 w-7 animate-spin rounded-full border-2 border-border border-t-foreground" />
