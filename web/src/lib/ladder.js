@@ -35,14 +35,36 @@ export function timeLeft(e) {
     r = Math.floor(n / 24);
   return r >= 1 ? `${r}d ${n % 24}h left` : `${n}h ${Math.floor((t % 36e5) / 6e4)}m left`;
 }
-/** Challenge clock: time left plus the local due time. Weekends (Sat/Sun) don't count toward the 72 hours, so the due time already skips them. */
-export function challengeClock(iso) {
-  const left = timeLeft(iso);
-  if (!iso || left === "Window closed") return left;
+/** Weekday-only ms between two instants in the viewer's local time (Sat/Sun don't count; local midnights handle DST). */
+export function weekdayMsBetween(fromMs, toMs) {
+  let t = fromMs;
+  let total = 0;
+  for (let i = 0; t < toMs && i < 400; i++) {
+    const d = new Date(t);
+    const nextMidnight = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime();
+    const stop = Math.min(nextMidnight, toMs);
+    const dow = d.getDay();
+    if (dow !== 0 && dow !== 6) total += stop - t;
+    t = stop;
+  }
+  return total;
+}
+/**
+ * Challenge clock: weekday time left (weekends don't count, same as the deadline), plus the local due time.
+ * e.g. "1d 4h left · due Mon 1:44pm", or "Weekend pause · 1d 4h left · due Mon 1:44pm" on Sat/Sun.
+ */
+export function challengeClock(iso, nowMs = Date.now()) {
+  if (!iso) return "";
+  const end = new Date(iso).getTime();
+  if (Number.isNaN(end) || end <= nowMs) return "Window closed";
+  const ms = weekdayMsBetween(nowMs, end);
+  const h = Math.floor(ms / 36e5);
+  const left = h >= 24 ? `${Math.floor(h / 24)}d ${h % 24}h left` : `${h}h ${Math.floor((ms % 36e5) / 6e4)}m left`;
   const d = new Date(iso);
   const day = d.toLocaleDateString("en-US", { weekday: "short" });
   const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }).replace(" AM", "am").replace(" PM", "pm");
-  return `${left} · due ${day} ${time} · weekends off`;
+  const dow = new Date(nowMs).getDay();
+  return `${dow === 0 || dow === 6 ? "Weekend pause · " : ""}${left} · due ${day} ${time}`;
 }
 /** The browser's IANA time zone (e.g. "America/Chicago"), or null. */
 export function browserTimeZone() {
