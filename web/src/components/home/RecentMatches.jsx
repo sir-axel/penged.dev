@@ -1,8 +1,10 @@
 import { Link } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
 import { MatchRow } from "@/components/MatchRow";
+import { useMyPlayer } from "@/hooks/useMyPlayer";
 
 export function RecentMatches({ matches = [] }) {
+  const { player } = useMyPlayer();
   return (
     <section className="border-t border-border bg-secondary/30">
       <div className="mx-auto max-w-5xl px-4 py-12 sm:px-6 sm:py-16">
@@ -30,7 +32,7 @@ export function RecentMatches({ matches = [] }) {
         ) : (
           <ul className="mt-5 overflow-hidden rounded-sm border border-border bg-card">
             {matches.map((e) => (
-              <MatchRow match={e} key={e.id} />
+              <MatchRow match={e} key={e.id} pov={player?.id} />
             ))}
           </ul>
         )}

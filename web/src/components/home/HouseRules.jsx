@@ -12,7 +12,7 @@ export const PRINCIPLES = [
   {
     tag: "03",
     title: "Challenges, not shortcuts",
-    body: "Your rank is your rating order, and anyone can challenge anyone. Ducking someone rated below you costs rating; ignoring it for 72 hours (weekends don't count) costs double and pays the challenger. Saying no to someone above you is free, but ignoring them still costs. Doubles challenges never cost anything.",
+    body: "Your rank is your rating order, and anyone can challenge anyone. Ducking someone rated below you costs rating; ignoring it for 72 hours (weekends don't count) costs double and pays the challenger. Saying no to someone 1–2 places above you costs half (further up it is free), and ignoring them costs half. Doubles challenges never cost anything.",
   },
 ];
 export function HouseRules() {
