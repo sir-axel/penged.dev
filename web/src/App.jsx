@@ -4,7 +4,7 @@ import { AuthProvider } from "@/context/AuthContext";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { Layout } from "@/components/Layout";
 import { ScrollToTop } from "@/components/ScrollToTop";
-import { RequireAuth, RequirePlayer } from "@/components/guards";
+import { RedirectIfSignedIn, RequireAuth, RequirePlayer } from "@/components/guards";
 import { Home } from "@/pages/Home";
 import { Leaderboard } from "@/pages/Leaderboard";
 import { Feed } from "@/pages/Feed";
@@ -64,13 +64,13 @@ function AppRoutes() {
             <Route path="/chat/dm/:threadId" element={<ChatDm />} />
           </Route>
         </Route>
+        <Route path="*" element={<NotFound />} />
       </Route>
-      <Route path="/login" element={<Login />} />
-      <Route path="/register" element={<Register />} />
-      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/login" element={<RedirectIfSignedIn><Login /></RedirectIfSignedIn>} />
+      <Route path="/register" element={<RedirectIfSignedIn><Register /></RedirectIfSignedIn>} />
+      <Route path="/forgot-password" element={<RedirectIfSignedIn><ForgotPassword /></RedirectIfSignedIn>} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/verify-email" element={<VerifyEmail />} />
-      <Route path="*" element={<NotFound />} />
     </Routes>
   );
 }

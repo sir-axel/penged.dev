@@ -1,51 +1,40 @@
 import { Link, useLocation } from "react-router-dom";
 import { feedbackHref } from "@/pages/Feedback";
 
+const readable = (p) => {
+  try {
+    return decodeURI(p);
+  } catch {
+    return p;
+  }
+};
+
 export function NotFound() {
-  const pageName = useLocation().pathname.substring(1);
+  const { pathname } = useLocation();
   return (
-    <div className="min-h-screen flex items-center justify-center p-6 bg-background">
-      <div className="max-w-md w-full">
-        <div className="text-center space-y-6">
-          <div className="space-y-2">
-            <h1 className="text-7xl font-light text-muted-foreground">404</h1>
-            <div className="h-0.5 w-16 bg-border mx-auto" />
-          </div>
-          <div className="space-y-3">
-            <h2 className="text-2xl font-medium text-foreground">Page Not Found</h2>
-            <p className="text-muted-foreground leading-relaxed">
-              {"The page "}
-              <span className="font-medium text-foreground">"{pageName}"</span>
-              {" could not be found in this application."}
-            </p>
-          </div>
-          <div className="pt-6">
-            <button
-              onClick={() => (window.location.href = "/")}
-              className="inline-flex min-h-10 items-center px-4 py-2 text-sm font-medium text-foreground bg-card border border-border rounded-sm hover:bg-accent transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-ring"
-            >
-              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
-                />
-              </svg>
-              Go Home
-            </button>
-            <p className="mt-4 text-sm text-muted-foreground">
-              Something broken?{" "}
-              <Link
-                to={feedbackHref("/" + pageName)}
-                className="inline-flex min-h-10 items-center font-medium text-foreground underline underline-offset-4"
-              >
-                Send feedback
-              </Link>
-            </p>
-          </div>
-        </div>
-      </div>
+    <div className="mx-auto flex max-w-md flex-col items-center px-4 py-16 text-center sm:px-6 sm:py-24">
+      <p className="font-display text-6xl text-muted-foreground">404</p>
+      <div className="mx-auto mt-3 h-0.5 w-16 bg-border" />
+      <h1 className="mt-6 font-heading text-2xl font-semibold text-foreground">That page does not exist</h1>
+      <p className="mt-3 break-all text-sm leading-relaxed text-muted-foreground">
+        Nothing lives at <span className="font-mono text-foreground">{readable(pathname)}</span>. It may have moved,
+        or the link is mistyped.
+      </p>
+      <Link
+        to="/"
+        className="mt-8 inline-flex min-h-10 items-center rounded-sm border border-border bg-card px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
+      >
+        Back to the board
+      </Link>
+      <p className="mt-4 text-sm text-muted-foreground">
+        Something broken?{" "}
+        <Link
+          to={feedbackHref(pathname)}
+          className="inline-flex min-h-10 items-center font-medium text-foreground underline underline-offset-4"
+        >
+          Send feedback
+        </Link>
+      </p>
     </div>
   );
 }

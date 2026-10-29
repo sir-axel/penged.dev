@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { ImagePlus, LoaderCircle } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
@@ -7,11 +7,13 @@ import { Avatar } from "@/components/Avatar";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { useMyPlayer } from "@/hooks/useMyPlayer";
 import { api } from "@/api/client";
 
 export function Welcome() {
   let navigate = useNavigate(),
     queryClient = useQueryClient(),
+    { player: existing } = useMyPlayer(),
     [username, setUsername] = useState(
       () => new URLSearchParams(window.location.search).get("username") || "",
     ),
@@ -20,6 +22,8 @@ export function Welcome() {
     [uploading, setUploading] = useState(false),
     [error, setError] = useState(""),
     [submitting, setSubmitting] = useState(false);
+  // Already claimed a username: nothing to do here.
+  if (existing && !submitting) return <Navigate to="/" replace />;
   return (
     <>
       <PageHeader
@@ -90,6 +94,7 @@ export function Welcome() {
               onChange={(e) => setUsername(e.target.value)}
               placeholder="e.g. topspin_tom"
               autoComplete="username"
+              maxLength={20}
               className="h-12 rounded-sm"
               required
             />
@@ -104,6 +109,7 @@ export function Welcome() {
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               placeholder="Optional — how your name shows on the ladder"
+              maxLength={40}
               className="h-12 rounded-sm"
             />
           </div>

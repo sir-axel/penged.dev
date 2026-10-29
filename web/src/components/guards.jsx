@@ -1,6 +1,7 @@
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { useMyPlayer } from "@/hooks/useMyPlayer";
+import { getReturnTo } from "@/lib/returnTo";
 
 const Spinner = () => (
   <div className="flex min-h-[50vh] items-center justify-center">
@@ -32,4 +33,10 @@ export function RequirePlayer() {
   const { player, isLoading } = useMyPlayer();
   if (isLoading) return <Spinner />;
   return player ? <Outlet /> : <Navigate to="/welcome" replace />;
+}
+
+/** Login / register / forgot-password make no sense once signed in: send them on to where they were headed. */
+export function RedirectIfSignedIn({ children }) {
+  const { isAuthenticated } = useAuth();
+  return isAuthenticated ? <Navigate to={getReturnTo()} replace /> : children;
 }

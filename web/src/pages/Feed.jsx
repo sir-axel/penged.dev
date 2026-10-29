@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useAuth } from "@/context/AuthContext";
@@ -17,8 +16,10 @@ const TABS = [
 
 export function Feed() {
   const { user, isAuthenticated } = useAuth();
-  const [params] = useSearchParams();
-  const [tab, setTab] = useState(params.get("scope") === "mine" ? "mine" : "all");
+  // The filter lives in the URL so Back from a match returns to the same tab.
+  const [params, setParams] = useSearchParams();
+  const tab = TABS.some((t) => t.key === params.get("scope")) ? params.get("scope") : "all";
+  const setTab = (key) => setParams(key === "all" ? {} : { scope: key }, { replace: true });
   const scope = tab === "mine" && !user?.id ? "all" : tab;
   const { data, isLoading, isError, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
     queryKey: ["feed", scope, user?.id],
