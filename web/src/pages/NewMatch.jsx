@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Plus, LoaderCircle, Trash2 } from "lucide-react";
@@ -52,6 +52,7 @@ export function NewMatch() {
       })),
     filledGames = games.filter((e) => e.a !== "" && e.b !== ""),
     validation = useMemo(() => validateGames(filledGames, target), [filledGames, target]),
+    halfGame = games.findIndex((e) => (e.a === "") !== (e.b === "")),
     updateGame = (e, t, n) => {
       setGames((r) =>
         r.map((r, i) =>
@@ -64,6 +65,10 @@ export function NewMatch() {
         ),
       );
     };
+  // A stale submit error must not outlive the inputs it was about.
+  useEffect(() => {
+    setError("");
+  }, [games, format, target, partnerId, opponentId, opponent2Id]);
   return (
     <>
       <PageHeader
@@ -256,21 +261,27 @@ export function NewMatch() {
             </button>
           )}
         </section>
-        {validation.ok && (
+        {validation.ok && halfGame < 0 && (
           <p className="rounded-sm border border-success/30 bg-success/10 px-3 py-2 text-sm text-success">
-            {"Your side wins "}
-            {validation.gamesA}–{validation.gamesB}. Everyone will be asked to confirm.
-          </p>
-        )}
-        {error && (
-          <p className="rounded-sm border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            {error}
+            {validation.winnerSide === "a"
+              ? `Your side wins ${validation.gamesA}–${validation.gamesB}.`
+              : `Your side loses ${validation.gamesA}–${validation.gamesB}.`}
+            {" Everyone will be asked to confirm."}
           </p>
         )}
       </div>
       {/* Sticky, not fixed: stays in view while filling the form, then rests at the end of it, so it never covers the footer. */}
       <div className="kb-bar sticky bottom-[calc(58px+env(safe-area-inset-bottom))] z-20 border-t border-border bg-background/95 px-4 py-3 backdrop-blur md:bottom-0">
         <div className="mx-auto max-w-2xl">
+          {/* Next to the button, so a failed submit is never off-screen. */}
+          {error && (
+            <p
+              role="alert"
+              className="mb-2 rounded-sm border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+            >
+              {error}
+            </p>
+          )}
           <Button
             onClick={async () => {
               if ((setError(""), !player)) {
@@ -279,6 +290,10 @@ export function NewMatch() {
               }
               if (!opponentId || (format === "doubles" && (!partnerId || !opponent2Id))) {
                 setError("Pick every player in the match.");
+                return;
+              }
+              if (halfGame >= 0) {
+                setError(`Game ${halfGame + 1} needs both scores.`);
                 return;
               }
               if (!validation.ok) {
