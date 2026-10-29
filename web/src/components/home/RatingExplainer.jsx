@@ -17,10 +17,12 @@ function readOpen(page, fallback) {
 }
 
 /** "How ratings work": heading is a toggle. Collapsed by default (home); pass defaultOpen where the page is about the rules. Choice is remembered per page. */
-export function RatingExplainer({ defaultOpen = false, page = "home" }) {
+export function RatingExplainer({ defaultOpen = false, page = "home", alwaysOpen = false }) {
   const panelId = useId();
-  const [open, setOpen] = useState(() => readOpen(page, defaultOpen));
+  const [openState, setOpen] = useState(() => readOpen(page, defaultOpen));
+  const open = alwaysOpen || openState;
   const toggle = () => {
+    if (alwaysOpen) return;
     const next = !open;
     setOpen(next);
     try {
@@ -30,13 +32,13 @@ export function RatingExplainer({ defaultOpen = false, page = "home" }) {
     }
   };
   return (
-    <section id="ratings" className="border-t border-border">
-      <div className="mx-auto max-w-5xl px-4 py-12 sm:px-6 sm:py-16">
+    <section id={alwaysOpen ? undefined : "ratings"} className={alwaysOpen ? "" : "border-t border-border"}>
+      <div className={alwaysOpen ? "px-1 py-2" : "mx-auto max-w-5xl px-4 py-12 sm:px-6 sm:py-16"}>
         <h2 className="m-0">
           <button
             type="button"
             onClick={toggle}
-            aria-expanded={open}
+            aria-expanded={alwaysOpen ? undefined : open}
             aria-controls={panelId}
             className="flex min-h-[44px] w-full items-center justify-between gap-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand"
           >
@@ -46,10 +48,10 @@ export function RatingExplainer({ defaultOpen = false, page = "home" }) {
                 How ratings work
               </span>
             </span>
-            <ChevronDown
+            {!alwaysOpen && <ChevronDown
               className={`h-6 w-6 shrink-0 text-muted-foreground transition-transform duration-300 motion-reduce:transition-none ${open ? "rotate-180" : ""}`}
               aria-hidden="true"
-            />
+            />}
           </button>
         </h2>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">

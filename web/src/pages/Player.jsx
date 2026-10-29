@@ -4,6 +4,7 @@ import { MessageSquare } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useMyPlayer } from "@/hooks/useMyPlayer";
 import { useQuery } from "@tanstack/react-query";
+import { RatingChart } from "@/components/RatingChart";
 import { BackButton } from "@/components/BackButton";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
@@ -230,6 +231,7 @@ export function PlayerProfile() {
           <Stat label="Losses" value={(player.singles_losses || 0) + (player.doubles_losses || 0)} />
           <Stat label="Level" value={player.level || 1} />
         </div>
+        <RatingChart player={player} />
         <section className="mt-8">
           <h2 className="font-display text-[0.58rem] uppercase tracking-[0.22em] text-muted-foreground">
             Match history
