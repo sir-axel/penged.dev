@@ -364,7 +364,9 @@ export function MatchDetail() {
                   )}
                   {e.matched && (
                     <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.08em] text-brand" data-testid="matched-softened">
-                      {`Matched game: loss softened ×${Number(e.matched.loss_factor.toFixed(2))}${e.matched.unsoftened != null ? ` (${e.matched.unsoftened} → ${e.delta})` : ""}`}
+                      {e.matched.min_win != null
+                        ? `Matched game: win topped up to +${e.matched.min_win} (was ${e.matched.raw_win > 0 ? "+" : ""}${e.matched.raw_win})`
+                        : `Matched game: loss softened ×${Number(e.matched.loss_factor.toFixed(2))}${e.matched.unsoftened != null ? ` (${e.matched.unsoftened} → ${e.delta})` : ""}`}
                     </p>
                   )}
                   {(e.games || []).length > 0 ? <GameLines change={e} /> : e.mov != null && <FactorLines change={e} />}

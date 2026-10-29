@@ -88,8 +88,8 @@ describe('weekly matchmaking copy quotes the shipped constants', () => {
     at(`at most ${Math.round(R.MATCHUP_LOSS_RATIO * 100)}% of the max win`);
     at(`min(1, ${R.MATCHUP_LOSS_RATIO} × max win ÷ the full loss)`);
     expect(M.cappedStakes({ max_win: 40, max_loss: 60 })).toEqual({ max_win: 40, max_loss: 30, loss_factor: 0.5 });
-    at('If a win is worth +1 or less for you, nothing is at stake');
-    expect(M.cappedStakes({ max_win: 1, max_loss: 60 }).max_loss).toBe(0);
+    at(`always worth at least +${R.MATCHUP_MIN_WIN} to you`);
+    expect(M.cappedStakes({ max_win: 1, max_loss: 60 })).toMatchObject({ max_win: R.MATCHUP_MIN_WIN });
     at(`Decline and you lose your max loss (at most ${R.MAX_DELTA}) right away`);
     expect(M.backoutCost(30, 1500)).toBe(Math.min(R.MAX_DELTA, R.MATCHUP_BACKOUT_MULT * 30));
     at(`lose your max loss (at most ${R.MAX_DELTA})`);

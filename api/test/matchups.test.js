@@ -203,21 +203,20 @@ describe('max win > max loss', () => {
     for (const w of [1, 2, 3, 5, 8, 13, 21, 40, 63, 80]) {
       for (const l of [1, 2, 4, 9, 20, 41, 60, 79, 80, 95]) {
         const q = cappedStakes({ max_win: w, max_loss: l });
-        expect(q.max_win).toBe(w);
+        const W = Math.max(5, w); // a matched win is worth at least +5
+        expect(q.max_win).toBe(W);
         expect(q.max_loss).toBeLessThan(q.max_win);
         expect(q.max_loss).toBeLessThanOrEqual(l);
-        if (w > 1) {
-          expect(q.max_loss).toBeGreaterThanOrEqual(1);
-          expect(q.loss_factor).toBeCloseTo(Math.min(1, (0.75 * w) / l), 3);
-        }
+        expect(q.max_loss).toBeGreaterThanOrEqual(1);
+        expect(q.loss_factor).toBeCloseTo(Math.min(1, (0.75 * W) / l), 3);
       }
     }
     expect(cappedStakes({ max_win: 80, max_loss: 80 })).toEqual({ max_win: 80, max_loss: 60, loss_factor: 0.75 });
     expect(cappedStakes({ max_win: 40, max_loss: 10 })).toEqual({ max_win: 40, max_loss: 10, loss_factor: 1 });
-    // best case <= +1 (a heavy favourite, whose 2-0 win can even cost rating): W counts as 1 and nothing is at stake
-    expect(cappedStakes({ max_win: -15, max_loss: 98 })).toEqual({ max_win: 1, max_loss: 0, loss_factor: 0 });
-    expect(cappedStakes({ max_win: 1, max_loss: 30 })).toEqual({ max_win: 1, max_loss: 0, loss_factor: 0 });
-    expect(cappedStakes({ max_win: 2, max_loss: 30 })).toEqual({ max_win: 2, max_loss: 1, loss_factor: 0.05 });
+    // a heavy favourite (whose 2-0 can even cost rating): the win counts as at least +5, the loss stays below it
+    expect(cappedStakes({ max_win: -15, max_loss: 98 })).toEqual({ max_win: 5, max_loss: 4, loss_factor: 0.0383 });
+    expect(cappedStakes({ max_win: 1, max_loss: 30 })).toEqual({ max_win: 5, max_loss: 4, loss_factor: 0.125 });
+    expect(cappedStakes({ max_win: 6, max_loss: 30 })).toEqual({ max_win: 6, max_loss: 5, loss_factor: 0.15 });
     expect(cappedStakes({ max_win: 30, max_loss: 0 })).toEqual({ max_win: 30, max_loss: 0, loss_factor: 1 });
     expect(softenLoss(1500, -40, 0.25)).toBe(-10);
     expect(softenLoss(1500, 12, 0.25)).toBe(12); // wins untouched
@@ -242,10 +241,11 @@ describe('max win > max loss', () => {
     for (const v of [vt, vb]) expect(v.max_win).toBeGreaterThan(v.max_loss);
     const rt = await rowOf(top);
     expect(rt.opponent_player_id).toBe(bot.player.id);
-    // #1 vs the bottom: a 2-0 win even costs #1 rating (the underdog's close-loss credit), so nothing is at stake for #1
+    // #1 vs the bottom: a 2-0 win could even cost #1 rating (close-loss credit), so the win is topped up to +5
     expect(rt.quote_win).toBeLessThanOrEqual(1);
     expect(rt.quote_loss).toBeGreaterThan(0);
-    expect(vt).toMatchObject({ max_win: 1, max_loss: 0, loss_factor: 0, decline_cost: 0, backout_cost: 0 });
+    expect(vt).toMatchObject({ max_win: 5, max_loss: 4 });
+    expect(vt.decline_cost).toBeGreaterThan(0);
     // the bottom player has everything to win and nothing to lose
     expect(vb.max_win).toBeGreaterThan(40);
     expect(vb.max_loss).toBe(0);
@@ -580,5 +580,22 @@ describe('weekly match deadlines', () => {
     await sql('UPDATE challenges SET expires_at = ? WHERE id = ?', later, ch.id);
     await sync();
     expect((await one('SELECT expires_at FROM challenges WHERE id = ?', ch.id)).expires_at).toBe(row.week_end);
+  });
+});
+
+describe('matched win floor', () => {
+  it('the owner of the row wins their matched game for at least +5, even as the heavy favourite', async () => {
+    const ps = await rated(['Top', 2300], ['Bot', 850]);
+    const [top, bot] = ps;
+    await only(top, bot);
+    await call(top, 'matchupYes');
+    const ch = (await rowOf(top)).challenge_id;
+    await call(bot, 'respondChallenge', { challenge_id: ch, decision: 'accept' });
+    // a close 2-0: the underdog's close-loss credit would normally cost the favourite rating
+    const s = await call(top, 'submitMatch', { format: 'singles', target: 11, side_a: [{ player_id: top.player.id }], side_b: [{ player_id: bot.player.id }], games: [{ a: 11, b: 9 }, { a: 11, b: 9 }] });
+    const m = (await call(bot, 'respondMatch', { match_id: s.body.match.id, decision: 'accept' })).body.match;
+    const t = m.rating_changes.find((x) => x.player_id === top.player.id);
+    expect(t.delta).toBe(5);
+    expect(t.matched).toMatchObject({ min_win: 5 });
   });
 });

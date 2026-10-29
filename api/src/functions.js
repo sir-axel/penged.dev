@@ -17,7 +17,7 @@ import {
   RANK_SQL, DOUBLES_RANK_SQL, rankPlayers, ACTIVE_DAYS, meetingWeight, NOVELTY_DAYS, stakes, currentRd, RATING_FLOOR, challengePenalty, WALKOVER_XP, COOLDOWN_DAYS, WAIVER_DAYS, FATIGUE_DAYS,
   CHALLENGE_CAP_DAYS, CHALLENGES_RECEIVED_PER_WEEK, CHALLENGES_SENT_PER_WEEK, MATCHUP_DODGE_DAYS,
 } from './rating.js';
-import { assignMatchups, whyText, backoutCost, missCost, cappedStakes, softenLoss } from './matchmaking.js';
+import { assignMatchups, whyText, backoutCost, missCost, cappedStakes, softenLoss, topUpWin } from './matchmaking.js';
 import { bountyFor, BOUNTY_CLAIM_DAYS, BOUNTY_RISE_DAYS } from './bounty.js';
 import { weekdayDeadline, cleanTimeZone, DEFAULT_TZ, weekStartIso, weekEndIso } from './weekdays.js';
 import { withCtx } from './email.js';
@@ -582,11 +582,14 @@ async function matchedFactors(env, ch) {
   if (!ch || ch.format !== 'singles') return {};
   const rs = await all(env,
     `SELECT player_id, loss_factor FROM matchups WHERE challenge_id = ? AND said_yes_at IS NOT NULL AND settled_at IS NULL
-       AND loss_factor IS NOT NULL AND loss_factor < 1`, ch.id);
+       AND loss_factor IS NOT NULL`, ch.id);
   return Object.fromEntries(rs.map((r) => [r.player_id, r.loss_factor]));
 }
-/** Applies a matched-game loss factor to one stakes() entry (losses only; wins unchanged). */
+/** Applies the matched-game rules to one stakes() entry: losses scaled by f, wins topped up to MATCHUP_MIN_WIN. */
 function softenStakes(x, f) {
+  x.win = x.win.map(topUpWin); x.narrow.win = topUpWin(x.narrow.win); x.dominant.win = topUpWin(x.dominant.win);
+  x.win_after = x.rating + x.win[1];
+  if (!x.placing) x.tier_win = tierChange(x.rating, x.win_after);
   const s = (v) => softenLoss(x.rating, v, f);
   x.lose = x.lose.map(s); x.narrow.lose = s(x.narrow.lose); x.dominant.lose = s(x.dominant.lose);
   x.lose_after = x.rating + x.lose[1];
@@ -645,11 +648,16 @@ async function verifyPlan(env, m, now) {
     // This week's matched game: the owner's loss is softened by the row's frozen factor (after everything else).
     const f = soften[p.id];
     let matched = null;
-    if (f != null && !won && res.delta < 0) {
+    if (f != null && !won && res.delta < 0 && f < 1) {
       const raw = res.delta;
       res.delta = softenLoss(res.before, res.delta, f);
       res.after = res.before + res.delta;
       matched = { loss_factor: f, unsoftened: raw };
+    } else if (f != null && won && res.delta < topUpWin(res.delta)) {
+      const raw = res.delta;
+      res.delta = topUpWin(res.delta);
+      res.after = res.before + res.delta;
+      matched = { min_win: res.delta, raw_win: raw };
     }
     const xpGain = xpRes.parts.reduce((t, x) => t + x.xp, 0);
     const xp = p.xp + xpGain;
@@ -777,7 +785,9 @@ fns.matchStakes = async ({ env, user }, body) => {
       { target, challenge }).map((r) => {
         const cs = claims[match.winner_side];
         const after0 = Math.max(RATING_FLOOR, r.after + sum(cs.filter((c) => c.to === r.id)) - sum(cs.filter((c) => c.from === r.id)));
-        const delta = sideOf(r.id) === match.winner_side ? after0 - r.before : softenLoss(r.before, after0 - r.before, soften[r.id]);
+        const won = sideOf(r.id) === match.winner_side;
+        const raw = after0 - r.before;
+        const delta = soften[r.id] == null ? raw : won ? topUpWin(raw) : softenLoss(r.before, raw, soften[r.id]);
         return [r.id, { ...r, after: r.before + delta, delta }];
       }))
     : null;

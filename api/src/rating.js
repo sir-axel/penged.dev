@@ -603,3 +603,5 @@ export const MATCHUP_BACKOUT_MULT = 2; // backing out after accepting costs 2x t
 // The matched game is lopsided in the owner's favour: their loss in it is scaled so the max loss is at most 75% of the
 // max win (factor f = min(1, 0.75 x win / loss), frozen at generation, applied when the owner loses the matched game).
 export const MATCHUP_LOSS_RATIO = 0.75;
+// A win in your weekly match is always worth at least this much to you (even a heavy favourite whose 2-0 would cost rating).
+export const MATCHUP_MIN_WIN = 5;
