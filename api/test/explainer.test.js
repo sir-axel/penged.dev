@@ -2,7 +2,7 @@
 // it quotes is checked against api/src/rating.js constants or recomputed with the real rating code.
 import { describe, it, expect } from 'vitest';
 import * as R from '../src/rating.js';
-import { RATING_POINTS, RATING_FORMULA, WORKED_EXAMPLE, XP_POINTS, CHALLENGE_POINTS } from '../../web/src/lib/ratingCopy.js';
+import { RATING_POINTS, RATING_FORMULA, WORKED_EXAMPLE, XP_POINTS, CHALLENGE_POINTS, MATCHUP_POINTS } from '../../web/src/lib/ratingCopy.js';
 
 const ALL = [...RATING_POINTS, RATING_FORMULA, WORKED_EXAMPLE, ...XP_POINTS, ...CHALLENGE_POINTS].join('\n');
 const has = (s) => expect(ALL).toContain(s);
@@ -67,6 +67,30 @@ describe('explainer quotes the shipped constants', () => {
     has(`At most ${B.BOUNTY_RATING_MAX} rating and ${B.BOUNTY_XP_MAX} xp`);
     has(`send ${R.CHALLENGES_SENT_PER_WEEK} challenges and receive ${R.CHALLENGES_RECEIVED_PER_WEEK} in any ${R.CHALLENGE_CAP_DAYS} days`);
     has(`earns ${R.WALKOVER_XP} xp`); has(`counts ×${R.CHALLENGE_STAKES} like a singles one`);
+  });
+});
+
+describe('weekly matchmaking copy quotes the shipped constants', () => {
+  it('weights, top pull, back-out and miss costs', async () => {
+    const M = await import('../src/matchmaking.js');
+    const T = MATCHUP_POINTS.join('\n');
+    const at = (s) => expect(T).toContain(s);
+    at(`Never played them: +${R.MATCHUP_NEVER_PLAYED}`);
+    at(`+${R.MATCHUP_PER_DAY} for every day since you last met, counting at most ${R.MATCHUP_DAYS_CAP} days`);
+    at(`in the last ${R.MATCHUP_DODGE_DAYS} days, either way round: +${R.MATCHUP_DODGE} (up to ${R.MATCHUP_DODGE_MAX} count)`);
+    expect(R.MATCHUP_TOP_SPAN).toBe(5);
+    at(`+${M.topBonus(1)} for #1, ${M.topBonus(2)} for #2, ${M.topBonus(3)} for #3, ${M.topBonus(4)} for #4, ${M.topBonus(5)} for #5`);
+    expect(M.topBonus(1)).toBe(R.MATCHUP_TOP_BONUS);
+    at(`Last week's pick again: −${R.MATCHUP_REPEAT_PENALTY}`);
+    at(`losing ${R.MATCHUP_BACKOUT_MULT}x your max loss (at most ${R.MAX_DELTA})`);
+    expect(M.backoutCost(30, 1500)).toBe(Math.min(R.MAX_DELTA, R.MATCHUP_BACKOUT_MULT * 30));
+    at(`lose your max loss (at most ${R.MAX_DELTA})`);
+    expect(M.missCost(95, 1500)).toBe(R.MAX_DELTA);
+    at(`played as a challenge (×${R.CHALLENGE_STAKES})`);
+    at(`the ${R.COOLDOWN_DAYS}-day cooldown`);
+    // ratings never enter the score
+    expect(M.matchupScore.length).toBe(1);
+    expect(String(M.matchupScore)).not.toMatch(/rating/i);
   });
 });
 

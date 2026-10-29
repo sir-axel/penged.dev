@@ -11,11 +11,13 @@
 import { bump, defer, guardedSend, layout } from './email.js';
 import { TIERS } from './tiers.js';
 import { DEFAULT_TZ } from './weekdays.js';
+import { whyText } from './matchmaking.js';
+import { MAX_DELTA, MATCHUP_BACKOUT_MULT } from './rating.js';
 
 /** Notification emails per UTC day; the rest of the Resend allowance stays free for account emails. */
 export const NOTIFY_DAILY_CAP = 60;
-// Only what players asked for: a challenge that names you, and the final score of a match you played.
-export const EVENTS = ['challenge_received', 'match_verified'];
+// Only what players asked for: a challenge that names you, the final score of a match you played, and your weekly match.
+export const EVENTS = ['challenge_received', 'match_verified', 'matchup_assigned'];
 
 const site = (env) => String(env.SITE_URL || 'https://penged.dev').replace(/\/$/, '');
 const parse = (v) => (typeof v === 'string' ? JSON.parse(v) : v);
@@ -97,16 +99,23 @@ const doublesMsgs = {
   },
 };
 
+const rankOf = (n) => (n != null ? ` (#${n})` : '');
 const challengeMsgs = {
   challenge_received(env, c, rs) {
     const r = rs[c.defender_user_id];
     if (!r) return [];
-    const lines = [`${c.challenger_name} (#${c.challenger_rank}) challenged you (#${c.defender_rank}).`];
+    const matched = !!c.matchup_id;
+    const lines = [matched
+      ? `${c.challenger_name}${rankOf(c.challenger_rank)} was matched with you for this week's match and said yes: this is their matched game. For you it is a regular challenge.`
+      : `${c.challenger_name} (#${c.challenger_rank}) challenged you (#${c.defender_rank}).`];
     if (c.message) lines.push(`Their message: "${c.message}"`);
     lines.push(`Accept or decline by ${when(c.expires_at, r.tz)}. The clock only runs on weekdays. ${c.direction === 'down'
       ? "They're rated above you, so declining is free, but letting it run out costs you rating."
       : 'Letting it run out can cost you rating.'}`);
-    return [message(env, r, { subject: `${c.challenger_name} challenged you`, heading: 'You have been challenged', lines, button: 'ANSWER THE CHALLENGE', path: '/challenges' })];
+    return [message(env, r, {
+      subject: matched ? `${c.challenger_name} wants this week's matched game with you` : `${c.challenger_name} challenged you`,
+      heading: matched ? "This week's matched game" : 'You have been challenged', lines, button: 'ANSWER THE CHALLENGE', path: '/challenges',
+    })];
   },
 };
 
@@ -152,6 +161,23 @@ const matchMsgs = {
   },
 };
 
+// Weekly matchmaking: each owner hears once, when the week's matchups are generated (ensureMatchupWeek).
+const minus = (n) => `−${Math.abs(n)}`;
+function matchupMsg(env, m, r) {
+  const opp = m.o_display || m.o_user || 'your opponent';
+  const loss = m.quote_loss || 0;
+  const back = Math.min(MAX_DELTA, MATCHUP_BACKOUT_MULT * loss);
+  const why = whyText(m);
+  const lines = [
+    `Your match this week is ${opp}${rankOf(m.opponent_rank)}.`,
+    ...(why ? [`Why them: ${why}.`] : []),
+    `On the line: max win +${m.quote_win || 0}, max loss ${minus(loss)} (a 2-0 either way, played as a challenge).`,
+    `Play it by ${when(new Date(Date.parse(m.week_end) - 60000).toISOString(), r.tz)}, or lose ${loss}.`,
+    `Say "I'm in" to send them the challenge. Once you say yes you can't back out without losing 2x the max loss (${minus(back)}).`,
+  ];
+  return message(env, r, { subject: `Your match this week: ${opp}`, heading: "This week's match", lines, button: 'SEE YOUR MATCH', path: '/challenges' });
+}
+
 // ---- planning + delivery ---------------------------------------------------------------------------------
 /** The emails an event should produce right now (recipients filtered). data: { challenge_id | challenge_ids | match_id, actor_user_id? } */
 export async function compose(env, event, data = {}) {
@@ -161,6 +187,16 @@ export async function compose(env, event, data = {}) {
     const cs = (await env.DB.prepare(`SELECT * FROM challenges WHERE id IN (${ids.map(() => '?').join(',')})`).bind(...ids).all()).results;
     const rs = await recipients(env, cs.flatMap(everyone));
     return cs.flatMap((c) => (c.format === 'doubles' ? doublesMsgs : challengeMsgs)[event](env, c, rs).filter((msg) => msg.user_id !== data.actor_user_id));
+  }
+  if (event === 'matchup_assigned') {
+    const ids = data.matchup_ids || [];
+    if (!ids.length) return [];
+    const rows = (await env.DB.prepare(
+      `SELECT m.*, o.display_name AS o_display, o.username AS o_user FROM matchups m LEFT JOIN players o ON o.id = m.opponent_player_id
+         WHERE m.id IN (${ids.map(() => '?').join(',')}) ORDER BY m.created_date, m.id`,
+    ).bind(...ids).all()).results;
+    const rs = await recipients(env, rows.map((m) => m.user_id));
+    return rows.filter((m) => rs[m.user_id]).map((m) => matchupMsg(env, m, rs[m.user_id]));
   }
   if (matchMsgs[event]) {
     const row = data.match_id ? await env.DB.prepare('SELECT * FROM matches WHERE id = ?').bind(data.match_id).first() : null;

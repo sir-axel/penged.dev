@@ -30,7 +30,7 @@ export const ENTITIES = {
       penalty_rank_after: 'int', penalty_reason: 'text', penalized_at: 'ts', reversed: 'bool',
       format: 'text', direction: 'text', challenger_partner_user_id: 'text', challenger_partner_player_id: 'text', challenger_partner_name: 'text',
       defender_partner_user_id: 'text', defender_partner_player_id: 'text', defender_partner_name: 'text',
-      all_user_ids: 'array', all_player_ids: 'array', accepted_user_ids: 'array', declined_by_user_id: 'text',
+      all_user_ids: 'array', all_player_ids: 'array', accepted_user_ids: 'array', declined_by_user_id: 'text', matchup_id: 'text',
     },
   },
 };

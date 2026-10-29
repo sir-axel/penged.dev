@@ -53,3 +53,26 @@ export function weekdayDeadline(startMs, ms, tzs = [DEFAULT_TZ]) {
   }
   return new Date(t).toISOString();
 }
+
+// ---------- the ladder week: Monday 00:00 America/Chicago (guild scores and weekly matchmaking) ----------
+const weekFmt = new Intl.DateTimeFormat('en-US', {
+  timeZone: DEFAULT_TZ, year: 'numeric', month: 'numeric', day: 'numeric', weekday: 'short', hour: 'numeric', minute: 'numeric', second: 'numeric', hourCycle: 'h23',
+});
+const partsAt = (t) => Object.fromEntries(weekFmt.formatToParts(new Date(t)).map((x) => [x.type, x.value]));
+/** Local wall clock minus UTC, in ms, at instant t. */
+const offsetAt = (t) => {
+  const p = partsAt(t);
+  return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour % 24, +p.minute, +p.second) - Math.floor(t / 1000) * 1000;
+};
+/** ISO instant of the most recent Monday 00:00 in America/Chicago (DST-aware). */
+export function weekStartIso(nowMs = Date.now()) {
+  const p = partsAt(nowMs);
+  const wall = Date.UTC(+p.year, +p.month - 1, +p.day - ((DOW[p.weekday] + 6) % 7)); // Monday midnight, as wall time
+  let t = wall - offsetAt(nowMs);
+  t = wall - offsetAt(t); // the offset at that Monday may differ (DST)
+  return new Date(t).toISOString();
+}
+
+/** ISO instant of the NEXT Monday 00:00 America/Chicago after the week starting at `weekStart` (DST-aware). */
+export const weekEndIso = (weekStart) => weekStartIso(Date.parse(weekStart) + 7.5 * DAY);
+

@@ -15,10 +15,11 @@ import { decodeInternal, pub } from './schema.js';
 import {
   START_RATING, REPEAT_WINDOW_DAYS, rateMatch, xpForMatch, levelForXp, validateGames, summarizeGames,
   RANK_SQL, DOUBLES_RANK_SQL, rankPlayers, ACTIVE_DAYS, meetingWeight, NOVELTY_DAYS, stakes, currentRd, RATING_FLOOR, challengePenalty, WALKOVER_XP, COOLDOWN_DAYS, WAIVER_DAYS, FATIGUE_DAYS,
-  CHALLENGE_CAP_DAYS, CHALLENGES_RECEIVED_PER_WEEK, CHALLENGES_SENT_PER_WEEK,
+  CHALLENGE_CAP_DAYS, CHALLENGES_RECEIVED_PER_WEEK, CHALLENGES_SENT_PER_WEEK, MATCHUP_DODGE_DAYS,
 } from './rating.js';
+import { assignMatchups, whyText, backoutCost, missCost } from './matchmaking.js';
 import { bountyFor, BOUNTY_CLAIM_DAYS, BOUNTY_RISE_DAYS } from './bounty.js';
-import { weekdayDeadline, cleanTimeZone, DEFAULT_TZ } from './weekdays.js';
+import { weekdayDeadline, cleanTimeZone, DEFAULT_TZ, weekStartIso, weekEndIso } from './weekdays.js';
 import { withCtx } from './email.js';
 import { notify } from './notify.js';
 
@@ -210,8 +211,8 @@ const fmtUtc = (iso) => {
 
 // ---------- weekly challenge caps (rolling CHALLENGE_CAP_DAYS, both formats, any status, reversed ones excluded) ----------
 const capSince = () => daysAgoIso(CHALLENGE_CAP_DAYS);
-const SENT_N = `(SELECT count(*) FROM challenges WHERE created_date > ? AND reversed = 0 AND challenger_player_id = ?)`;
-const RECEIVED_N = `(SELECT count(*) FROM challenges WHERE created_date > ? AND reversed = 0 AND (defender_player_id = ? OR defender_partner_player_id = ?))`;
+const SENT_N = `(SELECT count(*) FROM challenges WHERE created_date > ? AND reversed = 0 AND matchup_id IS NULL AND challenger_player_id = ?)`;
+const RECEIVED_N = `(SELECT count(*) FROM challenges WHERE created_date > ? AND reversed = 0 AND matchup_id IS NULL AND (defender_player_id = ? OR defender_partner_player_id = ?))`;
 /** When a capped player gets a slot back: `dates` ascending; null while under `cap`. */
 const freesAt = (dates, cap) =>
   (dates.length >= cap ? new Date(Date.parse(dates[dates.length - cap]) + CHALLENGE_CAP_DAYS * 86400000).toISOString() : null);
@@ -219,14 +220,14 @@ const times = (n) => (n === 1 ? 'once' : n === 2 ? 'twice' : `${n} times`);
 /** Refuses when the challenger is out of sends or a defender is out of receives; returns the guards that keep it so at commit. */
 async function capGuards(env, me, defenders) {
   const since = capSince();
-  const sent = (await all(env, `SELECT created_date FROM challenges WHERE created_date > ? AND reversed = 0 AND challenger_player_id = ? ORDER BY created_date`, since, me.id))
+  const sent = (await all(env, `SELECT created_date FROM challenges WHERE created_date > ? AND reversed = 0 AND matchup_id IS NULL AND challenger_player_id = ? ORDER BY created_date`, since, me.id))
     .map((r) => r.created_date);
   const again = freesAt(sent, CHALLENGES_SENT_PER_WEEK);
   if (again) throw new HttpError(409, `You have sent ${CHALLENGES_SENT_PER_WEEK} challenges this week. You can send another after ${fmtUtc(again)}.`);
   const guards = [guard(env, `${SENT_N} < ?`, since, me.id, CHALLENGES_SENT_PER_WEEK)];
   for (const d of defenders) {
     const got = (await all(env,
-      `SELECT created_date FROM challenges WHERE created_date > ? AND reversed = 0 AND (defender_player_id = ? OR defender_partner_player_id = ?) ORDER BY created_date`,
+      `SELECT created_date FROM challenges WHERE created_date > ? AND reversed = 0 AND matchup_id IS NULL AND (defender_player_id = ? OR defender_partner_player_id = ?) ORDER BY created_date`,
       since, d.id, d.id)).map((r) => r.created_date);
     const until = freesAt(got, CHALLENGES_RECEIVED_PER_WEEK);
     if (until) {
@@ -404,7 +405,6 @@ async function ratingParts(env, { fmt, sides, paddleOf, excludeId = '', now }) {
   const ids = [...sides.a, ...sides.b];
   const players = await getPlayers(env, ids);
   if (players.length !== ids.length) throw new HttpError(409, 'A player in this match no longer exists.');
-  const sideOf = (id) => (sides.a.includes(id) ? 'a' : 'b');
   // Earlier VERIFIED same-format meetings in the last 180 days. For player P, a meeting is an earlier match
   // where P was opposite at least one of P's opponents in this match (singles: the same opponent).
   // Each counts 0.5 ^ (days ago / REPEAT_HALF_LIFE_DAYS) (meetingWeight): it fades as time passes.
@@ -412,7 +412,13 @@ async function ratingParts(env, { fmt, sides, paddleOf, excludeId = '', now }) {
     `SELECT side_a, side_b, verified_at FROM matches WHERE status = 'verified' AND ranked = 1 AND format = ? AND id <> ? AND verified_at > ?
        AND EXISTS (SELECT 1 FROM json_each(all_player_ids) WHERE value IN (${placeholders(ids.length)}))`,
     fmt, excludeId, daysAgoIso(REPEAT_WINDOW_DAYS), ...ids);
-  const prev = prevRows.map((r) => {
+  return partsFrom({ fmt, sides, paddleOf, now, players, prevRows });
+}
+/** ratingParts from rows already loaded (`prevRows` may hold extra matches: only meetings between these players count). */
+function partsFrom({ fmt, sides, paddleOf, now, players, prevRows }) {
+  const sideOf = (id) => (sides.a.includes(id) ? 'a' : 'b');
+  const cut = Date.parse(now) - REPEAT_WINDOW_DAYS * 86400000;
+  const prev = prevRows.filter((r) => Date.parse(r.verified_at) > cut).map((r) => {
     const days = (Date.parse(now) - Date.parse(r.verified_at)) / 86400000;
     return { A: JSON.parse(r.side_a).map((e) => e.player_id), B: JSON.parse(r.side_b).map((e) => e.player_id), w: meetingWeight(days), days };
   });
@@ -498,24 +504,30 @@ function unrankedPlan(env, m, now, players, parts, sideOf) {
 
 /** Rating each player gained (net) in `fmt` over the last BOUNTY_RISE_DAYS of verified ranked matches. */
 async function risesOf(env, fmt, ids, excludeId = '') {
-  const out = Object.fromEntries(ids.map((id) => [id, 0]));
-  if (!ids.length) return out;
+  if (!ids.length) return {};
   const rows = await all(env,
     `SELECT rating_changes FROM matches WHERE status = 'verified' AND ranked = 1 AND format = ? AND id <> ? AND verified_at > ?
        AND EXISTS (SELECT 1 FROM json_each(all_player_ids) WHERE value IN (${placeholders(ids.length)}))`,
     fmt, excludeId, daysAgoIso(BOUNTY_RISE_DAYS), ...ids);
+  return risesFrom(rows, ids);
+}
+function risesFrom(rows, ids) {
+  const out = Object.fromEntries(ids.map((id) => [id, 0]));
   for (const r of rows) for (const c of JSON.parse(r.rating_changes || '[]')) if (c.player_id in out) out[c.player_id] += c.delta || 0;
   return out;
 }
 
 /** "hunter:target" pairs whose bounty was claimed in the last BOUNTY_CLAIM_DAYS (format `fmt`), for these targets. */
 async function claimedPairs(env, fmt, targetIds, excludeId = '') {
-  const claimed = new Set();
-  if (!targetIds.length) return claimed;
+  if (!targetIds.length) return new Set();
   const rows = await all(env,
     `SELECT rating_changes FROM matches WHERE status = 'verified' AND ranked = 1 AND format = ? AND id <> ? AND verified_at > ?
        AND EXISTS (SELECT 1 FROM json_each(all_player_ids) WHERE value IN (${placeholders(targetIds.length)}))`,
     fmt, excludeId, daysAgoIso(BOUNTY_CLAIM_DAYS), ...targetIds);
+  return claimedFrom(rows);
+}
+function claimedFrom(rows) {
+  const claimed = new Set();
   for (const r of rows) for (const c of JSON.parse(r.rating_changes || '[]')) for (const b of c.bounties || []) claimed.add(`${c.player_id}:${b.from}`);
   return claimed;
 }
@@ -533,6 +545,9 @@ async function bountyClaims(env, m, players, sideOf) {
   const losers = players.filter((p) => sideOf(p.id) !== m.winner_side);
   const rises = await risesOf(env, fmt, losers.map((p) => p.id), m.id);
   const claimed = await claimedPairs(env, fmt, losers.map((p) => p.id), m.id);
+  return claimsFrom(fmt, winners, losers, rises, claimed);
+}
+function claimsFrom(fmt, winners, losers, rises, claimed) {
   const out = [];
   for (const l of losers) {
     for (const w of winners) {
@@ -632,11 +647,35 @@ async function verifyPlan(env, m, now) {
     });
   }
   stmts.push(...rankStmts(env)); // each format's rank SQL reads only its own columns; the other is a no-op
+  if (fmt === 'singles') stmts.push(markPlayedStmt(env, m, now));
   if (ch) {
     stmts.push(guardRow(env, 'challenges', ch.id, ch.version, 'accepted'));
     stmts.push(stmt(env, `UPDATE challenges SET status = 'completed', updated_date = ?, version = version + 1 WHERE id = ?`, now, ch.id));
   }
   return { stmts, changes };
+}
+
+/** Folds bounty claims ({ a: [...], b: [...] } by winning side) into stakes() output, exactly as verification pays them. */
+function withBounties(out, claims) {
+  const sum = (cs) => cs.reduce((t, c) => t + c.rating, 0);
+  for (const x of out) {
+    const gets = claims[x.side].filter((c) => c.to === x.id);
+    const pays = sum(claims[x.side === 'a' ? 'b' : 'a'].filter((c) => c.from === x.id));
+    const bw = sum(gets);
+    const lose = (v) => Math.max(RATING_FLOOR - x.rating, v - pays);
+    if (bw) {
+      x.win = x.win.map((v) => v + bw); x.narrow.win += bw; x.dominant.win += bw; x.win_after += bw;
+      if (!x.placing) x.tier_win = tierChange(x.rating, x.win_after);
+    }
+    if (pays) {
+      x.lose = x.lose.map(lose); x.narrow.lose = lose(x.narrow.lose); x.dominant.lose = lose(x.dominant.lose);
+      x.lose_after = Math.max(RATING_FLOOR, x.rating + x.lose[1]);
+      if (!x.placing) x.tier_lose = tierChange(x.rating, x.lose_after);
+    }
+    if (gets.length) x.bounty_win = { rating: bw, xp: gets.reduce((t, c) => t + c.xp, 0), from: gets.map((c) => c.from_name) };
+    if (pays) x.bounty_risk = pays;
+  }
+  return out;
 }
 
 /**
@@ -693,24 +732,8 @@ fns.matchStakes = async ({ env, user }, body) => {
   const ranked = match ? match.ranked !== false : body.ranked !== false;
   const claims = { a: [], b: [] };
   if (ranked) for (const w of ['a', 'b']) claims[w] = await bountyClaims(env, { format: fmt, id: match?.id || '', winner_side: w }, players, sideOf);
+  withBounties(out, claims);
   const sum = (cs) => cs.reduce((t, c) => t + c.rating, 0);
-  for (const x of out) {
-    const gets = claims[x.side].filter((c) => c.to === x.id);
-    const pays = sum(claims[x.side === 'a' ? 'b' : 'a'].filter((c) => c.from === x.id));
-    const bw = sum(gets);
-    const lose = (v) => Math.max(RATING_FLOOR - x.rating, v - pays);
-    if (bw) {
-      x.win = x.win.map((v) => v + bw); x.narrow.win += bw; x.dominant.win += bw; x.win_after += bw;
-      if (!x.placing) x.tier_win = tierChange(x.rating, x.win_after);
-    }
-    if (pays) {
-      x.lose = x.lose.map(lose); x.narrow.lose = lose(x.narrow.lose); x.dominant.lose = lose(x.dominant.lose);
-      x.lose_after = Math.max(RATING_FLOOR, x.rating + x.lose[1]);
-      if (!x.placing) x.tier_lose = tierChange(x.rating, x.lose_after);
-    }
-    if (gets.length) x.bounty_win = { rating: bw, xp: gets.reduce((t, c) => t + c.xp, 0), from: gets.map((c) => c.from_name) };
-    if (pays) x.bounty_risk = pays;
-  }
   const nameById = Object.fromEntries(players.map((p) => [p.id, nameOf(p)]));
   // A pending match already has its scores: also say exactly what confirming it does (same rules verification uses).
   const actual = match && ranked
@@ -769,6 +792,18 @@ fns.respondMatch = ({ env, user }, body) =>
     return { match: pub('Match', await first(env, 'SELECT * FROM matches WHERE id = ?', id)) };
   });
 
+/** INSERT for a singles challenge me -> def. Direction: 'down' when the challenger is rated above. matchupId = sent from a matchup. */
+function insertSinglesChallenge(env, { id, me, def, message, now, matchupId = null }) {
+  return stmt(env,
+    `INSERT INTO challenges (id, challenger_user_id, challenger_player_id, challenger_name, challenger_rank, defender_user_id,
+       defender_player_id, defender_name, defender_rank, message, status, expires_at, created_date, updated_date, created_by_id,
+       format, direction, all_user_ids, all_player_ids, matchup_id)
+     VALUES (?,?,?,?,?,?,?,?,?,?,'open',?,?,?,?,'singles',?,?,?,?)`,
+    id, me.user_id, me.id, nameOf(me), me.singles_rank, def.user_id, def.id, nameOf(def), def.singles_rank, message,
+    weekdayDeadline(Date.parse(now), CHALLENGE_MS, [me.timezone, def.timezone]), now, now, me.user_id,
+    me.singles_rating > def.singles_rating ? 'down' : 'up', J([me.user_id, def.user_id]), J([me.id, def.id]), matchupId);
+}
+
 fns.createChallenge = ({ env, user }, body) =>
   retrying(async () => {
     if (body.format === 'doubles') return createDoublesChallenge(env, user, body);
@@ -782,7 +817,6 @@ fns.createChallenge = ({ env, user }, body) =>
     if (!def) throw new HttpError(404, 'That player does not exist.');
     if (me.singles_rank == null || def.singles_rank == null) throw bad('Both players need a ladder position.');
     // Anyone on the ladder; 'down' (challenger rated above) is free to decline, see challengePenalty.
-    const direction = me.singles_rating > def.singles_rating ? 'down' : 'up';
     const cool = await first(env,
       `SELECT penalized_at FROM challenges WHERE challenger_player_id = ? AND defender_player_id = ? AND penalized_at > ? AND reversed = 0
          ORDER BY penalized_at DESC LIMIT 1`, me.id, def.id, daysAgoIso(COOLDOWN_DAYS));
@@ -790,7 +824,7 @@ fns.createChallenge = ({ env, user }, body) =>
       const retry = new Date(Date.parse(cool.penalized_at) + COOLDOWN_DAYS * 86400000).toISOString();
       throw new HttpError(409, `You challenged ${nameOf(def)} recently. You can challenge them again after ${fmtUtc(retry)}.`);
     }
-    if (await first(env, `SELECT 1 AS x FROM challenges WHERE challenger_user_id = ? AND format = 'singles' AND status IN ('open','accepted') LIMIT 1`, user.id)) {
+    if (await first(env, `SELECT 1 AS x FROM challenges WHERE challenger_user_id = ? AND format = 'singles' AND matchup_id IS NULL AND status IN ('open','accepted') LIMIT 1`, user.id)) {
       throw new HttpError(409, 'You already have an active challenge.');
     }
     const caps = await capGuards(env, me, [def]);
@@ -798,16 +832,9 @@ fns.createChallenge = ({ env, user }, body) =>
     const now = nowIso();
     await commit(env, [
       guardLadder(env, lv),
-      guard(env, `NOT EXISTS (SELECT 1 FROM challenges WHERE challenger_user_id = ? AND format = 'singles' AND status IN ('open','accepted'))`, user.id),
+      guard(env, `NOT EXISTS (SELECT 1 FROM challenges WHERE challenger_user_id = ? AND format = 'singles' AND matchup_id IS NULL AND status IN ('open','accepted'))`, user.id),
       ...caps,
-      stmt(env,
-        `INSERT INTO challenges (id, challenger_user_id, challenger_player_id, challenger_name, challenger_rank, defender_user_id,
-           defender_player_id, defender_name, defender_rank, message, status, expires_at, created_date, updated_date, created_by_id,
-           format, direction, all_user_ids, all_player_ids)
-         VALUES (?,?,?,?,?,?,?,?,?,?,'open',?,?,?,?,'singles',?,?,?)`,
-        id, user.id, me.id, nameOf(me), me.singles_rank, def.user_id, def.id, nameOf(def), def.singles_rank, message,
-        weekdayDeadline(Date.parse(now), CHALLENGE_MS, [me.timezone, def.timezone]), now, now, user.id,
-        direction, J([user.id, def.user_id]), J([me.id, def.id])),
+      insertSinglesChallenge(env, { id, me, def, message, now }),
       touch(env, me.id, now),
     ]);
     await notify(env, 'challenge_received', { challenge_id: id, actor_user_id: user.id });
@@ -967,7 +994,7 @@ fns.challengeLimits = async ({ env, user }) => {
   const me = await getPlayerByUser(env, user.id);
   const rows = await all(env,
     `SELECT challenger_player_id, defender_player_id, defender_partner_player_id, created_date FROM challenges
-       WHERE created_date > ? AND reversed = 0 ORDER BY created_date`, capSince());
+       WHERE created_date > ? AND reversed = 0 AND matchup_id IS NULL ORDER BY created_date`, capSince());
   const sent = me ? rows.filter((r) => r.challenger_player_id === me.id).map((r) => r.created_date) : [];
   const got = {};
   for (const r of rows) for (const d of [r.defender_player_id, r.defender_partner_player_id]) if (d) (got[d] ||= []).push(r.created_date);
@@ -1026,8 +1053,361 @@ fns.resolveChallenge = ({ env, user }, body) =>
     return { challenge: pub('Challenge', await getChallenge(env, id)) };
   });
 
-/** Expire overdue challenges/matches, recompute flags and ranks. Session-free (also run by cron). */
-export const runSyncLadder = ({ env }) =>
+// ---------- weekly matchmaking ("This week's match", singles only) ----------
+// Rules: src/matchmaking.js (pure) + MATCHUP_* in rating.js. One row per (week, player who OWES the match); the
+// opponent is that player's best pair score, so many players may pick the same opponent. The owner's "I'm in" sends a
+// regular singles challenge (marked matchup_id; it skips the caps, the one-active rule and the cooldown). The opponent
+// answers it like any challenge (normal decline / expiry penalties). Week end (settleMatchups, from runSyncLadder):
+// played = a verified ranked singles match between the pair recorded during the week. Otherwise the owner pays their
+// max loss unless they said yes and the opponent then declined / ignored it (or never answered by week end).
+const SINGLES_RANKED = `status = 'verified' AND ranked = 1 AND format = 'singles'`;
+const pairKey = (x, y) => (x < y ? `${x}|${y}` : `${y}|${x}`);
+const thisWeek = () => {
+  const start = weekStartIso();
+  return { start, end: weekEndIso(start) };
+};
+const myRow = (env, week, playerId) => first(env, 'SELECT * FROM matchups WHERE week_start = ? AND player_id = ?', week, playerId);
+
+/** A verified ranked singles match between the pair marks every unsettled matchup of theirs whose week it was recorded in. */
+const markPlayedStmt = (env, m, now) => {
+  const [x, y] = [m.side_a[0].player_id, m.side_b[0].player_id];
+  return stmt(env,
+    `UPDATE matchups SET status = 'played', match_id = ?, settled_at = ?, updated_date = ?, version = version + 1
+       WHERE settled_at IS NULL AND week_start <= ? AND week_end > ?
+         AND ((player_id = ? AND opponent_player_id = ?) OR (player_id = ? AND opponent_player_id = ?))`,
+    m.id, now, now, m.created_date, m.created_date, x, y, y, x);
+};
+
+/** Bulk inputs for singles quotes (a handful of queries for any number of pairs): players, recent meetings, bounty state. */
+async function quoteCtx(env, now, ids = null) {
+  const days = Math.max(REPEAT_WINDOW_DAYS, BOUNTY_CLAIM_DAYS, BOUNTY_RISE_DAYS);
+  const inIds = ids ? ` AND EXISTS (SELECT 1 FROM json_each(all_player_ids) WHERE value IN (${placeholders(ids.length)}))` : '';
+  const players = ids ? await getPlayers(env, ids) : await all(env, 'SELECT * FROM players');
+  const rows = await all(env, `SELECT side_a, side_b, verified_at, rating_changes FROM matches WHERE ${SINGLES_RANKED} AND verified_at > ?${inIds}`,
+    daysAgoIso(days), ...(ids || []));
+  const since = (d) => rows.filter((r) => r.verified_at > daysAgoIso(d));
+  return {
+    now, rows, byId: Object.fromEntries(players.map((p) => [p.id, p])),
+    rises: risesFrom(since(BOUNTY_RISE_DAYS), players.map((p) => p.id)), claimed: claimedFrom(since(BOUNTY_CLAIM_DAYS)),
+  };
+}
+/**
+ * The owner's best case and worst case against `oppId`, played as a challenge: max_win = the best win (a dominant 2-0),
+ * max_loss = the size of the worst loss (a dominant 0-2), bounties included, exactly as matchStakes shows them.
+ */
+function quoteOf(ctx, ownerId, oppId) {
+  const a = ctx.byId[ownerId], b = ctx.byId[oppId];
+  if (!a || !b) return { max_win: 0, max_loss: 0 };
+  const sides = { a: [a.id], b: [b.id] };
+  const { parts } = partsFrom({ fmt: 'singles', sides, paddleOf: () => 'default', now: ctx.now, players: [a, b], prevRows: ctx.rows });
+  const out = stakes({ format: 'singles', target: 11, sides: { a: [parts[0]], b: [parts[1]] }, challenge: true }, tierChange);
+  const claims = { a: claimsFrom('singles', [a], [b], ctx.rises, ctx.claimed), b: claimsFrom('singles', [b], [a], ctx.rises, ctx.claimed) };
+  const me = withBounties(out, claims).find((x) => x.id === a.id);
+  return { max_win: me.win[1], max_loss: Math.max(0, -me.lose[1]) };
+}
+
+/** Where a matchup stands: settled status, else open | waiting (challenge sent) | accepted | unplayed (window ran out) | cleared. */
+function matchupState(m, ch) {
+  if (m.settled_at) return m.status;
+  if (!m.said_yes_at) return 'open';
+  if (!ch || ch.status === 'cancelled') return 'cleared';
+  const sent = ch.challenger_player_id === m.player_id;
+  if (sent && (ch.status === 'declined' || (ch.status === 'expired' && !ch.responded_at))) return 'cleared';
+  if (ch.status === 'open') return 'waiting';
+  if (ch.status === 'accepted' || ch.status === 'completed') return 'accepted';
+  return 'unplayed';
+}
+
+/**
+ * Generates this week's matchups once (lazily from any matchup call, and from runSyncLadder / cron). Race-safe: the
+ * matchup_weeks insert leads the batch, so a concurrent second generation fails on its PRIMARY KEY and rolls back whole.
+ * Emails each new row's owner (matchup_assigned), only from the call that inserted it. Returns the number of rows created.
+ */
+export async function ensureMatchupWeek(env) {
+  const { start: week, end } = thisWeek();
+  const ids = await retrying(async () => {
+    if (await first(env, 'SELECT 1 AS x FROM matchup_weeks WHERE week_start = ?', week)) return [];
+    const now = nowIso();
+    const pool = await all(env, 'SELECT id, user_id, singles_rank FROM players WHERE singles_rank IS NOT NULL ORDER BY singles_rank, id');
+    const last = {};
+    for (const r of await all(env,
+      `SELECT json_extract(side_a, '$[0].player_id') AS a, json_extract(side_b, '$[0].player_id') AS b, max(verified_at) AS at
+         FROM matches WHERE ${SINGLES_RANKED} GROUP BY a, b`)) {
+      const k = pairKey(r.a, r.b);
+      if (!last[k] || r.at > last[k]) last[k] = r.at;
+    }
+    const ducked = {}; // "x>y": x ducked a singles challenge from y
+    for (const r of await all(env,
+      `SELECT challenger_player_id AS c, defender_player_id AS d, count(*) AS n FROM challenges
+         WHERE format = 'singles' AND reversed = 0 AND created_date > ? AND (status = 'declined' OR (status = 'expired' AND responded_at IS NULL))
+         GROUP BY c, d`, daysAgoIso(MATCHUP_DODGE_DAYS))) ducked[`${r.d}>${r.c}`] = r.n;
+    const prevWeek = weekStartIso(Date.parse(week) - 3.5 * 86400000);
+    const lastPick = Object.fromEntries((await all(env, 'SELECT player_id, opponent_player_id FROM matchups WHERE week_start = ?', prevWeek))
+      .map((r) => [r.player_id, r.opponent_player_id]));
+    const nowMs = Date.parse(now);
+    const factsOf = (a, b) => {
+      const at = last[pairKey(a, b)];
+      return {
+        lastDays: at ? Math.floor((nowMs - Date.parse(at)) / 86400000) : null,
+        dodges: (ducked[`${b}>${a}`] || 0) + (ducked[`${a}>${b}`] || 0), repeat: lastPick[a] === b,
+      };
+    };
+    const picks = assignMatchups(week, pool.map((p) => ({ id: p.id, rank: p.singles_rank })), factsOf);
+    const ctx = picks.length ? await quoteCtx(env, now) : null;
+    const byId = Object.fromEntries(pool.map((p) => [p.id, p]));
+    const rows = picks.map((x) => {
+      const f = factsOf(x.player, x.opponent);
+      return { id: uuid(), ...x, f, q: quoteOf(ctx, x.player, x.opponent) };
+    });
+    await commit(env, [
+      stmt(env, 'INSERT INTO matchup_weeks (week_start, week_end, players, created_date) VALUES (?,?,?,?)', week, end, pool.length, now),
+      ...rows.map((r) => stmt(env,
+        `INSERT INTO matchups (id, week_start, week_end, player_id, user_id, opponent_player_id, opponent_user_id, score, never_played,
+           last_played_days, dodged_by_them, dodged_by_me, opponent_rank, quote_win, quote_loss, created_date, updated_date)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        r.id, week, end, r.player, byId[r.player].user_id, r.opponent, byId[r.opponent].user_id, r.score, r.f.lastDays == null ? 1 : 0,
+        r.f.lastDays, ducked[`${r.opponent}>${r.player}`] || 0, ducked[`${r.player}>${r.opponent}`] || 0, byId[r.opponent].singles_rank,
+        r.q.max_win, r.q.max_loss, now, now)),
+    ]);
+    return rows.map((r) => r.id);
+  });
+  if (ids.length) await notify(env, 'matchup_assigned', { matchup_ids: ids });
+  return ids.length;
+}
+
+/**
+ * Rating hits ([{ key, player_id, cost: (rating) => points }]) applied in order to fresh player rows, with the rank before
+ * and after each. Returns { guards, stmts (player updates + rank recompute), res: { key: { penalty, before, after } } }.
+ */
+async function ratingHits(env, hits, lv) {
+  const roster = await rankRows(env);
+  const byId = Object.fromEntries(roster.map((r) => [r.id, r]));
+  const ids = [...new Set(hits.map((h) => h.player_id))];
+  const pl = Object.fromEntries((ids.length ? await getPlayers(env, ids) : []).map((p) => [p.id, { ...p }]));
+  const guards = [guardLadder(env, lv), ...Object.values(pl).map((p) => guardRow(env, 'players', p.id, p.version))];
+  const res = {};
+  const dirty = new Set();
+  for (const h of hits) {
+    const p = pl[h.player_id];
+    if (!p) {
+      res[h.key] = { penalty: 0, before: null, after: null };
+      continue;
+    }
+    const before = rankPlayers(roster, activeCut())[p.id] ?? null;
+    const penalty = h.cost(p.singles_rating);
+    if (penalty > 0) {
+      p.singles_rating -= penalty; dirty.add(p.id);
+      if (byId[p.id]) byId[p.id].rating = p.singles_rating;
+    }
+    res[h.key] = { penalty, before, after: rankPlayers(roster, activeCut())[p.id] ?? null };
+  }
+  const now = nowIso();
+  const stmts = [...dirty].map((id) => stmt(env, 'UPDATE players SET singles_rating = ?, updated_date = ?, version = version + 1 WHERE id = ?',
+    pl[id].singles_rating, now, id));
+  if (dirty.size) stmts.push(...rankStmts(env));
+  return { guards, stmts, res };
+}
+const penaltyCols = `status = ?, penalty_rating = ?, penalty_reason = ?, penalty_rank_before = ?, penalty_rank_after = ?, settled_at = ?,
+  updated_date = ?, version = version + 1`;
+
+/**
+ * Week-end processing for every unsettled matchup whose week is over (idempotent: each row is guarded on its version and
+ * settled once). A pending result between the pair recorded that week holds the row until it resolves.
+ */
+async function settleMatchups(env) {
+  return retrying(async () => {
+    const now = nowIso();
+    const due = await all(env, 'SELECT * FROM matchups WHERE settled_at IS NULL AND week_end <= ? ORDER BY week_end, id LIMIT 100', now);
+    if (!due.length) return 0;
+    const lv = await ladderVersion(env);
+    const chIds = due.map((m) => m.challenge_id).filter(Boolean);
+    const chs = Object.fromEntries((chIds.length ? await all(env, `SELECT * FROM challenges WHERE id IN (${placeholders(chIds.length)})`, ...chIds) : [])
+      .map((c) => [c.id, c]));
+    const from = due.reduce((t, m) => (m.week_start < t ? m.week_start : t), due[0].week_start);
+    const to = due.reduce((t, m) => (m.week_end > t ? m.week_end : t), due[0].week_end);
+    const ms = (await all(env,
+      `SELECT id, status, created_date, all_player_ids FROM matches WHERE format = 'singles' AND ranked = 1 AND status IN ('verified','pending')
+         AND created_date >= ? AND created_date < ? ORDER BY created_date`, from, to))
+      .map((m) => ({ ...m, ids: JSON.parse(m.all_player_ids) }));
+    const plan = [];
+    for (const m of due) {
+      const between = ms.filter((x) => x.ids.includes(m.player_id) && x.ids.includes(m.opponent_player_id)
+        && x.created_date >= m.week_start && x.created_date < m.week_end);
+      const played = between.find((x) => x.status === 'verified');
+      if (played) plan.push({ m, played });
+      else if (between.length) continue; // a result is waiting for sign-off: settle once it resolves
+      else {
+        const state = matchupState(m, chs[m.challenge_id]);
+        plan.push({ m, state, owes: state === 'open' || state === 'accepted' || state === 'unplayed' });
+      }
+    }
+    if (!plan.length) return 0;
+    const fresh = plan.filter((x) => x.owes && !x.m.said_yes_at);
+    const ctx = fresh.length ? await quoteCtx(env, now, [...new Set(fresh.flatMap((x) => [x.m.player_id, x.m.opponent_player_id]))]) : null;
+    const loss = (m) => (m.said_yes_at ? m.max_loss : quoteOf(ctx, m.player_id, m.opponent_player_id).max_loss);
+    const hits = plan.filter((x) => x.owes).map((x) => ({ key: x.m.id, player_id: x.m.player_id, cost: (r) => missCost(loss(x.m), r) }));
+    const rh = await ratingHits(env, hits, lv);
+    const stmts = [...rh.guards];
+    for (const x of plan) {
+      stmts.push(guardRow(env, 'matchups', x.m.id, x.m.version));
+      if (x.played) {
+        stmts.push(stmt(env, `UPDATE matchups SET status = 'played', match_id = ?, settled_at = ?, updated_date = ?, version = version + 1 WHERE id = ?`,
+          x.played.id, now, now, x.m.id));
+      } else if (x.owes) {
+        const r = rh.res[x.m.id];
+        stmts.push(stmt(env, `UPDATE matchups SET max_loss = COALESCE(max_loss, ?), ${penaltyCols} WHERE id = ?`,
+          loss(x.m), 'missed', r.penalty, 'missed_match', r.before, r.after, now, now, x.m.id));
+      } else {
+        stmts.push(stmt(env, `UPDATE matchups SET status = 'cleared', settled_at = ?, updated_date = ?, version = version + 1 WHERE id = ?`, now, now, x.m.id));
+      }
+    }
+    stmts.push(...rh.stmts);
+    await commit(env, stmts);
+    return plan.length;
+  });
+}
+
+/** This week's matchmaking for player `me`: their matchup (with live or frozen stakes) and who was matched with them. */
+async function matchupView(env, me) {
+  const { start, end } = thisWeek();
+  const weekRow = await first(env, 'SELECT * FROM matchup_weeks WHERE week_start = ?', start);
+  const mine = await myRow(env, start, me.id);
+  const incoming = await all(env, 'SELECT * FROM matchups WHERE week_start = ? AND opponent_player_id = ? ORDER BY created_date, id', start, me.id);
+  const rows = [mine, ...incoming].filter(Boolean);
+  const chIds = rows.map((r) => r.challenge_id).filter(Boolean);
+  const chs = Object.fromEntries((chIds.length ? await all(env, `SELECT * FROM challenges WHERE id IN (${placeholders(chIds.length)})`, ...chIds) : [])
+    .map((c) => [c.id, c]));
+  const pids = [...new Set(rows.flatMap((r) => [r.player_id, r.opponent_player_id]))];
+  const ps = Object.fromEntries((pids.length ? await getPlayers(env, pids) : []).map((p) => [p.id, p]));
+  let matchup = null;
+  if (mine) {
+    const live = !mine.said_yes_at && !mine.settled_at;
+    const q = live ? quoteOf(await quoteCtx(env, nowIso(), [me.id, mine.opponent_player_id]), me.id, mine.opponent_player_id)
+      : { max_win: mine.max_win, max_loss: mine.max_loss };
+    const ch = chs[mine.challenge_id] || null;
+    matchup = {
+      id: mine.id, status: matchupState(mine, ch), opponent: pub('Player', ps[mine.opponent_player_id]), why: whyText(mine),
+      said_yes_at: mine.said_yes_at, max_win: q.max_win, max_loss: q.max_loss, backout_cost: backoutCost(q.max_loss, me.singles_rating),
+      frozen: !live, challenge: pub('Challenge', ch), match_id: mine.match_id, penalty_rating: mine.penalty_rating,
+      penalty_reason: mine.penalty_reason, mutual: incoming.some((r) => r.player_id === mine.opponent_player_id),
+    };
+  }
+  return {
+    week_start: start, week_end: end, deadline: end, ranked: me.singles_rank != null, generated: !!weekRow,
+    bye: !mine && !!weekRow && me.singles_rank != null, reason: mine ? null : me.singles_rank == null ? 'unranked' : !weekRow ? 'pending' : weekRow.players < 2 ? 'alone' : 'late',
+    matchup,
+    incoming: incoming.map((r) => ({
+      id: r.id, status: matchupState(r, chs[r.challenge_id]), player: pub('Player', ps[r.player_id]), challenge: pub('Challenge', chs[r.challenge_id] || null),
+    })),
+  };
+}
+
+fns.myMatchup = async ({ env, user }) => {
+  const me = await requirePlayer(env, user);
+  await ensureMatchupWeek(env);
+  return matchupView(env, me);
+};
+
+/** Everyone's matchups this week (public): who owes a match to whom and where it stands. */
+fns.listMatchups = async ({ env }) => {
+  await ensureMatchupWeek(env);
+  const { start, end } = thisWeek();
+  const rows = await all(env,
+    `SELECT m.*, c.status AS ch_status, c.challenger_player_id AS ch_challenger, c.responded_at AS ch_responded,
+            p.display_name AS p_display, p.username AS p_user, o.display_name AS o_display, o.username AS o_user, o.singles_rank AS o_rank
+       FROM matchups m LEFT JOIN challenges c ON c.id = m.challenge_id
+       LEFT JOIN players p ON p.id = m.player_id LEFT JOIN players o ON o.id = m.opponent_player_id
+       WHERE m.week_start = ? ORDER BY o.singles_rank IS NULL, o.singles_rank, m.created_date, m.id`, start);
+  return {
+    week_start: start, week_end: end,
+    items: rows.map((r) => ({
+      id: r.id, player_id: r.player_id, player_name: r.p_display || r.p_user, opponent_player_id: r.opponent_player_id,
+      opponent_name: r.o_display || r.o_user, opponent_rank: r.o_rank,
+      status: matchupState(r, r.challenge_id && r.ch_status ? { status: r.ch_status, challenger_player_id: r.ch_challenger, responded_at: r.ch_responded } : null),
+    })),
+  };
+};
+
+/**
+ * "I'm in": the owner commits to this week's match. Freezes max win / max loss, then sends the challenge: a live singles
+ * challenge between the pair is reused (one from the opponent is accepted), otherwise a new matched challenge goes out.
+ */
+fns.matchupYes = async ({ env, user }) => {
+  await requirePlayer(env, user);
+  await ensureMatchupWeek(env);
+  return retrying(async () => {
+    const me = await requirePlayer(env, user);
+    const { start } = thisWeek();
+    const m = await myRow(env, start, me.id);
+    if (!m) throw bad('You have no match this week.');
+    if (m.settled_at) throw bad("This week's match is already settled.");
+    if (m.status !== 'open') throw bad('You already said yes to this match.');
+    const now = nowIso();
+    if (m.week_end <= now) throw bad('This week is over.');
+    const opp = (await getPlayers(env, [m.opponent_player_id]))[0];
+    if (!opp) throw new HttpError(409, 'Your opponent is no longer on the ladder.');
+    const q = quoteOf(await quoteCtx(env, now, [me.id, opp.id]), me.id, opp.id);
+    const live = await first(env,
+      `SELECT * FROM challenges WHERE format = 'singles' AND status IN ('open','accepted') AND (expires_at IS NULL OR expires_at > ?)
+         AND ((challenger_player_id = ? AND defender_player_id = ?) OR (challenger_player_id = ? AND defender_player_id = ?))
+         ORDER BY created_date LIMIT 1`, now, me.id, opp.id, opp.id, me.id);
+    const stmts = [guardRow(env, 'matchups', m.id, m.version, 'open')];
+    let chId, sent = false;
+    if (live) {
+      chId = live.id;
+      stmts.push(guardRow(env, 'challenges', live.id, live.version, live.status));
+      if (live.status === 'open' && live.defender_player_id === me.id) {
+        stmts.push(stmt(env, `UPDATE challenges SET status = 'accepted', responded_at = ?, expires_at = ?, updated_date = ?, version = version + 1 WHERE id = ?`,
+          now, weekdayDeadline(Date.parse(now), CHALLENGE_MS, [me.timezone, opp.timezone]), now, live.id));
+      }
+    } else {
+      chId = uuid();
+      sent = true;
+      stmts.push(insertSinglesChallenge(env, { id: chId, me, def: opp, message: '', now, matchupId: m.id }), touch(env, me.id, now));
+    }
+    stmts.push(stmt(env,
+      `UPDATE matchups SET status = 'committed', said_yes_at = ?, max_win = ?, max_loss = ?, challenge_id = ?, updated_date = ?, version = version + 1 WHERE id = ?`,
+      now, q.max_win, q.max_loss, chId, now, m.id));
+    await commit(env, stmts);
+    if (sent) await notify(env, 'challenge_received', { challenge_id: chId, actor_user_id: user.id });
+    return matchupView(env, me);
+  });
+};
+
+/** Backing out after "I'm in": 2x the frozen max loss (at most 80, never below the floor); the challenge is cancelled. */
+fns.matchupBackOut = ({ env, user }) =>
+  retrying(async () => {
+    const me = await requirePlayer(env, user);
+    const { start } = thisWeek();
+    const m = await myRow(env, start, me.id);
+    if (!m || m.settled_at || m.status !== 'committed') throw bad('You have nothing to back out of.');
+    const ch = m.challenge_id ? await getChallenge(env, m.challenge_id) : null;
+    const state = matchupState(m, ch);
+    if (state === 'cleared') throw bad("You're cleared for this week: there is nothing to back out of.");
+    if (state === 'unplayed') throw bad('Your challenge window has closed. Play them before the week ends, or the max loss applies.');
+    const lv = await ladderVersion(env);
+    const now = nowIso();
+    const rh = await ratingHits(env, [{ key: m.id, player_id: me.id, cost: (r) => backoutCost(m.max_loss, r) }], lv);
+    const r = rh.res[m.id];
+    await commit(env, [
+      ...rh.guards,
+      guardRow(env, 'matchups', m.id, m.version, 'committed'),
+      guardRow(env, 'challenges', ch.id, ch.version, ch.status),
+      stmt(env, `UPDATE challenges SET status = 'cancelled', updated_date = ?, version = version + 1 WHERE id = ?`, now, ch.id),
+      stmt(env, `UPDATE matchups SET ${penaltyCols} WHERE id = ?`, 'backed_out', r.penalty, 'backed_out', r.before, r.after, now, now, m.id),
+      ...rh.stmts,
+    ]);
+    return matchupView(env, (await getPlayers(env, [me.id]))[0]);
+  });
+
+/** Expire overdue challenges/matches, recompute flags and ranks; settle last week's matchups and make this week's. Session-free (also run by cron). */
+export const runSyncLadder = async ({ env }) => {
+  const res = await syncCore(env);
+  res.matchups_settled = await settleMatchups(env);
+  res.matchups_assigned = await ensureMatchupWeek(env);
+  return res;
+};
+const syncCore = (env) =>
   retrying(async () => {
     const lv = await ladderVersion(env);
     const now = nowIso();
@@ -1054,6 +1434,7 @@ fns.deleteAccount = ({ env, user }, body) =>
       stmt(env, `DELETE FROM challenges WHERE status IN ('open','accepted') AND (challenger_user_id = ? OR defender_user_id = ?
         OR EXISTS (SELECT 1 FROM json_each(all_user_ids) WHERE value = ?))`, user.id, user.id, user.id),
       stmt(env, `DELETE FROM matches WHERE status = 'pending' AND EXISTS (SELECT 1 FROM json_each(all_user_ids) WHERE value = ?)`, user.id),
+      ...(p ? [stmt(env, 'DELETE FROM matchups WHERE settled_at IS NULL AND (player_id = ? OR opponent_player_id = ?)', p.id, p.id)] : []),
       stmt(env, 'DELETE FROM players WHERE user_id = ?', user.id),
       ...chat.chatErasureStmts(env, user.id),
       ...(await guilds.guildErasureStmts(env, p)),
@@ -1086,7 +1467,7 @@ for (const n of [
 ]) fns[n] = guilds[n];
 
 // The only functions callable without a session (they get user = null).
-const PUBLIC_FNS = new Set(['submitFeedback', 'listTopics', 'getTopic', 'roomPosts', 'roomAround', 'listDisputes', 'disputeCounts', 'playerSearch', 'listGuilds', 'getGuild', 'guildTags', 'bountyBoard']);
+const PUBLIC_FNS = new Set(['submitFeedback', 'listTopics', 'getTopic', 'roomPosts', 'roomAround', 'listDisputes', 'disputeCounts', 'playerSearch', 'listGuilds', 'getGuild', 'guildTags', 'bountyBoard', 'listMatchups']);
 
 export const functions = new Hono();
 functions.post('/:name', async (c) => {

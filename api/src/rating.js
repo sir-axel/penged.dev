@@ -579,3 +579,17 @@ export function challengePenalty({ kind, direction = 'up', ...o }) {
   }
   return { penalty: cap(p), reason, dropsRank: true, walkover: false };
 }
+
+// ---------- Weekly matchmaking ("This week's match", singles only; see src/matchmaking.js) ----------
+// Every ranked singles player gets ONE opponent per week (Monday 00:00 America/Chicago), their highest pair score.
+// Many players may get the same opponent. Rating closeness is deliberately NOT a factor: cross-board play is the point.
+export const MATCHUP_NEVER_PLAYED = 100; // never met in a verified ranked singles match
+export const MATCHUP_PER_DAY = 1; // otherwise: 1 point per day since the last verified meeting...
+export const MATCHUP_DAYS_CAP = 60; // ...counting at most 60 days (so never-played always outranks long-time-no-see)
+export const MATCHUP_DODGE = 25; // per ducked singles challenge between the pair (declined / ignored, either way round)
+export const MATCHUP_DODGE_MAX = 4; // at most this many ducks count
+export const MATCHUP_DODGE_DAYS = 90;
+export const MATCHUP_TOP_BONUS = 30; // pull toward the top: #1 +30, then 6 less per place down to #5 (+6)
+export const MATCHUP_TOP_SPAN = 5;
+export const MATCHUP_REPEAT_PENALTY = 40; // the same pick as last week
+export const MATCHUP_BACKOUT_MULT = 2; // backing out after saying yes costs 2x the max loss (capped at MAX_DELTA)

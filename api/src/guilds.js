@@ -1,7 +1,7 @@
 import { all, first, stmt, guardRow, commit, retrying, uuid, nowIso } from './db.js';
 import { HttpError, bad } from './errors.js';
 import { pub } from './schema.js';
-import { DEFAULT_TZ } from './weekdays.js';
+import { weekStartIso } from './weekdays.js';
 import { avatarOwner, removeAvatar } from './uploads.js';
 
 // Guilds: teams of up to MAX_MEMBERS players, one guild per player. The tables (migration 0021) are NOT in the
@@ -15,25 +15,8 @@ const RATED_MIN = 5; // singles matches before a member counts toward the guild'
 
 const isStr = (v) => typeof v === 'string';
 
-// ---------- the guild week: Monday 00:00 America/Chicago ----------
-const DOW = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
-const weekFmt = new Intl.DateTimeFormat('en-US', {
-  timeZone: DEFAULT_TZ, year: 'numeric', month: 'numeric', day: 'numeric', weekday: 'short', hour: 'numeric', minute: 'numeric', second: 'numeric', hourCycle: 'h23',
-});
-const partsAt = (t) => Object.fromEntries(weekFmt.formatToParts(new Date(t)).map((x) => [x.type, x.value]));
-/** Local wall clock minus UTC, in ms, at instant t. */
-const offsetAt = (t) => {
-  const p = partsAt(t);
-  return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour % 24, +p.minute, +p.second) - Math.floor(t / 1000) * 1000;
-};
-/** ISO instant of the most recent Monday 00:00 in America/Chicago (DST-aware). */
-export function weekStartIso(nowMs = Date.now()) {
-  const p = partsAt(nowMs);
-  const wall = Date.UTC(+p.year, +p.month - 1, +p.day - ((DOW[p.weekday] + 6) % 7)); // Monday midnight, as wall time
-  let t = wall - offsetAt(nowMs);
-  t = wall - offsetAt(t); // the offset at that Monday may differ (DST)
-  return new Date(t).toISOString();
-}
+// The guild week (Monday 00:00 America/Chicago) is the same week matchmaking uses: weekdays.js.
+export { weekStartIso };
 
 // ---------- validation ----------
 function cleanName(v) {

@@ -78,3 +78,14 @@ export const CHALLENGE_POINTS = [
   "An accepted challenge that never gets played expires with no penalty.",
   "Doubles challenges: pick a partner and two opponents, anyone with a profile. Your partner and both opponents all have to accept; one no closes it. Nobody loses rating for declining or ignoring a doubles challenge. Played as challenged, it counts ×1.25 like a singles one.",
 ];
+
+export const MATCHUP_POINTS = [
+  "Every Monday at midnight (Chicago time) everyone on the singles ladder gets one matched opponent for the week. Your first ranked singles match puts you in. Nobody sits out unless they are the only one on the ladder.",
+  "Who you get: the player you most need to play. Never played them: +100. Otherwise +1 for every day since you last met, counting at most 60 days. Each ducked singles challenge between you in the last 90 days, either way round: +25 (up to 4 count). The top of the ladder pulls: +30 for #1, 24 for #2, 18 for #3, 12 for #4, 6 for #5. Last week's pick again: −40. How close your ratings are never counts: the point is to play across the board.",
+  "Several people can be matched with the same player, so #1 may have a queue. A matched challenge you receive is a regular challenge for you: decline it or let it run out and the normal penalties apply.",
+  "Before you say yes you see your max win (a dominant 2-0 win) and your max loss (a dominant 2-0 loss), played as a challenge (×1.25), bounties included.",
+  "Say \"I'm in\" and the challenge goes to them. It skips the weekly limits, the one-open-challenge rule and the 7-day cooldown, and it doesn't use up anyone's weekly limits. Your max loss is frozen when you say yes.",
+  "Once you say yes you can't back out without losing 2x your max loss (at most 80).",
+  "Play it by Sunday night or lose your max loss (at most 80). If you said yes and they decline it, ignore it or haven't answered by the end of the week, you owe nothing. Accepted but never played: you still pay.",
+  "Any verified ranked singles match between you two that week counts. Matched with each other? One match covers you both.",
+];

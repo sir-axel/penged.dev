@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { PageHeader } from "@/components/PageHeader";
 import { TIERS } from "@/lib/tiers";
 import { RATING_POINTS, XP_POINTS, CHALLENGE_POINTS } from "@/components/home/RatingExplainer";
+import { MATCHUP_POINTS } from "@/lib/ratingCopy";
 
 export const RULE_SECTIONS = [
   {
@@ -57,6 +58,10 @@ export const RULE_SECTIONS = [
       ...CHALLENGE_POINTS,
       "Two unanswered challenges, or a player inactive for 30 days with an open dispute, puts a 'review' badge next to their name on the ladder.",
     ],
+  },
+  {
+    title: "This week's match",
+    items: [...MATCHUP_POINTS],
   },
 ];
 export function Rules() {
