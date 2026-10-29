@@ -98,7 +98,7 @@ function Item({ item, onChange, onReply, busy }) {
           onChange={(e) => setNote(e.target.value)}
           rows={2}
           maxLength={2000}
-          className="mt-1 block w-full rounded-sm border border-input bg-transparent px-3 py-2 text-base shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring md:text-sm"
+          className="mt-1 block w-full rounded-sm border border-input bg-transparent px-3 py-2 text-base shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring lg:text-sm"
         />
       </label>
       <div className="mt-2 flex flex-wrap gap-2">

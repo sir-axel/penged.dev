@@ -34,8 +34,8 @@ export function ChatDisputes() {
           <div>
             <h1 className="font-heading text-xl font-bold leading-none">Disputes</h1>
             <p className="mt-1.5 text-sm text-muted-foreground">
-              One thread per match. A dispute starts from a match: open it from <Link className="underline underline-offset-4" to="/confirm">To confirm</Link> or
-              the <Link className="underline underline-offset-4" to="/feed">Feed</Link> and tap <strong className="font-semibold text-foreground">Discuss</strong>.
+              One thread per match. A dispute starts from a match: open it from <Link className="-my-2.5 inline-block py-2.5 underline underline-offset-4" to="/confirm">To confirm</Link> or
+              the <Link className="-my-2.5 inline-block py-2.5 underline underline-offset-4" to="/feed">Feed</Link> and tap <strong className="font-semibold text-foreground">Discuss</strong>.
             </p>
           </div>
         </div>
@@ -86,7 +86,7 @@ export function ChatDisputes() {
           </ul>
         )}
         {q.hasNextPage && <Button variant="outline" className="mt-3 h-11 w-full rounded-sm" disabled={q.isFetchingNextPage} onClick={() => q.fetchNextPage()}>Load more</Button>}
-        {!isAuthenticated && <p className="mt-4 text-sm text-muted-foreground"><Link className="underline underline-offset-4" to="/login?returnTo=%2Fchat%2Fdisputes">Sign in</Link> to see the disputes you are part of.</p>}
+        {!isAuthenticated && <p className="mt-4 text-sm text-muted-foreground"><Link className="-my-2.5 inline-block py-2.5 underline underline-offset-4" to="/login?returnTo=%2Fchat%2Fdisputes">Sign in</Link> to see the disputes you are part of.</p>}
       </div>
     </>
   );

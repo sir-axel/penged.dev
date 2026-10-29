@@ -367,7 +367,7 @@ function GameLines({ change }) {
   const games = describeGames(change);
   return (
     <details className="group mt-1">
-      <summary className="flex min-h-8 cursor-pointer list-none items-start gap-1 font-mono text-[10px] uppercase leading-relaxed tracking-[0.08em] text-muted-foreground [&::-webkit-details-marker]:hidden">
+      <summary className="flex min-h-10 cursor-pointer list-none items-start gap-1 font-mono text-[10px] uppercase leading-relaxed tracking-[0.08em] text-muted-foreground [&::-webkit-details-marker]:hidden">
         <span className="min-w-0 flex-1">
           {games.map((g, i) => (
             <span key={g.key} className="whitespace-nowrap">
@@ -377,7 +377,7 @@ function GameLines({ change }) {
             </span>
           ))}
         </span>
-        <ChevronDown className="mt-px h-3.5 w-3.5 shrink-0 text-brand transition-transform group-open:rotate-180" aria-label="Show each game" />
+        <ChevronDown className="mt-1 h-3.5 w-3.5 shrink-0 text-brand transition-transform group-open:rotate-180" aria-label="Show each game" />
       </summary>
       <ol className="mt-1 space-y-2 border-l-2 border-border pl-3">
         {games.map((g) => (
@@ -409,7 +409,7 @@ function FactorLines({ change, compactOnly = false }) {
       </p>
       {!compactOnly && detail.length > 2 && (
         <details className="mt-1 group">
-          <summary className="inline-flex min-h-8 cursor-pointer items-center font-mono text-[10px] uppercase tracking-[0.08em] text-brand">
+          <summary className="inline-flex min-h-10 cursor-pointer items-center font-mono text-[10px] uppercase tracking-[0.08em] text-brand">
             How this was calculated
           </summary>
           <dl className="mt-1 space-y-1.5 border-l-2 border-border pl-3">

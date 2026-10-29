@@ -73,7 +73,7 @@ export function PlayerPicker({
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search players"
                 aria-label="Search players"
-                className="h-11 w-full rounded-sm border border-input bg-background pl-9 pr-3 text-base outline-none focus:border-foreground/40 sm:text-sm"
+                className="h-11 w-full rounded-sm border border-input bg-background pl-9 pr-3 text-base outline-none focus:border-foreground/40 lg:text-sm"
               />
             </div>
           </div>

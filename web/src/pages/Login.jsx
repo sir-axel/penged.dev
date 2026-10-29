@@ -24,7 +24,7 @@ export function Login() {
           Don't have an account?{" "}
           <Link
             to={"/register" + (returnTo === "/" ? "" : "?returnTo=" + encodeURIComponent(returnTo))}
-            className="inline-block py-2.5 text-primary font-medium hover:underline sm:py-0"
+            className="inline-block py-2.5 text-primary font-medium hover:underline"
           >
             Create one
           </Link>

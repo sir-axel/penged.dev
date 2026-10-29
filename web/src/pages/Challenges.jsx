@@ -9,6 +9,7 @@ import { timeLeft } from "@/lib/ladder";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/EmptyState";
+import { SegmentedControl } from "@/components/match/SegmentedControl";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -42,6 +43,17 @@ export function outcomeText(t, asChallenger) {
   return asChallenger
     ? `Declined · ${t.defender_name} ${minus(pen)} rating${rankMoved ? ` · #${t.penalty_rank_before} → #${t.penalty_rank_after}` : ""}`
     : `Declined · ${minus(pen)} rating${rankMoved ? ` · #${t.penalty_rank_before} → #${t.penalty_rank_after}` : ""}${halved}`;
+}
+
+// Wording for a row you are not part of (the list is public): third person, no "you".
+export function publicOutcomeText(t) {
+  const pen = t.penalty_rating || 0;
+  if (!t.penalty_reason) return null;
+  if (t.reversed) return "Penalty reversed by an admin";
+  if (t.penalty_reason === "waived_recent_match") return "Declined · no penalty — they played this week";
+  if (t.penalty_reason === "expired")
+    return `No response · walkover for ${t.challenger_name} · ${minus(pen)} rating for ${t.defender_name}`;
+  return `Declined · ${t.defender_name} ${minus(pen)} rating${t.penalty_reason === "fatigue_halved" ? " (halved: busy week)" : ""}`;
 }
 
 export function DeclineButton({ challenge, busy, onDecline }) {
@@ -90,6 +102,7 @@ export function Challenges() {
     [busy, setBusy] = useState(""),
     [error, setError] = useState(""),
     [selectedId, setSelectedId] = useState(""),
+    [recentFilter, setRecentFilter] = useState("all"),
     [message, setMessage] = useState(""),
     { data: challenges = [] } = useQuery({
       queryKey: ["challenges", user?.id],
@@ -162,15 +175,10 @@ export function Challenges() {
     outgoing = challenges.filter(
       (t) => t.challenger_user_id === user?.id && ["open", "accepted"].includes(t.status),
     ),
-    // The list is public; only show challenges this person was part of.
-    recent = challenges
-      .filter(
-        (e) =>
-          (e.challenger_user_id === user?.id || e.defender_user_id === user?.id) &&
-          !incoming.includes(e) &&
-          !outgoing.includes(e),
-      )
-      .slice(0, 8);
+    // Challenges are public: everyone's recent ones, with the ones you are part of marked "You".
+    isMine = (e) => e.challenger_user_id === user?.id || e.defender_user_id === user?.id,
+    recentAll = challenges.filter((e) => !incoming.includes(e) && !outgoing.includes(e)),
+    recent = (recentFilter === "mine" ? recentAll.filter(isMine) : recentAll).slice(0, 8);
   return (
     <>
       <PageHeader
@@ -360,26 +368,52 @@ export function Challenges() {
             </>
           )}
         </section>
-        {recent.length > 0 && (
+        {recentAll.length > 0 && (
           <section>
-            <h2 className="font-display text-[0.58rem] uppercase tracking-[0.22em] text-muted-foreground">
-              Recent
-            </h2>
-            <ul className="mt-2 divide-y divide-border overflow-hidden rounded-sm border border-border bg-card">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="font-display text-[0.58rem] uppercase tracking-[0.22em] text-muted-foreground">
+                Recent
+              </h2>
+              {user && (
+                <div className="w-36">
+                  <SegmentedControl
+                    label="Show recent challenges"
+                    value={recentFilter}
+                    onChange={setRecentFilter}
+                    options={[
+                      { value: "all", label: "All" },
+                      { value: "mine", label: "Mine" },
+                    ]}
+                  />
+                </div>
+              )}
+            </div>
+            {recent.length === 0 && (
+              <p className="mt-2 text-sm text-muted-foreground">You have no past challenges yet.</p>
+            )}
+            <ul className={`mt-2 divide-y divide-border overflow-hidden rounded-sm border border-border bg-card ${recent.length ? "" : "hidden"}`}>
               {recent.map((t) => {
-                let n = t.challenger_user_id === user?.id;
+                let n = t.challenger_user_id === user?.id,
+                  mine = isMine(t);
                 return (
-                  <li className="space-y-2 px-3 py-2.5" key={t.id}>
+                  <li className="space-y-2 px-3 py-2.5" key={t.id} data-mine={mine || undefined}>
                     <div className="flex items-center justify-between gap-2">
-                      <span className="min-w-0 truncate font-heading text-sm">
-                        {n ? `You → ${t.defender_name}` : `${t.challenger_name} → You`}
+                      <span className="min-w-0 break-words font-heading text-sm">
+                        {n ? `You → ${t.defender_name}` : mine ? `${t.challenger_name} → You` : `${t.challenger_name} → ${t.defender_name}`}
                       </span>
-                      <StatusBadge status={t.status} />
+                      <span className="flex shrink-0 items-center gap-1.5">
+                        {mine && (
+                          <span className="rounded-sm border border-foreground px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.1em]">
+                            You
+                          </span>
+                        )}
+                        <StatusBadge status={t.status} />
+                      </span>
                     </div>
-                    {outcomeText(t, n) && (
-                      <p className="text-xs text-muted-foreground">{outcomeText(t, n)}</p>
+                    {(mine ? outcomeText(t, n) : publicOutcomeText(t)) && (
+                      <p className="text-xs text-muted-foreground">{mine ? outcomeText(t, n) : publicOutcomeText(t)}</p>
                     )}
-                    {!n &&
+                    {mine && !n &&
                       t.penalty_reason &&
                       !t.reversed &&
                       !t.review_requested &&
@@ -393,13 +427,13 @@ export function Challenges() {
                             )
                           }
                           variant="outline"
-                          className="h-9 w-full rounded-sm text-xs"
+                          className="h-10 w-full rounded-sm text-xs"
                           disabled={!!busy}
                         >
                           Ask an admin to review this penalty
                         </Button>
                       )}
-                    {!n && t.review_requested && !t.reversed && (
+                    {mine && !n && t.review_requested && !t.reversed && (
                       <p className="text-xs text-warning">Review requested — an admin will decide.</p>
                     )}
                   </li>

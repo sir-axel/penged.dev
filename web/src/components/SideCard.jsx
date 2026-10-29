@@ -26,9 +26,9 @@ export function SideCard({ side, gamesWon: gamesWon, winner: winner, label: labe
             <div className="flex min-w-0 flex-1 flex-col items-start sm:flex-row sm:items-center sm:gap-2">
               <Link
                 to={`/players/${e.username}`}
-                className="w-full min-w-0 truncate pt-2 font-heading text-sm font-medium hover:underline sm:w-auto sm:flex-1 sm:py-1"
+                className="flex min-h-10 w-full min-w-0 items-center font-heading text-sm font-medium leading-tight hover:underline sm:w-auto sm:flex-1"
               >
-                {e.display_name || e.username}
+                <span className="line-clamp-2 min-w-0 break-words">{e.display_name || e.username}</span>
               </Link>
               {tiers[e.player_id] && (
                 <TierBadge

@@ -72,7 +72,7 @@ export function Profile() {
             </div>
             <Link
               to={`/players/${player.username}`}
-              className="inline-flex min-h-10 shrink-0 items-center rounded-sm border border-border px-3 py-1.5 text-xs font-medium sm:min-h-0 sm:px-2.5 hover:border-foreground/40"
+              className="inline-flex min-h-10 shrink-0 items-center rounded-sm border border-border px-3 py-1.5 text-xs font-medium lg:min-h-0 sm:px-2.5 hover:border-foreground/40"
             >
               View
             </Link>
@@ -159,7 +159,7 @@ export function Profile() {
               rows={3}
               maxLength={280}
               placeholder="Paddle of choice, signature shot, trash talk."
-              className="w-full rounded-sm border border-input bg-card px-3 py-2 text-base outline-none focus:border-foreground/40 sm:text-sm"
+              className="w-full rounded-sm border border-input bg-card px-3 py-2 text-base outline-none focus:border-foreground/40 lg:text-sm"
             />
           </div>
           {error && (

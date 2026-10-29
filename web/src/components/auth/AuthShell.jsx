@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { Logo } from "@/components/Logo";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 export function AuthShell({
   icon: Icon,
@@ -16,13 +17,16 @@ export function AuthShell({
           <Link to="/" aria-label="Penged.dev home" className="inline-flex min-h-10 items-center rounded-none py-1">
             <Logo />
           </Link>
-          <Link
-            to="/"
-            className="inline-flex min-h-10 items-center gap-1.5 font-display text-[0.55rem] uppercase tracking-[0.16em] text-muted-foreground hover:text-foreground"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
-            Back to the board
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link
+              to="/"
+              className="inline-flex min-h-10 items-center gap-1.5 font-display text-[0.55rem] uppercase tracking-[0.16em] text-muted-foreground hover:text-foreground"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
+              Back to the board
+            </Link>
+            <ThemeToggle />
+          </div>
         </div>
       </div>
       <div className="w-full max-w-md">

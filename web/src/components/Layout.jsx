@@ -1,8 +1,8 @@
 import { useEffect } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
-import { Trophy, Plus, Swords, User, LogIn, Rss, ClipboardCheck, MessageSquare, Sun, Moon } from "lucide-react";
+import { Trophy, Plus, Swords, User, LogIn, Rss, ClipboardCheck, MessageSquare } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
-import { useTheme } from "@/context/ThemeContext";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { Logo } from "@/components/Logo";
 import { CountBadge, UnreadDot, useNewFeedbackCount, useUnreadReplyCount } from "@/hooks/useFeedbackCount";
 import { useQueueCount } from "@/hooks/useQueueCount";
@@ -48,8 +48,10 @@ const DESKTOP_NAV = [...NAV_ITEMS, { to: "/chat", label: "Chat", short: "Chat", 
 export function Layout() {
   let { isAuthenticated } = useAuth();
   const location = useLocation();
-  const { theme, toggleTheme } = useTheme();
-  const dark = theme === "dark";
+  const onProfile = location.pathname === "/profile" || location.pathname.startsWith("/profile/");
+  const onChat = location.pathname === "/chat" || location.pathname.startsWith("/chat/");
+  const ACTIVE = "border-foreground bg-foreground text-background";
+  const IDLE = "border-border bg-secondary text-foreground hover:bg-accent";
   const queueCount = useQueueCount();
   const chatUnread = useChatUnread();
   const chatCount = chatUnread.dms + chatUnread.mentions;
@@ -92,7 +94,7 @@ export function Layout() {
               <NavLink
                 to={e}
                 className={({ isActive: e }) =>
-                  `relative inline-flex h-9 items-center whitespace-nowrap rounded-sm border px-2.5 font-display text-[0.55rem] uppercase tracking-[0.1em] transition-colors lg:px-3 lg:text-[0.58rem] lg:tracking-[0.12em] ${e ? "border-foreground bg-foreground text-background" : "border-border bg-secondary text-foreground hover:bg-accent"}`
+                  `relative inline-flex h-10 items-center whitespace-nowrap rounded-sm border px-2.5 font-display text-[0.55rem] uppercase tracking-[0.1em] transition-colors lg:h-9 lg:px-3 lg:text-[0.58rem] lg:tracking-[0.12em] ${e ? "border-foreground bg-foreground text-background" : "border-border bg-secondary text-foreground hover:bg-accent"}`
                 }
                 key={e}
               >
@@ -103,19 +105,12 @@ export function Layout() {
             ))}
           </nav>
           <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
-          <button
-            type="button"
-            onClick={toggleTheme}
-            aria-label={dark ? "Switch to light mode" : "Switch to dark mode"}
-            aria-pressed={dark}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-sm border border-border bg-secondary hover:bg-accent md:h-9 md:w-9"
-          >
-            {dark ? <Sun className="h-4 w-4" aria-hidden="true" /> : <Moon className="h-4 w-4" aria-hidden="true" />}
-          </button>
+          <ThemeToggle />
           <Link
             to="/chat"
             aria-label={chatCount > 0 ? `Chat, ${chatCount} new` : "Chat"}
-            className="relative inline-flex h-10 w-10 items-center justify-center rounded-sm border border-border bg-secondary hover:bg-accent md:hidden"
+            className={`relative inline-flex h-10 w-10 items-center justify-center rounded-sm border md:hidden ${onChat ? ACTIVE : IDLE}`}
+            aria-current={onChat ? "page" : undefined}
           >
             <MessageSquare className="h-4 w-4" aria-hidden="true" />
             <CountBadge n={chatCount} className="absolute -right-2 -top-2" />
@@ -123,7 +118,8 @@ export function Layout() {
           {isAuthenticated ? (
             <Link
               to="/profile"
-              className="relative inline-flex min-h-10 items-center gap-1.5 whitespace-nowrap rounded-sm border border-border bg-secondary px-3 font-display text-[0.55rem] uppercase tracking-[0.12em] hover:bg-accent md:h-9 md:min-h-0 md:px-2.5 lg:px-3"
+              aria-current={onProfile ? "page" : undefined}
+              className={`relative inline-flex min-h-10 items-center gap-1.5 whitespace-nowrap rounded-sm border px-3 font-display text-[0.55rem] uppercase tracking-[0.12em] md:px-2.5 lg:h-9 lg:min-h-0 lg:px-3 ${onProfile ? ACTIVE : IDLE}`}
             >
               <User className="h-3.5 w-3.5" aria-hidden="true" />
               <span className="hidden sm:inline">My </span>
@@ -134,7 +130,7 @@ export function Layout() {
           ) : (
             <Link
               to="/login"
-              className="relative inline-flex min-h-10 items-center gap-1.5 whitespace-nowrap rounded-sm border border-border bg-secondary px-3 font-display text-[0.55rem] uppercase tracking-[0.12em] hover:bg-accent md:h-9 md:min-h-0 md:px-2.5 lg:px-3"
+              className="relative inline-flex min-h-10 items-center gap-1.5 whitespace-nowrap rounded-sm border border-border bg-secondary px-3 font-display text-[0.55rem] uppercase tracking-[0.12em] hover:bg-accent md:px-2.5 lg:h-9 lg:min-h-0 lg:px-3"
             >
               <LogIn className="h-3.5 w-3.5" aria-hidden="true" />
               Sign in
