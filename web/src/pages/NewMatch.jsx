@@ -11,6 +11,7 @@ import { playerName } from "@/lib/ladder";
 import { PaddleToggle } from "@/components/match/PaddleToggle";
 import { PlayerPicker } from "@/components/match/PlayerPicker";
 import { ScoreStepper } from "@/components/match/ScoreStepper";
+import { StakesLine } from "@/components/match/StakesLine";
 import { Button } from "@/components/ui/button";
 import { api } from "@/api/client";
 
@@ -65,6 +66,16 @@ export function NewMatch() {
         ),
       );
     };
+  // Once every player is picked: what this match can do to your rating (typical 2-1 each way).
+  const picked = !!player && !!opponentId && (format === "singles" || (!!partnerId && !!opponent2Id));
+  const stakesRequest = picked
+    ? {
+        format,
+        target,
+        side_a: [player.id, ...(format === "doubles" ? [partnerId] : [])].map((id) => ({ player_id: id, paddle: paddleOf(id) })),
+        side_b: [opponentId, ...(format === "doubles" ? [opponent2Id] : [])].map((id) => ({ player_id: id, paddle: paddleOf(id) })),
+      }
+    : null;
   // A stale submit error must not outlive the inputs it was about.
   useEffect(() => {
     setError("");
@@ -187,6 +198,7 @@ export function NewMatch() {
               </div>
             )}
           </div>
+          {stakesRequest && <StakesLine request={stakesRequest} />}
         </section>
         <section className="space-y-2">
           <div className="flex items-center justify-between">

@@ -10,17 +10,19 @@ export const RATING_POINTS = [
   "Every game counts. Each game in a match is rated on its own, in order — a 3-0 sweep earns three wins, a 2-1 grind earns two wins and a loss.",
   "Margins matter. Win a game 11-2 and you gain far more than winning it 11-9 — up to double.",
   "Upsets pay. Beat someone rated above you and the win is boosted; crushing someone far below you is damped.",
-  "You lose points the same way you win them. Get crushed in a game and you lose big; lose narrowly to someone better and it barely stings. In singles, what the winner gains the loser drops.",
-  "K-factor (per format): 48 for a brand-new player, easing to 32 as you play games. One game counts half a K, so a single game moves you less than a whole match used to.",
+  "You lose points the same way you win them. Get crushed in a game and you lose big; lose narrowly to someone better and it barely stings. Between two regulars in singles, what the winner gains the loser drops.",
+  "New and returning players move fast. K (how far one result moves you) is 48 for a brand-new player and eases toward 32 over your first ~100 games. Back after 3+ weeks away? K rises for your whole first match back, up to double after two months. Regulars stay steady, but never frozen.",
   "One game moves you at most 40 points, and one match (all its games together) at most 80.",
-  "Rematches count, just a little less. Each earlier match against the same opponent in the last 180 days (matches, not games; older than 30 days counts half) shrinks the swing: ×0.70 after one, ×0.52 after three, ×0.43 after six, and never below ×0.30, so regulars keep moving.",
-  "Games to 21 count 10% more than games to 11. Coming back after a long break boosts K on the first game of your return match.",
+  "Rematches count, just a little less, and the effect fades fast. Each recent match against the same opponent shrinks the swing, but it halves every 3 days: play the same person every day and results count about half (×0.48), weekly ×0.89, after a few weeks off fully. Never below ×0.30, so regulars keep moving.",
+  "New rivals count more. Your first match against someone in 30+ days (or ever) is fresh evidence: ×1.1 and +10 xp. Playing around the office is the fastest way to find your real level.",
+  "Games to 21 count 10% more than games to 11. An opponent with few games behind them moves you a little less (their rating is still settling).",
   "Paddles count. A paid paddle is treated as +50 rating when working out who was expected to win: win with one and you gain a little less, beat one and you gain a little more.",
-  "Doubles uses each team's average rating. Each format has its own games played (K-factor), matches played (provisional under 5), rematch count, time away, streaks and rank: nothing is shared.",
+  "Doubles uses each team's average rating; a stronger partner gains a little less and loses a little more. Each format has its own games played (K-factor), matches played (placement under 5), rematch history, time away, streaks and rank: nothing is shared.",
+  "See what's on the line before you play. Record a match, To confirm and Challenges show what a typical 2-1 win or loss would do to your rating, and the tier it would take you to.",
   "Records show both: Matches (match wins and losses) and Games (every game you won and lost).",
 ];
 export const RATING_FORMULA =
-  "Each game, in order (game 2 starts from the ratings game 1 left):\n\nedge      = 50 * share of paid paddles on your side  (0, 25 or 50)\nexpected  = 1 / (1 + 10 ^ (((opponent + their edge) - (you + your edge)) / 400))\ndominance = (winnerPoints - loserPoints) / (winnerPoints + loserPoints)   of THAT game\nmargin    = 0.75 + 1.25 * sqrt(dominance)         (0.75 to 2.0)\nupset     = 2.2 / (2.2 + 0.001 * (winner - loser))  (0.6 to 1.6, edges included)\nchange    = 0.5 * K * (result - expected) * repeat * margin * upset   (max 40 per game)\n\nresult = 1 for a win, 0 for a loss (the loser gets the same margin and upset factors)\nK      = 32 + 16 * e ^ (-games played / 30)   (48 brand new, 32 seasoned)\nrepeat = 0.3 + 0.7 / (1 + 0.75 * earlier MATCHES with this opponent)   (1.0 down to 0.3, never 0)\nmatch total = sum of its games, never more than 80";
+  "Each game, in order (game 2 starts from the ratings game 1 left):\n\nedge      = 50 * share of paid paddles on your side  (0, 25 or 50)\nexpected  = 1 / (1 + 10 ^ (((opponent + their edge) - (you + your edge)) / 400))\ndominance = (winnerPoints - loserPoints) / (winnerPoints + loserPoints)   of THAT game\nmargin    = 0.75 + 1.25 * sqrt(dominance)         (0.75 to 2.0)\nupset     = 2.2 / (2.2 + 0.001 * (winner - loser))  (0.6 to 1.6, edges included)\nchange    = 0.5 * K * rust * (result - expected) * margin * upset * repeat\n            * new rival * certainty * to21 * partner * challenge     (max 40 per game)\n\nresult    = 1 for a win, 0 for a loss (the loser gets the same margin and upset factors)\nK         = 32 + 16 * e ^ (-games played / 60)   (48 brand new, 32 seasoned)\nrust      = 1 + min(1, (days away - 21) / 40)     (3+ weeks away; every game of that match)\nrepeat    = 0.3 + 0.7 / (1 + 0.75 * meetings)    meetings = sum of 0.5 ^ (days ago / 3)\nnew rival = 1.1 if you have not met these opponents in 30 days, else 1\ncertainty = 0.8 to 1.0 by the opponent's games (full from 10)\nto21      = 1.1 for games to 21      challenge = 1.25 for an accepted challenge\npartner   = doubles: 0.75 to 1.25 (stronger partner gains less, loses more)\nmatch total = sum of its games, never more than 80";
 export const XP_POINTS = [
   "+25 xp for playing, +25 for winning",
   "+5 xp per game you take (five games max)",
@@ -29,6 +31,7 @@ export const XP_POINTS = [
   "Skunk: +15 xp for every game you win 11-0",
   "Comeback: +15 xp for winning after losing game 1",
   "First verified match of the day: +10 xp",
+  "New rival: +10 xp for your first verified match against someone in that format, or the first in 30+ days",
 ];
 export const CHALLENGE_POINTS = [
   "Challenges are singles-only: you can challenge a player up to three singles ranks above you. One open challenge at a time.",
@@ -88,7 +91,7 @@ export function RatingExplainer({ defaultOpen = false, page = "home" }) {
           </button>
         </h2>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
-          Elo, like chess ratings, plus margins and upsets. Your rating moves only once everyone who
+          Elo, like chess ratings, plus margins, upsets, rematch recency and time away. Your rating moves only once everyone who
           played has confirmed the result, so nobody can award themselves a win.
         </p>
         <div
@@ -148,11 +151,12 @@ export function RatingExplainer({ defaultOpen = false, page = "home" }) {
           </h3>
           <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
             Two regulars (25 games each, free paddles): 1400 beats 1600, expected 0.24 a game. A 3-0
-            blowout (11-2, 11-3, 11-1) is three wins: +29, +24, +24 = +77, and the loser drops 77. The same
-            match played narrowly (11-9, 9-11, 12-10) is two wins and a loss: +19, −6, +17 = +30. With a paid
-            paddle the blowout is +70 for the winner; if the loser had it, +80. Between two evenly rated
-            players (1400 each, 20 games), a 3-0 sweep is +41, a 2-1 grind +10, a close 2-0 +22. Rank simply
-            follows rating.
+            blowout (11-2, 11-3, 11-1) is three wins: +32, +26, +22 = +80 (the match cap), and the loser drops 80.
+            The same match played narrowly (11-9, 9-11, 12-10) is two wins and a loss: +20, −6, +19 = +33. With a
+            paid paddle the blowout is +76 for the winner. Between two evenly rated players (1400 each, 20
+            games), a 3-0 sweep is +44, a 2-1 grind +10, a close 2-0 +23. What's on the line for two equal
+            regulars (a typical 2-1: 11-7, 7-11, 11-7): ±13 against a new rival, ±10 if you meet weekly, ±6 if you
+            play each other every day, and ±15 for the one coming back from six weeks off. Rank simply follows rating.
           </p>
           <Link
             to="/rules"

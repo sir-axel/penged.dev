@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { ResultRow } from "@/components/ResultRow";
 import { Button } from "@/components/ui/button";
 import { DeclineButton } from "@/pages/Challenges";
+import { StakesLine } from "@/components/match/StakesLine";
 import { timeLeft } from "@/lib/ladder";
 import { timeAgo } from "@/lib/timeAgo";
 import { api } from "@/api/client";
@@ -66,6 +67,7 @@ function ConfirmCard({ match, busy, onRespond }) {
     <li className="rounded-sm border border-border bg-card p-3" data-testid="confirm-card">
       <MatchSummary match={match}>
         {match.note && <p className="mt-2 rounded-sm bg-secondary/60 px-2.5 py-1.5 text-xs">Note: {match.note}</p>}
+        <StakesLine request={{ match_id: match.id }} showResult className="mt-2" />
         {pending ? (
           <div className="mt-3 space-y-2 rounded-sm border border-destructive/30 bg-destructive/5 p-2.5">
             <p className="text-sm">
@@ -207,6 +209,7 @@ export function Confirm() {
                       </p>
                       <p className="mt-0.5 text-xs text-muted-foreground">{timeLeft(c.expires_at)}</p>
                       {c.message && <p className="mt-2 rounded-sm bg-secondary/60 px-2.5 py-1.5 text-xs">“{c.message}”</p>}
+                      <StakesLine request={{ challenge_id: c.id }} className="mt-2" />
                       <div className="mt-3 grid grid-cols-2 gap-2">
                         <Button
                           className="h-11 rounded-sm"

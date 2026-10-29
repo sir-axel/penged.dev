@@ -38,16 +38,17 @@ export function describeChange(e) {
     });
   }
   if (e.score && e.expected != null) compact.push(`expected ${Math.round(e.expected * 100)}%`);
-  if (e.k != null) detail.push({ label: "K", value: e.k.toFixed(1), note: "how far one result can move you; shrinks as you play" });
+  if (e.k != null) detail.push({ label: "K", value: e.k.toFixed(1), note: "how far one result can move you: 48 when new, easing toward 32 over your first ~100 games" });
   const rows = [
     ["mov", "margin", "bigger wins move more", e.mov],
     ["ac", e.ac >= 1 ? "upset" : "favourite", e.ac >= 1 ? "beat or lost to someone who was ahead on paper" : "favourites are damped", e.ac],
-    ["rust", "rust", "back after a long break: K is higher", e.rust],
+    ["rust", "back from a break", "3+ weeks away: K is higher for this whole match (up to double)", e.rust],
     ["opp_certainty", "new opponent", "opponent has few matches, so their rating is less certain", e.opp_certainty],
     e.games
       ? ["evidence", "to 21", "a game to 21 is a more reliable result than one to 11", e.evidence]
       : ["evidence", "match length", "more games (or a 21 target) is a more reliable result", e.evidence],
-    ["repeat", "rematch", "earlier meetings with this opponent shrink the swing", e.repeat],
+    ["repeat", "rematch", "recent meetings with this opponent shrink the swing; each one fades by half every 3 days", e.repeat],
+    ["novelty", "new rival", "first meeting in 30+ days: fresh evidence counts 10% more", e.novelty],
     ["teammate", "partner", "doubles: a stronger partner gains less and loses more", e.teammate],
     ["challenge", "challenge", "playing an accepted challenge counts extra", e.challenge],
   ];

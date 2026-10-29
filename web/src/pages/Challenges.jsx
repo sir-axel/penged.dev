@@ -10,6 +10,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/EmptyState";
 import { SegmentedControl } from "@/components/match/SegmentedControl";
+import { StakesLine } from "@/components/match/StakesLine";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -220,6 +221,7 @@ export function Challenges() {
                       “{e.message}”
                     </p>
                   )}
+                  <StakesLine request={{ challenge_id: e.id }} className="mt-2" />
                   <div className="mt-3 grid grid-cols-2 gap-2">
                     <Button
                       onClick={() =>
@@ -283,6 +285,7 @@ export function Challenges() {
                     </div>
                     <StatusBadge status={e.status} />
                   </div>
+                  <StakesLine request={{ challenge_id: e.id }} className="mt-2" />
                 </li>
               ))}
             </ul>
