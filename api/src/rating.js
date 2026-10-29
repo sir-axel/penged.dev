@@ -461,8 +461,10 @@ export const CHALLENGE_CAP_DAYS = 7;
 export const CHALLENGES_RECEIVED_PER_WEEK = 2;
 export const CHALLENGES_SENT_PER_WEEK = 3;
 // Anyone on the ladder may challenge anyone. 'down' = the challenger was rated above the defender at creation:
-// declining is free, ignoring it costs DOWN_EXPIRE_MULT x the upward expiry penalty, with no walkover for the challenger.
-export const DOWN_EXPIRE_MULT = 0.5;
+// declining costs DOWN_MULT x the upward decline penalty while they are within DOWN_CLOSE_GAP places, and is free beyond;
+// ignoring it costs DOWN_MULT x the upward expiry penalty at any gap. Never a walkover for the challenger.
+export const DOWN_MULT = 0.5;
+export const DOWN_CLOSE_GAP = 2;
 // At most one ducking penalty per defender per rolling DUCK_PENALTY_DAYS: a second penalisable duck closes free ('weekly_penalty_cap').
 export const DUCK_PENALTY_DAYS = 7;
 
@@ -498,9 +500,11 @@ export function challengePenalty(o) {
 }
 function duckPenalty({ kind, direction = 'up', ...o }) {
   if (direction === 'down') {
-    if (kind !== 'expired') return { penalty: 0, reason: 'declined_down', dropsRank: false, walkover: false };
     const up = duckPenalty({ ...o, kind });
-    return { penalty: Math.round(DOWN_EXPIRE_MULT * up.penalty), reason: 'expired_down', dropsRank: true, walkover: false };
+    if (kind === 'expired') return { penalty: Math.round(DOWN_MULT * up.penalty), reason: 'expired_down', dropsRank: true, walkover: false };
+    if (up.penalty === 0) return up; // waived (played this week)
+    if (Math.round(o.rankGap || 1) > DOWN_CLOSE_GAP) return { penalty: 0, reason: 'declined_down', dropsRank: false, walkover: false };
+    return { penalty: Math.max(1, Math.round(DOWN_MULT * up.penalty)), reason: 'declined_down_close', dropsRank: true, walkover: false };
   }
   const { defRating, defRd, chalRating, meetings = 0, rankGap = 1, recentPairMatch = false, defRecentMatches = 0 } = o;
   const loss = dodgeBase({ defRating, defRd, chalRating, meetings, rankGap });

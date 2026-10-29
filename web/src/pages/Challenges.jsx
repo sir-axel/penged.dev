@@ -83,6 +83,11 @@ export function outcomeText(t, asChallenger) {
   if (t.penalty_reason === "declined_down") {
     return asChallenger ? `Declined · free — you are rated above ${t.defender_name}` : "Declined · free — they are rated above you";
   }
+  if (t.penalty_reason === "declined_down_close") {
+    return asChallenger
+      ? `Declined · ${t.defender_name} ${minus(pen)} rating${moved} (half: you are just above)`
+      : `Declined · ${minus(pen)} rating${moved} (half: they are just above you)`;
+  }
   if (t.penalty_reason === "weekly_penalty_cap") {
     const what = t.status === "expired" ? "No response" : "Declined";
     return asChallenger
@@ -112,7 +117,8 @@ export function publicOutcomeText(t) {
   if (!t.penalty_reason) return null;
   if (t.reversed) return "Penalty reversed by an admin";
   if (t.penalty_reason === "waived_recent_match") return "Declined · no penalty — they played this week";
-  if (t.penalty_reason === "declined_down") return "Declined · free — challenged by someone rated above";
+  if (t.penalty_reason === "declined_down") return "Declined · free — challenged by someone rated well above";
+  if (t.penalty_reason === "declined_down_close") return `Declined · ${t.defender_name} ${minus(pen)} rating (half: challenged from just above)`;
   if (t.penalty_reason === "weekly_penalty_cap") return "No penalty — already paid one this week";
   if (t.penalty_reason === "expired_down") return `No response · ${minus(pen)} rating for ${t.defender_name} · no walkover`;
   if (t.penalty_reason === "expired")
@@ -123,7 +129,7 @@ export function publicOutcomeText(t) {
 /** Why ducking is free, in the defender's words (null when it costs). */
 function freeWhy(reason) {
   return {
-    declined_down: "No penalty for declining — they challenged down (they are rated above you).",
+    declined_down: "No penalty for declining — they are rated well above you (3+ places up).",
     waived_recent_match: "Declining is free this time — you played this challenger this week.",
     weekly_penalty_cap: "Declining is free this time — you already took a ducking penalty this week.",
     doubles: "No penalty for declining a doubles challenge.",
@@ -284,7 +290,7 @@ function QuoteLine({ target }) {
     d.penalty > 0
       ? `If ${name} declines: ${minus(d.penalty)} for them.`
       : {
-          declined_down: `Free for ${name} to decline — you are rated above them.`,
+          declined_down: `Free for ${name} to decline — you are 3+ places above them.`,
           waived_recent_match: `Free for ${name} to decline — you played this week.`,
           weekly_penalty_cap: `Free for ${name} — they already took a ducking penalty this week.`,
         }[d.reason] || `Free for ${name} to decline.`;
@@ -514,7 +520,8 @@ export function Challenges() {
                   {targets.map((e) => {
                     const full = atLimit[e.id];
                     const down = (Number(player?.singles_rating) || 0) > (Number(e.singles_rating) || 0);
-                    const tag = full ? "weekly limit" : selectedId === e.id ? "selected" : down ? "free to decline" : "challenge";
+                    const farDown = down && player?.singles_rank != null && e.singles_rank != null && Math.abs(e.singles_rank - player.singles_rank) > 2;
+                    const tag = full ? "weekly limit" : selectedId === e.id ? "selected" : farDown ? "free to decline" : down ? "half cost" : "challenge";
                     return (
                       <li key={e.id}>
                         <button
@@ -703,7 +710,7 @@ export function Challenges() {
         )}
         <EmptyState
           title="How challenges move rating"
-          body="Rank follows rating. Saying no to someone rated below you costs rating, and staying silent for 72 hours (weekends don't count) costs double and pays them. Saying no to someone above you is free; staying silent costs half. One ducking penalty a week at most. Doubles challenges never cost anything."
+          body="Rank follows rating. Saying no to someone rated below you costs rating, and staying silent for 72 hours (weekends don't count) costs double and pays them. Saying no to someone 1–2 places above you costs half, and is free further up; staying silent costs half. One ducking penalty a week at most. Doubles challenges never cost anything."
           action={
             <Link
               to="/rules"

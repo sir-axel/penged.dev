@@ -1,4 +1,4 @@
--- Challenge caps, challenging down (top 3) and doubles challenges.
+-- Challenge caps, anyone-can-challenge-anyone direction and doubles challenges.
 -- direction: 'up' = challenger rated at or below the defender at creation (ducking costs the defender), 'down' = rated above
 -- (declining is free; ignoring it until it expires costs half, with no walkover). Anyone on the ladder may challenge anyone.
 -- format 'doubles': challenger + partner vs defender + defender partner. The partner and both defenders must all accept

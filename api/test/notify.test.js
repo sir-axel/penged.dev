@@ -61,53 +61,6 @@ describe('notify: who gets what', () => {
     expect(m.html).toContain('href="https://penged.dev/profile"');
   });
 
-  it('accepted / declined go to the challenger only', async () => {
-    const { a, b, c } = await trio();
-    const ch1 = await challenge(c, a);
-    await call(a, 'respondChallenge', { challenge_id: ch1.id, decision: 'accept' });
-    expect(subjects(await compose(env, 'challenge_accepted', { challenge_id: ch1.id, actor_user_id: a.id })))
-      .toEqual(['cc3@x.test: Aa1 accepted your challenge']);
-    await sql("UPDATE challenges SET status = 'completed' WHERE id = ?", ch1.id);
-    const ch2 = await challenge(c, b);
-    const r = await call(b, 'respondChallenge', { challenge_id: ch2.id, decision: 'decline' });
-    const msgs = await compose(env, 'challenge_declined', { challenge_id: ch2.id, actor_user_id: b.id });
-    expect(subjects(msgs)).toEqual(['cc3@x.test: Bb2 declined your challenge']);
-    expect(msgs[0].text).toContain(`Declining cost them ${r.body.challenge.penalty_rating} rating.`);
-  });
-
-  it('expired: the defender hears the cost, the challenger the walkover', async () => {
-    const { a, c } = await trio();
-    const ch = await challenge(c, a);
-    await sql('UPDATE challenges SET expires_at = ? WHERE id = ?', past(), ch.id);
-    await call(c, 'syncLadder');
-    const row = await env.DB.prepare('SELECT * FROM challenges WHERE id = ?').bind(ch.id).first();
-    expect(row.penalty_rating).toBeGreaterThan(0);
-    const msgs = await compose(env, 'challenge_expired', { challenge_ids: [ch.id] });
-    expect(subjects(msgs)).toEqual([
-      `aa1@x.test: Challenge from Cc3 expired (-${row.penalty_rating})`,
-      `cc3@x.test: Aa1 didn't answer: walkover (+${row.challenger_rating_gain})`,
-    ]);
-    expect(msgs.find((m) => m.to === 'aa1@x.test').text).toContain(`from #${row.penalty_rank_before} to #${row.penalty_rank_after}`);
-  });
-
-  it('expired after accepting: both hear it ran out, no rating talk of penalties', async () => {
-    const { a, c } = await trio();
-    const ch = await challenge(c, a);
-    await call(a, 'respondChallenge', { challenge_id: ch.id, decision: 'accept' });
-    await sql("UPDATE challenges SET status = 'expired' WHERE id = ?", ch.id);
-    const msgs = await compose(env, 'challenge_expired', { challenge_ids: [ch.id] });
-    expect(subjects(msgs)).toEqual(['aa1@x.test: Challenge with Cc3 expired', 'cc3@x.test: Challenge with Aa1 expired']);
-  });
-
-  it('match submitted: the players who must confirm, never the submitter', async () => {
-    const { a, b } = await trio();
-    const m = await singles(b, a);
-    const msgs = await compose(env, 'match_submitted', { match_id: m.id, actor_user_id: b.id });
-    expect(subjects(msgs)).toEqual(['aa1@x.test: Bb2 logged a result: confirm it']);
-    expect(msgs[0].text).toContain('you lost to Bb2 0-2 (5-11, 7-11)');
-    expect(msgs[0].text).toContain(`https://penged.dev/matches/${m.id}`);
-  });
-
   it('match verified: score, win/loss from each POV and rating change; the confirmer is not emailed', async () => {
     const { a, b } = await trio();
     const m = await singles(b, a);
@@ -145,10 +98,11 @@ describe('notify: who gets what', () => {
       format: 'doubles', target: 11, side_a: [{ player_id: p1.player.id }, { player_id: p2.player.id }],
       side_b: [{ player_id: p3.player.id }, { player_id: p4.player.id }], games,
     });
-    const msgs = await compose(env, 'match_submitted', { match_id: sub.body.match.id, actor_user_id: p1.id });
-    expect(msgs.map((m) => m.to).sort()).toEqual(['dd2@x.test', 'dd3@x.test', 'dd4@x.test']);
-    expect(msgs.find((m) => m.to === 'dd2@x.test').text).toContain('you & Dd1 beat Dd3 & Dd4 2-0');
-    expect(msgs.find((m) => m.to === 'dd3@x.test').text).toContain('you & Dd4 lost to Dd1 & Dd2 0-2');
+    for (const p of [p2, p3, p4]) await call(p, 'respondMatch', { match_id: sub.body.match.id, decision: 'accept' });
+    const msgs = await compose(env, 'match_verified', { match_id: sub.body.match.id, actor_user_id: p4.id });
+    expect(msgs.map((m) => m.to).sort()).toEqual(['dd1@x.test', 'dd2@x.test', 'dd3@x.test']);
+    expect(msgs.find((m) => m.to === 'dd2@x.test').subject).toMatch(/^Final: you & Dd1 beat Dd3 & Dd4 2-0/);
+    expect(msgs.find((m) => m.to === 'dd3@x.test').subject).toMatch(/^Final: you & Dd4 lost to Dd1 & Dd2 0-2/);
   });
 });
 
@@ -200,19 +154,19 @@ describe('notify: wired into the functions (Resend stubbed)', () => {
     expect(sent.map((s) => [s.body.to[0], s.body.subject])).toEqual([['aa1@x.test', 'Cc3 challenged you']]);
   });
 
-  it('submit then verify emails the confirmer, then the submitter with the final score', async () => {
+  it('submitting sends nothing; verifying emails the submitter the final score', async () => {
     const { a, b } = await trio();
     const sent = mockResend();
     const app = appWith(KEY_ENV);
     const m = (await callWith(app, b, 'submitMatch', {
       format: 'singles', target: 11, side_a: [{ player_id: b.player.id }], side_b: [{ player_id: a.player.id }], games,
     })).body.match;
-    expect(sent.map((s) => s.body.to[0])).toEqual(['aa1@x.test']);
+    expect(sent).toHaveLength(0);
     const v = await callWith(app, a, 'respondMatch', { match_id: m.id, decision: 'accept' });
     expect(v.body.match.status).toBe('verified');
-    expect(sent).toHaveLength(2);
-    expect(sent[1].body.to).toEqual(['bb2@x.test']);
-    expect(sent[1].body.subject).toMatch(/^Final: you beat Aa1 2-0 \(\+\d+\)$/);
+    expect(sent).toHaveLength(1);
+    expect(sent[0].body.to).toEqual(['bb2@x.test']);
+    expect(sent[0].body.subject).toMatch(/^Final: you beat Aa1 2-0 \(\+\d+\)$/);
   });
 
   it('a failing email provider never fails the request', async () => {

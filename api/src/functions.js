@@ -396,7 +396,6 @@ fns.submitMatch = ({ env, user }, body) =>
         inFutureIso(MATCH_EXPIRY_MS), now, now, user.id, ranked ? 1 : 0),
       touch(env, me.id, now),
     ]);
-    await notify(env, 'match_submitted', { match_id: id, actor_user_id: user.id });
     return { match: pub('Match', await first(env, 'SELECT * FROM matches WHERE id = ?', id)) };
   });
 
@@ -781,7 +780,6 @@ async function respondDoublesChallenge(env, user, c, decision) {
   }
   await commit(env, stmts);
   const after = await getChallenge(env, c.id);
-  if (after.status !== 'open') await notify(env, after.status === 'accepted' ? 'challenge_accepted' : 'challenge_declined', { challenge_id: c.id, actor_user_id: user.id });
   return { challenge: pub('Challenge', after) };
 }
 
@@ -802,7 +800,6 @@ fns.respondChallenge = ({ env, user }, body) =>
       const plan = await penaltyPlan(env, [c], 'declined', now, lv);
       if (!plan.changed) throw new HttpError(409, 'That challenge can no longer be answered.');
       await commit(env, [...plan.guards, ...plan.stmts, flagsStmt(env)]);
-      await notify(env, 'challenge_declined', { challenge_id: id, actor_user_id: user.id });
       return { challenge: pub('Challenge', await getChallenge(env, id)) };
     }
     // Accepting starts a fresh 72h (weekday) window to actually play; unplayed accepted challenges expire in syncLadder.
@@ -813,7 +810,6 @@ fns.respondChallenge = ({ env, user }, body) =>
       stmt(env, 'UPDATE challenges SET status = ?, responded_at = ?, expires_at = ?, updated_date = ?, version = version + 1 WHERE id = ?',
         'accepted', now, playBy, now, c.id),
     ]);
-    await notify(env, 'challenge_accepted', { challenge_id: id, actor_user_id: user.id });
     return { challenge: pub('Challenge', await getChallenge(env, id)) };
   });
 
@@ -946,7 +942,6 @@ export const runSyncLadder = ({ env }) =>
     const iM = stmts.push(stmt(env, `UPDATE matches SET status = 'expired', updated_date = ?, version = version + 1 WHERE status = 'pending' AND expires_at < ?`, now, now)) - 1;
     stmts.push(flagsStmt(env), stmt(env, RANK_SQL, activeCut()), stmt(env, DOUBLES_RANK_SQL, activeCut())); // ranks are derived from ratings; idempotent
     const res = await commit(env, stmts);
-    await notify(env, 'challenge_expired', { challenge_ids: [...overdue.map((c) => c.id), ...(res[iC].results || []).map((r) => r.id)] });
     return { ok: true, expired_challenges: plan.changed + res[iC].meta.changes, expired_matches: res[iM].meta.changes };
   });
 

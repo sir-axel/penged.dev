@@ -65,22 +65,32 @@ describe('anyone can challenge anyone (singles)', () => {
     expect((await single(e, g)).status).toBe(400);
   });
 
-  it('downward: declining is free (but starts the pair cooldown)', async () => {
+  it('downward: declining costs half within 2 places (and starts the pair cooldown)', async () => {
     const [a, b] = await ladder('Aa1', 'Bb2', 'Cc3');
     await rate(a, 1401);
     // the quote before sending matches the preview after
     const q = (await call(a, 'challengeQuote', { defender_player_id: b.player.id })).body;
-    expect(q).toMatchObject({ direction: 'down', decline: { penalty: 0, reason: 'declined_down' }, expire: { penalty: 12, challenger_gain: 0 } });
+    expect(q).toMatchObject({ direction: 'down', decline: { penalty: 6, reason: 'declined_down_close' }, expire: { penalty: 12, challenger_gain: 0 } });
     expect((await call(b, 'challengeQuote', { defender_player_id: a.player.id })).body)
       .toMatchObject({ direction: 'up', decline: { penalty: 12, reason: 'declined' }, expire: { penalty: 24, challenger_gain: 24 } });
     const ch = (await single(a, b)).body.challenge;
     const pv = (await call(b, 'challengePenaltyPreview', { challenge_id: ch.id })).body;
-    expect(pv.decline).toMatchObject({ penalty: 0, reason: 'declined_down', drops_rank: false, challenger_gain: 0 });
+    expect(pv.decline).toMatchObject({ penalty: 6, reason: 'declined_down_close', drops_rank: true, challenger_gain: 0 });
     expect(pv.expire).toMatchObject({ penalty: 12, reason: 'expired_down', drops_rank: true, challenger_gain: 0 });
     const r = (await answer(b, ch, 'decline')).body.challenge;
-    expect(r).toMatchObject({ status: 'declined', penalty_rating: 0, penalty_reason: 'declined_down' });
-    expect(await ent('Player', b.player.id)).toMatchObject({ singles_rating: 1400, singles_rank: 2 });
+    expect(r).toMatchObject({ status: 'declined', penalty_rating: 6, penalty_reason: 'declined_down_close' });
+    expect(await ent('Player', b.player.id)).toMatchObject({ singles_rating: 1394 });
+    expect(await ent('Player', a.player.id)).toMatchObject({ singles_rating: 1401 });
     expect((await single(a, b)).status).toBe(409); // same-pair cooldown
+  });
+
+  it('downward: declining is free from 3+ places up', async () => {
+    const [a, , , d] = await ladder('Aa1', 'Bb2', 'Cc3', 'Dd4');
+    await rate(a, 1401);
+    const ch = (await single(a, d)).body.challenge;
+    const r = (await answer(d, ch, 'decline')).body.challenge;
+    expect(r).toMatchObject({ status: 'declined', penalty_rating: 0, penalty_reason: 'declined_down' });
+    expect(await ent('Player', d.player.id)).toMatchObject({ singles_rating: 1400 });
   });
 
   it('downward: ignoring it costs half the upward expiry, with no walkover for the challenger', async () => {
@@ -222,14 +232,5 @@ describe('doubles challenge emails', () => {
     expect(subjects(got)).toEqual(['bb2@x.test', 'cc3@x.test', 'dd4@x.test'].map((t) => `${t}: Aa1 challenged you to doubles`));
     expect(got.find((m) => m.to === 'bb2@x.test').text).toContain('Aa1 wants you as their partner in a doubles challenge: Aa1 & Bb2 vs Cc3 & Dd4.');
     expect(got.find((m) => m.to === 'cc3@x.test').text).toContain('Aa1 challenged you to doubles: Aa1 & Bb2 vs Cc3 & Dd4.');
-    await answer(c, ch, 'decline');
-    const dec = await compose(env, 'challenge_declined', { challenge_id: ch.id, actor_user_id: c.id });
-    expect(subjects(dec)).toEqual(['aa1@x.test', 'bb2@x.test', 'dd4@x.test'].map((t) => `${t}: Cc3 declined the doubles challenge`));
-    const ch2 = (await doubles(a, b, c, d)).body.challenge;
-    for (const u of [b, c, d]) await answer(u, ch2, 'accept');
-    expect(subjects(await compose(env, 'challenge_accepted', { challenge_id: ch2.id, actor_user_id: d.id })))
-      .toEqual(['aa1@x.test', 'bb2@x.test', 'cc3@x.test'].map((t) => `${t}: Doubles challenge on`));
-    await sql("UPDATE challenges SET status = 'expired' WHERE id = ?", ch2.id);
-    expect((await compose(env, 'challenge_expired', { challenge_ids: [ch2.id] }))[0].text).toContain('The doubles challenge Aa1 & Bb2 vs Cc3 & Dd4 ran out of time.');
   });
 });

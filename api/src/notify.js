@@ -14,7 +14,8 @@ import { DEFAULT_TZ } from './weekdays.js';
 
 /** Notification emails per UTC day; the rest of the Resend allowance stays free for account emails. */
 export const NOTIFY_DAILY_CAP = 60;
-export const EVENTS = ['challenge_received', 'challenge_accepted', 'challenge_declined', 'challenge_expired', 'match_submitted', 'match_verified'];
+// Only what players asked for: a challenge that names you, and the final score of a match you played.
+export const EVENTS = ['challenge_received', 'match_verified'];
 
 const site = (env) => String(env.SITE_URL || 'https://penged.dev').replace(/\/$/, '');
 const parse = (v) => (typeof v === 'string' ? JSON.parse(v) : v);
@@ -94,28 +95,6 @@ const doublesMsgs = {
       return message(env, r, { subject: `${c.challenger_name} challenged you to doubles`, heading: 'Doubles challenge', lines, button: 'ANSWER THE CHALLENGE', path: '/challenges' });
     });
   },
-  challenge_accepted(env, c, rs) {
-    return everyone(c).map((uid) => rs[uid]).filter(Boolean).map((r) => message(env, r, {
-      subject: 'Doubles challenge on', heading: 'Everyone accepted',
-      lines: [`Everyone accepted the doubles challenge: ${pairs(c)}.`, `Play by ${when(c.expires_at, r.tz)} (weekdays only) and log the result.`],
-      button: 'SEE THE CHALLENGE', path: '/challenges',
-    }));
-  },
-  challenge_declined(env, c, rs) {
-    const who = nameOfUser(c, c.declined_by_user_id);
-    return everyone(c).map((uid) => rs[uid]).filter(Boolean).map((r) => message(env, r, {
-      subject: `${who} declined the doubles challenge`, heading: 'Doubles challenge declined',
-      lines: [`${who} declined the doubles challenge: ${pairs(c)}.`, 'No rating changed.'],
-      button: 'SEE CHALLENGES', path: '/challenges',
-    }));
-  },
-  challenge_expired(env, c, rs) {
-    return everyone(c).map((uid) => rs[uid]).filter(Boolean).map((r) => message(env, r, {
-      subject: 'Doubles challenge expired', heading: 'Challenge expired',
-      lines: [`The doubles challenge ${pairs(c)} ran out of time.`, 'No rating changed.'],
-      button: 'SEE CHALLENGES', path: '/challenges',
-    }));
-  },
 };
 
 const challengeMsgs = {
@@ -128,58 +107,6 @@ const challengeMsgs = {
       ? "They're rated above you, so declining is free, but letting it run out costs you rating."
       : 'Letting it run out can cost you rating.'}`);
     return [message(env, r, { subject: `${c.challenger_name} challenged you`, heading: 'You have been challenged', lines, button: 'ANSWER THE CHALLENGE', path: '/challenges' })];
-  },
-  challenge_accepted(env, c, rs) {
-    const r = rs[c.challenger_user_id];
-    if (!r) return [];
-    const lines = [`${c.defender_name} accepted your challenge.`, `Play by ${when(c.expires_at, r.tz)} (weekdays only) and log the result.`];
-    return [message(env, r, { subject: `${c.defender_name} accepted your challenge`, heading: 'Challenge accepted', lines, button: 'SEE THE CHALLENGE', path: '/challenges' })];
-  },
-  challenge_declined(env, c, rs) {
-    const r = rs[c.challenger_user_id];
-    if (!r) return [];
-    const lines = [`${c.defender_name} declined your challenge.`];
-    if (c.penalty_rating > 0) lines.push(`Declining cost them ${c.penalty_rating} rating.`);
-    return [message(env, r, { subject: `${c.defender_name} declined your challenge`, heading: 'Challenge declined', lines, button: 'SEE THE CHALLENGE', path: '/challenges' })];
-  },
-  challenge_expired(env, c, rs) {
-    const out = [];
-    const def = rs[c.defender_user_id];
-    const chal = rs[c.challenger_user_id];
-    if (c.responded_at) {
-      // Accepted but never played: no penalty either way.
-      for (const [r, other] of [[def, c.challenger_name], [chal, c.defender_name]]) {
-        if (!r) continue;
-        out.push(message(env, r, {
-          subject: `Challenge with ${other} expired`, heading: 'Challenge expired',
-          lines: [`Your challenge with ${other} ran out of time before a result was confirmed.`, 'No rating changed.'],
-          button: 'SEE CHALLENGES', path: '/challenges',
-        }));
-      }
-      return out;
-    }
-    const p = c.penalty_rating || 0;
-    if (def) {
-      const lines = [`You didn't answer ${c.challenger_name}'s challenge in time.`];
-      if (p > 0) {
-        const drop = c.penalty_rank_before != null && c.penalty_rank_after != null && c.penalty_rank_after !== c.penalty_rank_before
-          ? `, and you moved from #${c.penalty_rank_before} to #${c.penalty_rank_after}` : '';
-        lines.push(`It cost you ${p} rating${drop}.`);
-      } else lines.push('No rating penalty this time.');
-      out.push(message(env, def, {
-        subject: `Challenge from ${c.challenger_name} expired${p > 0 ? ` (-${p})` : ''}`, heading: 'Challenge expired', lines,
-        button: 'SEE CHALLENGES', path: '/challenges',
-      }));
-    }
-    if (chal) {
-      const g = c.challenger_rating_gain || 0;
-      const lines = [`${c.defender_name} didn't answer your challenge in time.`, g > 0 ? `You get a walkover: +${g} rating.` : 'No rating changed.'];
-      out.push(message(env, chal, {
-        subject: `${c.defender_name} didn't answer${g > 0 ? `: walkover (+${g})` : ''}`, heading: 'Challenge expired', lines,
-        button: 'SEE CHALLENGES', path: '/challenges',
-      }));
-    }
-    return out;
   },
 };
 
@@ -201,24 +128,6 @@ function pov(m, userId) {
 }
 
 const matchMsgs = {
-  match_submitted(env, m, rs) {
-    if (m.status !== 'pending') return [];
-    const out = [];
-    for (const uid of m.all_user_ids) {
-      const r = rs[uid];
-      if (!r || uid === m.submitted_by_user_id || m.accepted_user_ids.includes(uid)) continue;
-      const v = pov(m, uid);
-      out.push(message(env, r, {
-        subject: `${m.submitted_by_name} logged a result: confirm it`, heading: 'Confirm your result',
-        lines: [
-          `${m.submitted_by_name} logged your ${m.format} match: ${v.you} ${v.won ? 'beat' : 'lost to'} ${v.opp} ${v.set} (${v.games}).`,
-          `Confirm it, or dispute it if it's wrong. It expires ${when(m.expires_at, r.tz)}.`,
-        ],
-        button: 'CONFIRM THE RESULT', path: `/matches/${m.id}`,
-      }));
-    }
-    return out;
-  },
   match_verified(env, m, rs, { actor_user_id: actor } = {}) {
     if (m.status !== 'verified') return [];
     const changes = m.rating_changes || [];
