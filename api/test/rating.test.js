@@ -158,20 +158,28 @@ describe('elo (per game)', () => {
   });
   it('repeat factor', () => {
     expect(repeatFactor(0)).toBe(1);
-    expect(repeatFactor(1)).toBeCloseTo(0.5714, 4);
-    expect(repeatFactor(2)).toBeCloseTo(0.4, 4);
+    expect(repeatFactor(1)).toBeCloseTo(0.7, 4); // 0.3 + 0.7 / 1.75
+    expect(repeatFactor(2)).toBeCloseTo(0.58, 4);
+    expect(repeatFactor(6)).toBeCloseTo(0.4273, 4);
+    // Never zero: a small group's regulars keep moving, just less.
+    expect(repeatFactor(1000)).toBeGreaterThan(0.3);
+    for (let n = 0; n < 50; n++) expect(repeatFactor(n + 1)).toBeLessThan(repeatFactor(n));
   });
   it('rematch counts MATCHES, not games: one earlier meeting scales every game the same', () => {
     const f = (n, won) => dl(1400, 1400, won, { earlierMeetings: n, dominance: 0 }).delta;
     expect(f(0, true)).toBe(9); // 48 * .5 * .5 * .75
     expect(f(1, true)).toBe(Math.round(9 * repeatFactor(1)));
     expect(f(1, false)).toBe(-f(1, true));
-    expect(f(6, true)).toBe(0);
-    expect(f(6, false)).toBe(0);
+    // Frequent rematches still count (floored), they are only damped.
+    expect(f(6, true)).toBe(Math.round(9 * repeatFactor(6)));
+    expect(f(6, true)).toBeGreaterThan(0);
+    expect(f(6, false)).toBe(-f(6, true));
     const r = duel(1400, 1400, SWEEP, { ...reg, earlierMeetings: 1 }, { ...reg, earlierMeetings: 1 });
     expect(r.w.games.every((g) => g.repeat === repeatFactor(1))).toBe(true);
     const six = duel(1400, 1400, SWEEP, { ...reg, earlierMeetings: 6 }, { ...reg, earlierMeetings: 6 });
-    expect([six.w.delta, six.l.delta]).toEqual([0, 0]);
+    expect(six.w.delta).toBeGreaterThan(0);
+    expect(six.w.delta).toBeLessThan(r.w.delta);
+    expect(six.l.delta).toBe(-six.w.delta);
   });
   it('doubles uses team averages and own K; partners are independent players', () => {
     const r = rateMatch([
@@ -485,7 +493,7 @@ describe('smooth K (games), rust, certainty, target-21, recency, teammate, chall
     expect(mk([{ a: 21, b: 5 }, { a: 21, b: 5 }], 21).games.every((g) => Math.abs(g.evidence - 1.1) < 1e-9)).toBe(true);
     expect(mk([{ a: 21, b: 10 }], 21).delta).toBeGreaterThan(mk([{ a: 11, b: 5 }], 11).delta * 0 + 0);
   });
-  it('repeat factor weights recent meetings fully and older ones by half; six weighted freezes both', () => {
+  it('repeat factor weights recent meetings fully and older ones by half; many meetings damp but never freeze', () => {
     expect(meetingWeight(0)).toBe(1);
     expect(meetingWeight(30)).toBe(1);
     expect(meetingWeight(31)).toBe(0.5);
@@ -493,10 +501,11 @@ describe('smooth K (games), rust, certainty, target-21, recency, teammate, chall
     const old = computeDelta({ ...base, earlierMeetings: 2 * meetingWeight(60) });
     const recent = computeDelta({ ...base, earlierMeetings: 2 * meetingWeight(10) });
     expect(old.delta).toBeGreaterThan(recent.delta);
-    expect(old.repeat).toBeCloseTo(1 / 1.75, 9);
-    expect(computeDelta({ ...base, earlierMeetings: 5.5 }).delta).toBeGreaterThan(0);
-    expect(computeDelta({ ...base, earlierMeetings: 6 }).delta).toBe(0);
-    expect(computeDelta({ ...base, won: false, earlierMeetings: 6 }).delta).toBe(0);
+    expect(old.repeat).toBeCloseTo(0.7, 9);
+    const six = computeDelta({ ...base, earlierMeetings: 6 }).delta;
+    expect(six).toBeGreaterThan(0);
+    expect(six).toBeLessThan(computeDelta({ ...base, earlierMeetings: 2 }).delta);
+    expect(computeDelta({ ...base, won: false, earlierMeetings: 6 }).delta).toBeLessThan(0);
   });
   it('teammate factor: stronger partner gains less on a win and loses more on a loss', () => {
     expect(teammateFactor(1400, 1400, true)).toBe(1);

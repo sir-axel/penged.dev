@@ -37,12 +37,13 @@ export const CERT_FULL_GAMES = 10;
 // every game counts on its own now).
 export const EVIDENCE_TARGET_21 = 1.1;
 // Rematches: earlier meetings in the last REPEAT_WINDOW_DAYS count 1 if within REPEAT_RECENT_DAYS, else REPEAT_OLD_WEIGHT.
-// repeat = 1 / (1 + REPEAT_STEP * weightedMeetings); at ZERO_GAIN_MEETINGS weighted meetings neither player moves.
+// repeat = REPEAT_FLOOR + (1 - REPEAT_FLOOR) / (1 + REPEAT_STEP * weightedMeetings): frequent rematches count less but
+// never stop counting (a small group plays the same people all the time; regulars must not be frozen).
 export const REPEAT_WINDOW_DAYS = 180;
 export const REPEAT_RECENT_DAYS = 30;
 export const REPEAT_OLD_WEIGHT = 0.5;
 export const REPEAT_STEP = 0.75;
-export const ZERO_GAIN_MEETINGS = 6;
+export const REPEAT_FLOOR = 0.3;
 // Doubles: a stronger partner gains less / loses more. teammate = clamp(1 -/+ TEAMMATE_SLOPE * (own - partner) / 400, MIN, MAX)
 export const TEAMMATE_SLOPE = 0.25;
 export const TEAMMATE_MIN = 0.75;
@@ -110,7 +111,7 @@ export function teammateFactor(own, partner, won) {
 }
 
 export function repeatFactor(earlierMeetings) {
-  return 1 / (1 + REPEAT_STEP * Math.max(0, earlierMeetings));
+  return REPEAT_FLOOR + (1 - REPEAT_FLOOR) / (1 + REPEAT_STEP * Math.max(0, earlierMeetings));
 }
 
 /** Dominance of a match: (winnerPoints - loserPoints) / total points, clamped to [0, 1]. */
@@ -158,7 +159,7 @@ export function computeDelta({
   const rust = rustFactor(daysSinceLast);
   const k = kSmooth(gamesPlayed, kDecay) * rust;
   const certainty = certaintyWeight(oppGamesPlayed);
-  const repeat = earlierMeetings >= ZERO_GAIN_MEETINGS ? 0 : repeatFactor(earlierMeetings);
+  const repeat = repeatFactor(earlierMeetings);
   const base = {
     expected, mov, ac, dominance: dom, paddle_edge: oppEdge - edge, k, rust, opp_certainty: certainty,
     evidence, repeat, teammate, challenge,
