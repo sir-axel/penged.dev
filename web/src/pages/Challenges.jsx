@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, LoaderCircle, Search, Undo2 } from "lucide-react";
+import { ArrowLeftRight, Check, LoaderCircle, Search, Undo2 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useMyPlayer } from "@/hooks/useMyPlayer";
 import { PageHeader } from "@/components/PageHeader";
@@ -443,15 +443,10 @@ function SwapCompare({ from, to, me }) {
 }
 
 /** The swap button with its confirmation: who goes out, who comes in, and what changes for you. */
-function SwapConfirm({ from, to, me, busy, onSwap, className = "" }) {
+function SwapConfirm({ from, to, me, busy, onSwap, trigger }) {
   return (
     <AlertDialog>
-      <AlertDialogTrigger asChild>
-        <Button disabled={!to || busy} className={`h-12 w-full rounded-sm ${className}`} data-testid="swap-send">
-          {busy && <LoaderCircle className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
-          {to ? `Swap ${from.defender_name} → ${playerName(to)} · free` : "Pick someone to swap to"}
-        </Button>
-      </AlertDialogTrigger>
+      <AlertDialogTrigger asChild>{trigger}</AlertDialogTrigger>
       {to && (
         <AlertDialogContent className="max-h-[88dvh] w-[calc(100%-2rem)] overflow-y-auto overscroll-contain rounded-sm">
           <AlertDialogHeader>
@@ -757,7 +752,42 @@ export function Challenges() {
                     const full = atLimit[e.id];
                     const down = (Number(player?.singles_rating) || 0) > (Number(e.singles_rating) || 0);
                     const current = myLive?.defender_player_id === e.id;
-                    const tag = current ? "your challenge" : full ? "weekly limit" : selectedId === e.id ? "selected" : canSwap ? (down ? "swap · half cost" : "swap") : down ? "half cost" : "challenge";
+                    const tag = current ? "your challenge" : full ? "weekly limit" : selectedId === e.id ? "selected" : down ? "half cost" : "challenge";
+                    if (canSwap && !current && !full)
+                      return (
+                        <li key={e.id} className="flex min-h-[54px] items-center gap-3 rounded-sm border border-border bg-card px-3 py-2">
+                          <span className="w-6 shrink-0 font-mono text-xs text-muted-foreground">{e.singles_rank}</span>
+                          <span className="min-w-0 flex-1">
+                            <span className="flex min-w-0 items-center gap-1.5">
+                              <span className="truncate font-heading text-sm font-semibold">{playerName(e)}</span>
+                              <BountyChip bounty={bountyOf(e)} />
+                            </span>
+                            <span className="block font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+                              {`${e.singles_rating} rating${down ? " · half cost" : ""}`}
+                            </span>
+                          </span>
+                          <SwapConfirm
+                            from={myLive}
+                            to={e}
+                            me={player}
+                            busy={busy === `swap-${e.id}`}
+                            onSwap={() =>
+                              act("revokeChallenge", { challenge_id: myLive.id, swap_to_player_id: e.id, ...(message.trim() ? { message } : null) }, `swap-${e.id}`)
+                            }
+                            trigger={
+                              <button
+                                type="button"
+                                disabled={!!busy}
+                                className="inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-sm bg-secondary px-3 text-sm font-medium text-foreground transition-colors hover:bg-secondary/70 disabled:opacity-50"
+                                data-testid={`swap-${e.username}`}
+                              >
+                                {busy === `swap-${e.id}` ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <ArrowLeftRight className="h-4 w-4" aria-hidden="true" />}
+                                Swap
+                              </button>
+                            }
+                          />
+                        </li>
+                      );
                     return (
                       <li key={e.id}>
                         <button
@@ -794,30 +824,14 @@ export function Challenges() {
                     {q ? "Nobody on the ladder matches that." : "There is nobody else on the ladder yet."}
                   </p>
                 )}
-                {selected && <SendPreview me={player} target={selected} />}
+                {!canSwap && selected && <SendPreview me={player} target={selected} />}
                 {noteBox}
-                {myLive && (
+                {myLive && !canSwap && (
                   <p className="rounded-sm border border-border bg-secondary/50 px-3 py-2 text-xs" data-testid="swap-note">
-                    {canSwap
-                      ? `You already have a challenge out to ${myLive.defender_name}. Pick someone here to swap it to them instead: free, and it doesn't use a send.`
-                      : `${myLive.defender_name} already accepted your challenge. Play it, or revoke it from In progress, before sending another.`}
+                    {`${myLive.defender_name} already accepted your challenge. Play it, or revoke it from In progress, before sending another.`}
                   </p>
                 )}
-                {canSwap ? (
-                  <SwapConfirm
-                    from={myLive}
-                    to={selected && selectedId !== myLive.defender_player_id ? selected : null}
-                    me={player}
-                    busy={busy === "create"}
-                    onSwap={async () => {
-                      (await act(
-                        "revokeChallenge",
-                        { challenge_id: myLive.id, swap_to_player_id: selectedId, ...(message.trim() ? { message } : null) },
-                        "create",
-                      )) && (setSelectedId(""), setMessage(""));
-                    }}
-                  />
-                ) : (
+                {canSwap ? null : (
                   <Button
                     onClick={async () => {
                       (await act("createChallenge", { defender_player_id: selectedId, message }, "create")) &&
