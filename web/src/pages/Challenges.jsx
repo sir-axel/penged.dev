@@ -12,6 +12,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { SegmentedControl } from "@/components/match/SegmentedControl";
 import { PlayerPicker } from "@/components/match/PlayerPicker";
 import { BountyChip } from "@/components/BountyChip";
+import { Avatar } from "@/components/Avatar";
 import { useBounties } from "@/hooks/useBounties";
 import { StakesLine, useStakes } from "@/components/match/StakesLine";
 import { MatchupCard, MatchedChip, WeekMatchesList } from "@/components/MatchupCard";
@@ -215,6 +216,7 @@ function RevokeButton({ challenge, targets, atLimit, busy, onSwap, onRevoke }) {
   });
   const cost = data?.revoke?.penalty ?? null;
   const options = targets.filter((p) => p.id !== challenge.defender_player_id && !atLimit[p.id]);
+  const bountyOf = useBounties("singles");
   return (
     <AlertDialog open={open} onOpenChange={setOpen}>
       <AlertDialogTrigger asChild>
@@ -228,7 +230,7 @@ function RevokeButton({ challenge, targets, atLimit, busy, onSwap, onRevoke }) {
           Revoke
         </button>
       </AlertDialogTrigger>
-      <AlertDialogContent className="w-[calc(100%-2rem)] rounded-sm">
+      <AlertDialogContent className="max-h-[88dvh] w-[calc(100%-2rem)] overflow-y-auto overscroll-contain rounded-sm">
         <AlertDialogHeader>
           <AlertDialogTitle>Take back your challenge?</AlertDialogTitle>
           <AlertDialogDescription>
@@ -237,22 +239,42 @@ function RevokeButton({ challenge, targets, atLimit, busy, onSwap, onRevoke }) {
         </AlertDialogHeader>
         {data?.can_swap !== false && (
           <div className="space-y-2 rounded-sm border border-success/40 bg-success/5 p-3">
-            <label htmlFor={`swap-${challenge.id}`} className="block text-sm font-medium">
+            <p className="text-sm font-medium">
               Swap to someone else <span className="font-mono text-xs text-success">· free</span>
-            </label>
-            <select
+            </p>
+            <ul
               id={`swap-${challenge.id}`}
-              value={swapTo}
-              onChange={(e) => setSwapTo(e.target.value)}
-              className="h-11 w-full rounded-sm border border-input bg-card px-2 text-base lg:text-sm"
+              role="listbox"
+              aria-label="Pick a player to swap to"
+              className="max-h-56 space-y-1 overflow-y-auto overscroll-contain rounded-sm border border-border bg-card p-1"
             >
-              <option value="">Pick a player</option>
-              {options.map((p) => (
-                <option key={p.id} value={p.id}>{`#${p.singles_rank} ${playerName(p)} · ${p.singles_rating}`}</option>
-              ))}
-            </select>
+              {options.map((p) => {
+                const picked = swapTo === p.id;
+                return (
+                  <li key={p.id}>
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={picked}
+                      onClick={() => setSwapTo(p.id)}
+                      className={`flex min-h-[48px] w-full items-center gap-2.5 rounded-sm px-2 py-1.5 text-left transition-colors ${picked ? "bg-foreground text-background" : "hover:bg-secondary"}`}
+                    >
+                      <span className={`w-6 shrink-0 font-mono text-xs tabular-nums ${picked ? "text-background/70" : "text-muted-foreground"}`}>{p.singles_rank}</span>
+                      <Avatar name={playerName(p)} src={p.avatar_url} size={28} player={p} />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-heading text-sm font-semibold">{playerName(p)}</span>
+                        <span className={`block font-mono text-[10px] uppercase tracking-[0.1em] ${picked ? "text-background/70" : "text-muted-foreground"}`}>{`${p.singles_rating} rating`}</span>
+                      </span>
+                      <BountyChip bounty={bountyOf(p)} />
+                      {picked && <Check className="h-4 w-4 shrink-0" aria-hidden="true" />}
+                    </button>
+                  </li>
+                );
+              })}
+              {!options.length && <li className="px-2 py-4 text-center text-sm text-muted-foreground">Nobody else can take a challenge right now.</li>}
+            </ul>
             <Button className="h-11 w-full rounded-sm" disabled={!swapTo || busy} onClick={async () => (await onSwap(swapTo), setOpen(false))}>
-              Swap challenge
+              {swapTo ? `Swap to ${playerName(options.find((p) => p.id === swapTo) || {})}` : "Pick a player to swap to"}
             </Button>
           </div>
         )}
