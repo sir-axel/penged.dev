@@ -43,15 +43,15 @@ export const NAV_ITEMS = [
   },
 ];
 // Desktop header only: the mobile bottom nav keeps exactly the five items above (chat lives in the mobile header).
-// Guilds sits next to the ladder on wide screens (lg+); narrower ones reach it from the Leaderboard page (Players / Guilds).
-const DESKTOP_NAV = [NAV_ITEMS[0], { to: "/guilds", label: "Guilds", short: "Guilds", wide: true }, ...NAV_ITEMS.slice(1), { to: "/chat", label: "Chat", short: "Chat", chat: true }];
+// Guilds live inside the ladder (Leaderboard: Players / Guilds), so the Ladder tab stays lit on guild pages.
+const DESKTOP_NAV = [...NAV_ITEMS, { to: "/chat", label: "Chat", short: "Chat", chat: true }];
 
 export function Layout() {
   let { isAuthenticated } = useAuth();
   const location = useLocation();
   const onProfile = location.pathname === "/profile" || location.pathname.startsWith("/profile/");
   const onChat = location.pathname === "/chat" || location.pathname.startsWith("/chat/");
-  const onGuilds = location.pathname === "/guilds" || location.pathname.startsWith("/guilds/"); // the "Ladder" tab covers guilds on phones
+  const onGuilds = location.pathname === "/guilds" || location.pathname.startsWith("/guilds/"); // the "Ladder" tab covers guilds
   const ACTIVE = "border-foreground bg-foreground text-background";
   const IDLE = "border-border bg-secondary text-foreground hover:bg-accent";
   const queueCount = useQueueCount();
@@ -92,13 +92,13 @@ export function Layout() {
             <Logo className="hidden min-[340px]:inline-flex" />
           </Link>
           <nav aria-label="Main" className="hidden min-w-0 items-center gap-1.5 md:flex lg:gap-2">
-            {DESKTOP_NAV.map(({ to: e, short: t, badge, chat, wide }) => (
+            {DESKTOP_NAV.map(({ to: path, short: t, badge, chat }) => (
               <NavLink
-                to={e}
-                className={({ isActive: e }) =>
-                  `relative ${wide ? "hidden lg:inline-flex" : "inline-flex"} h-10 items-center whitespace-nowrap rounded-sm border px-2.5 font-display text-[0.55rem] uppercase tracking-[0.1em] transition-colors lg:h-9 lg:px-3 lg:text-[0.58rem] lg:tracking-[0.12em] ${e ? "border-foreground bg-foreground text-background" : "border-border bg-secondary text-foreground hover:bg-accent"}`
+                to={path}
+                className={({ isActive }) =>
+                  `relative inline-flex h-10 items-center whitespace-nowrap rounded-sm border px-2.5 font-display text-[0.55rem] uppercase tracking-[0.1em] transition-colors lg:h-9 lg:px-3 lg:text-[0.58rem] lg:tracking-[0.12em] ${isActive || (path === "/leaderboard" && onGuilds) ? "border-foreground bg-foreground text-background" : "border-border bg-secondary text-foreground hover:bg-accent"}`
                 }
-                key={e}
+                key={path}
               >
                 {t}
                 {badge && <CountBadge n={queueCount} className="absolute -right-2 -top-2 rounded-full" />}

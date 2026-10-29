@@ -32,7 +32,7 @@ function GuildRow({ guild: g, mine, max }) {
         data-testid="guild-row"
       >
         <span className="w-7 shrink-0 font-mono text-xs tabular-nums text-muted-foreground">{String(g.rank).padStart(2, "0")}</span>
-        <GuildBadge color={g.color} size={26} />
+        <GuildBadge color={g.color} size={26} src={g.avatar_url || undefined} />
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-1.5">
             <GuildTag tag={g.tag} color={g.color} />

@@ -326,8 +326,8 @@ describe('rating-derived ranks', () => {
   it('a win moves you past everyone you now out-rate, not just the opponent', async () => {
     const a = await mkPlayer('Aa1'); const b = await mkPlayer('Bb2'); const c = await mkPlayer('Cc3');
     await seasoned(a, b, c);
-    await win(c, a); // c 1480, a 1320, b 1400, plus a's #1 bounty (20): c 1500, a 1300
-    expect(await ranks()).toEqual([['Cc3', 1, 1500], ['Bb2', 2, 1400], ['Aa1', 3, 1300]]);
+    await win(c, a); // c 1480, a 1320, b 1400, plus a's #1 bounty for c two places below (12 + 2): c 1494, a 1306
+    expect(await ranks()).toEqual([['Cc3', 1, 1494], ['Bb2', 2, 1400], ['Aa1', 3, 1306]]);
     void b;
   });
 

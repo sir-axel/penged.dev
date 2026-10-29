@@ -56,8 +56,11 @@ describe('explainer quotes the shipped constants', () => {
     expect(R.DOWN_MULT).toBe(0.5); expect(R.DOWN_CLOSE_GAP).toBe(2); has('costs half the usual amount if they are 1 or 2 places above you'); has('costs half the usual amount, with no walkover');
     has('there is no weekly limit on ducking penalties');
     const B = await import('../src/bounty.js');
-    has(`#1 +${B.BOUNTY_RATING[1]} rating and +${B.BOUNTY_XP[1]} xp, #2 +${B.BOUNTY_RATING[2]} and +${B.BOUNTY_XP[2]}, #3 +${B.BOUNTY_RATING[3]} and +${B.BOUNTY_XP[3]}`);
-    has(`plus ${B.BOUNTY_STREAK_RATING} rating and ${B.BOUNTY_STREAK_XP} xp per win in their current streak, up to +${B.BOUNTY_STREAK_RATING_MAX} and +${B.BOUNTY_STREAK_XP_MAX}`); expect(R.DUCK_PENALTY_DAYS).toBeUndefined();
+    has(`#1 ${B.BOUNTY_PODIUM_RATING[1]} rating and ${B.BOUNTY_PODIUM_XP[1]} xp, #2 ${B.BOUNTY_PODIUM_RATING[2]} and ${B.BOUNTY_PODIUM_XP[2]}, #3 ${B.BOUNTY_PODIUM_RATING[3]} and ${B.BOUNTY_PODIUM_XP[3]}`);
+    has(`plus ${B.BOUNTY_GAP_RATING} rating and ${B.BOUNTY_GAP_XP} xp for every extra place between you, up to +${B.BOUNTY_GAP_RATING_MAX} and +${B.BOUNTY_GAP_XP_MAX}`);
+    has(`${B.BOUNTY_STREAK_MIN}+ win streak`); has(`${B.BOUNTY_STREAK_RATING} rating and ${B.BOUNTY_STREAK_XP} xp per win past 2, up to ${B.BOUNTY_STREAK_RATING_MAX} and ${B.BOUNTY_STREAK_XP_MAX}`);
+    has(`up ${B.BOUNTY_RISE_MIN}+ rating in the last ${B.BOUNTY_RISE_DAYS} days`); has(`1 rating per ${B.BOUNTY_RISE_RATING_PER} points risen, up to ${B.BOUNTY_RISE_RATING_MAX}; 1 xp per ${B.BOUNTY_RISE_XP_PER}, up to ${B.BOUNTY_RISE_XP_MAX}`);
+    has(`At most ${B.BOUNTY_RATING_MAX} rating and ${B.BOUNTY_XP_MAX} xp`);
     has(`send ${R.CHALLENGES_SENT_PER_WEEK} challenges and receive ${R.CHALLENGES_RECEIVED_PER_WEEK} in any ${R.CHALLENGE_CAP_DAYS} days`);
     has(`earns ${R.WALKOVER_XP} xp`); has(`counts ×${R.CHALLENGE_STAKES} like a singles one`);
   });

@@ -5,9 +5,11 @@ import { TierBadge } from "@/components/TierBadge";
 import { GuildTag } from "@/components/GuildBadge";
 import { useGuildTags } from "@/hooks/useGuildTags";
 import { BountyChip } from "@/components/BountyChip";
+import { useBounties } from "@/hooks/useBounties";
 
 export function LadderRow({ rank, player, rating: rating, wins = 0, losses = 0, provisional = false, inactive = false, unrated = false, streak = 0, format = "singles" }) {
   const guild = useGuildTags()[player.id];
+  const bountyOf = useBounties(format);
   return (
     <li className="border-b border-border last:border-0">
       <Link
@@ -31,7 +33,7 @@ export function LadderRow({ rank, player, rating: rating, wins = 0, losses = 0, 
             )}
           </span>
           <span className="mt-0.5 block font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
-            {!unrated && !inactive && format !== "overall" && <BountyChip rank={rank} streak={streak} className="mb-1 mr-1.5 align-middle" />}
+            {!unrated && !inactive && format !== "overall" && <BountyChip bounty={bountyOf(player)} className="mb-1 mr-1.5 align-middle" />}
             {guild && <GuildTag tag={guild.tag} color={guild.color} title={guild.name} className="mr-1.5 align-middle" />}
             {"lvl "}
             {player.level || 1}

@@ -12,6 +12,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { SegmentedControl } from "@/components/match/SegmentedControl";
 import { PlayerPicker } from "@/components/match/PlayerPicker";
 import { BountyChip } from "@/components/BountyChip";
+import { useBounties } from "@/hooks/useBounties";
 import { StakesLine } from "@/components/match/StakesLine";
 import {
   AlertDialog,
@@ -327,6 +328,7 @@ export function Challenges() {
     queryFn: async () => (await api.entities.Player.list({ limit: 300 })).items || [],
   });
   const myRank = Number(player?.singles_rank) || 0;
+  const bountyOf = useBounties("singles");
   const atLimit = limits?.at_limit || {};
   const outOfSends = limits && limits.sends_left <= 0;
   const ladder = useMemo(
@@ -527,7 +529,7 @@ export function Challenges() {
                           <span className="min-w-0 flex-1">
                             <span className="flex min-w-0 items-center gap-1.5">
                               <span className="truncate font-heading text-sm font-semibold">{playerName(e)}</span>
-                              <BountyChip rank={e.singles_rank} streak={e.singles_win_streak} />
+                              <BountyChip bounty={bountyOf(e)} />
                             </span>
                             <span className="block font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
                               {e.singles_rating}

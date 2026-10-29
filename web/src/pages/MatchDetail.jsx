@@ -349,7 +349,7 @@ export function MatchDetail() {
                   </div>
                   {(e.bounties || []).map((b) => (
                     <p key={b.from} className="mt-1 font-mono text-[10px] uppercase tracking-[0.08em] text-brand" data-testid="bounty-claimed">
-                      {`Bounty claimed on ${b.name} (#${b.rank}): +${b.rating} rating · +${b.xp} xp`}
+                      {`Bounty claimed on ${b.name}${(b.parts || []).length ? ` (${b.parts.map((k) => ({ podium: "top 3", streak: "streak", riser: "riser" })[k] || k).join(" + ")})` : ""}: +${b.rating} rating · +${b.xp} xp`}
                     </p>
                   ))}
                   {e.bounty_paid > 0 && (

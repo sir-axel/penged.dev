@@ -7,7 +7,7 @@ export const SEPARATE_RATINGS =
 export const RATING_POINTS = [
   SEPARATE_RATINGS,
   "Everyone starts at 1400. No rating ever drops below 100, so there is a long way down to the Dirt.",
-  "Bounties: the top 3 of each ladder carry a bounty (#1 +20 rating and +60 xp, #2 +14 and +40, #3 +8 and +25, plus 3 rating and 10 xp per win in their current streak, up to +15 and +50). Beat them in a ranked match and the bounty rating comes straight out of theirs into yours, on top of the normal result. You can claim the same player's bounty once a week; in doubles the winners split the rating and each get the xp.",
+  "Bounties: what beating someone is worth to you, on top of the normal result, and it comes straight out of their rating. Three kinds stack. The top 3 carry one for anyone ranked below them (#1 12 rating and 50 xp, #2 9 and 35, #3 6 and 25, plus 2 rating and 5 xp for every extra place between you, up to +10 and +30), so chasing the top pays most from the bottom. Anyone on a 3+ win streak carries one for everybody, #1 included (3 rating and 10 xp per win past 2, up to 15 and 50). Anyone up 50+ rating in the last 7 days carries one too (1 rating per 10 points risen, up to 12; 1 xp per 2, up to 40). At most 30 rating and 120 xp. You can claim the same player's bounty once a week; in doubles the winners split the rating and each get the xp. Bounties show next to names when you pick someone to record or challenge.",
   "Only Ranked matches move ratings. Record a match as Unranked to just play for XP: ratings, records, streaks, rematch counts and challenges stay as they are.",
   "Every game counts. Each game in a match is rated on its own, in order — a 3-0 sweep earns three wins, a 2-1 grind earns two wins and a loss.",
   "Confidence: the ladder also tracks how sure it is about your rating (±200 when you are brand new, never tighter than ±50). The less sure it is, the more each result moves you, so new players find their level fast and settled regulars move steadily.",
@@ -52,7 +52,7 @@ export const WORKED_EXAMPLE =
 
 export const XP_POINTS = [
   "+25 xp for playing, +25 for winning",
-  "Bounty: +25 to +110 xp for beating a top-3 player in a ranked match",
+  "Bounty: up to +120 xp for taking down a top-3 player, a hot streak or a fast riser in a ranked match",
   "+5 xp per game you take (five games max)",
   "Upset: +10 xp per full 50 rating points you were behind (max +60)",
   "Streak: +10 xp x (wins in a row - 1) from your second straight win in the format you are playing (max +50)",

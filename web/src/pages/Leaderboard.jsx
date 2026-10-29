@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
+import { Search } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useMyPlayer } from "@/hooks/useMyPlayer";
 import { matchesPlayed, overallRating, playerName, PROVISIONAL_MATCHES, ACTIVE_DAYS, isInactive, rankFor, ratingFor, streakFor } from "@/lib/ladder";
@@ -25,6 +26,7 @@ export const BOARD_TABS = [
 ];
 export function Leaderboard() {
   let [view, setView] = useState("singles"),
+    [search, setSearch] = useState(""),
     { player: me } = useMyPlayer(),
     { data: players = [], isLoading } = useQuery({
       queryKey: ["players"],
@@ -87,6 +89,10 @@ export function Leaderboard() {
           streak: streakFor(e, view),
         }));
     }, [players, view]);
+  // Search keeps everyone's real rank; it only hides the rows that don't match.
+  const q = search.trim().toLowerCase();
+  const shown = (list) =>
+    q ? list.filter((e) => playerName(e.player).toLowerCase().includes(q) || String(e.player.username || "").toLowerCase().includes(q)) : list;
   return (
     <>
       <PageHeader
@@ -123,6 +129,18 @@ export function Leaderboard() {
             Guilds
           </Link>
         </div>
+        <div className="relative mb-3">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Find a player"
+            aria-label="Find a player on the leaderboard"
+            className="h-11 w-full rounded-sm border border-input bg-card pl-9 pr-3 text-base outline-none focus:border-foreground/40 lg:text-sm"
+            data-testid="ladder-search"
+          />
+        </div>
         {isLoading ? (
           <div className="flex justify-center py-16">
             <div className="h-7 w-7 animate-spin rounded-full border-2 border-border border-t-foreground" />
@@ -151,16 +169,19 @@ export function Leaderboard() {
               </span>
             </div>
             <ul>
-              {rows.map((e) => (
+              {shown(rows).map((e) => (
                 <LadderRow {...e} format={view} provisional={e.wins + e.losses < PROVISIONAL_MATCHES} key={e.player.id} />
               ))}
-              {unratedRows.map((e) => (
+              {shown(unratedRows).map((e) => (
                 <LadderRow {...e} format={view} unrated key={e.player.id} />
               ))}
             </ul>
+            {q && shown(rows).length + shown(unratedRows).length === 0 && (
+              <p className="px-3 py-6 text-center text-sm text-muted-foreground">{`Nobody on this ladder matches "${search.trim()}".`}</p>
+            )}
           </div>
         )}
-        {view !== "overall" && inactiveRows.length > 0 && (
+        {view !== "overall" && shown(inactiveRows).length > 0 && (
           <section className="mt-6" aria-label="Inactive players">
             <h2 className="font-display text-[0.58rem] uppercase tracking-[0.22em] text-muted-foreground">
               Inactive
@@ -169,7 +190,7 @@ export function Leaderboard() {
               {`No verified ${view} match in ${ACTIVE_DAYS} days, so off the ranked ladder. Play one and you are back, with your rating intact.`}
             </p>
             <ul className="mt-2 overflow-hidden rounded-sm border border-border bg-card opacity-80">
-              {inactiveRows.map((e) => (
+              {shown(inactiveRows).map((e) => (
                 <LadderRow {...e} format={view} inactive provisional={e.wins + e.losses < PROVISIONAL_MATCHES} key={e.player.id} />
               ))}
             </ul>

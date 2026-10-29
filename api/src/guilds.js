@@ -2,6 +2,7 @@ import { all, first, stmt, guardRow, commit, retrying, uuid, nowIso } from './db
 import { HttpError, bad } from './errors.js';
 import { pub } from './schema.js';
 import { DEFAULT_TZ } from './weekdays.js';
+import { avatarOwner, removeAvatar } from './uploads.js';
 
 // Guilds: teams of up to MAX_MEMBERS players, one guild per player. The tables (migration 0021) are NOT in the
 // entity whitelist: reads and writes go through the functions below. Every membership change bumps guilds.version
@@ -58,6 +59,15 @@ function cleanDescription(v) {
   const d = v.replace(/\s+/g, ' ').trim();
   if (d.length > 140) throw bad('Descriptions are at most 140 characters.');
   return d || null;
+}
+// Guild pictures must be files THIS app issued to the caller (same rule as player avatars).
+const AVATAR_RE = /^\/api\/files\/[0-9a-f-]{36}\.(?:png|jpg|webp|gif)$/;
+async function cleanGuildAvatar(env, user, v, current = null) {
+  if (v == null || v === '') return null;
+  if (!isStr(v) || !AVATAR_RE.test(v)) throw bad('Upload an image to use as the guild picture.');
+  if (v === current) return v;
+  if ((await avatarOwner(env, v.slice('/api/files/'.length))) !== user.id) throw bad('Upload an image to use as the guild picture.');
+  return v;
 }
 const needId = (v, what) => {
   if (!isStr(v) || !v) throw bad(`Missing ${what}.`);
@@ -135,7 +145,7 @@ async function rankedGuilds(env, weekStart) {
 }
 
 const pubGuild = (g) => ({
-  id: g.id, name: g.name, tag: g.tag, color: g.color, description: g.description,
+  id: g.id, name: g.name, tag: g.tag, color: g.color, description: g.description, avatar_url: g.avatar_url || null,
   leader_player_id: g.leader_player_id, member_count: g.member_count, created_date: g.created_date, updated_date: g.updated_date,
 });
 
@@ -244,6 +254,7 @@ export const createGuild = ({ env, user }, body) =>
     const tag = cleanTag(body.tag);
     const color = cleanColor(body.color);
     const description = cleanDescription(body.description);
+    const avatar = await cleanGuildAvatar(env, user, body.avatar_url);
     if (await membershipOf(env, me.id)) throw new HttpError(409, 'You are already in a guild. Leave it first.');
     if (await nameTaken(env, name.toLowerCase())) throw new HttpError(409, 'That guild name is taken.');
     if (await tagTaken(env, tag)) throw new HttpError(409, 'That tag is taken.');
@@ -251,9 +262,9 @@ export const createGuild = ({ env, user }, body) =>
     const now = nowIso();
     await commit(env, [
       stmt(env,
-        `INSERT INTO guilds (id, created_date, updated_date, created_by_id, name, name_lower, tag, color, description, leader_player_id, member_count)
-         VALUES (?,?,?,?,?,?,?,?,?,?,1)`,
-        id, now, now, user.id, name, name.toLowerCase(), tag, color, description, me.id),
+        `INSERT INTO guilds (id, created_date, updated_date, created_by_id, name, name_lower, tag, color, description, avatar_url, leader_player_id, member_count)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,1)`,
+        id, now, now, user.id, name, name.toLowerCase(), tag, color, description, avatar, me.id),
       ...addMemberStmts(env, { id }, me.id, now, 'leader'),
     ]);
     return { guild: pubGuild(await getGuildRow(env, id)) };
@@ -276,6 +287,7 @@ export const updateGuild = ({ env, user }, body) =>
     }
     if (body.color !== undefined) set.color = cleanColor(body.color);
     if (body.description !== undefined) set.description = cleanDescription(body.description);
+    if (body.avatar_url !== undefined) set.avatar_url = await cleanGuildAvatar(env, user, body.avatar_url, g.avatar_url);
     const keys = Object.keys(set);
     if (keys.length) {
       await commit(env, [
@@ -284,6 +296,7 @@ export const updateGuild = ({ env, user }, body) =>
           ...keys.map((k) => set[k]), nowIso(), g.id),
       ]);
     }
+    if ('avatar_url' in set && g.avatar_url && set.avatar_url !== g.avatar_url) await removeAvatar(env, g.avatar_url);
     return { guild: pubGuild(await getGuildRow(env, g.id)) };
   });
 

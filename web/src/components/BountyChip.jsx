@@ -1,5 +1,3 @@
-import { bountyFor } from "@/lib/bounty";
-
 // A tiny pixel crosshair.
 const SIGHT = ["..####..", ".#....#.", "#..##..#", "#.#..#.#", "#.#..#.#", "#..##..#", ".#....#.", "..####.."];
 export function Crosshair({ size = 10, className = "" }) {
@@ -10,18 +8,20 @@ export function Crosshair({ size = 10, className = "" }) {
   );
 }
 
-/** "Bounty +20 elo · +60 xp" on a top-3 player (null for everyone else). */
-export function BountyChip({ rank, streak = 0, className = "", long = false }) {
-  const b = bountyFor(rank, streak);
-  if (!b) return null;
+const KIND = { podium: "top 3", streak: "hot streak", riser: "rising fast" };
+
+/** "+16 · 60xp" for a bounty from useBounties (null renders nothing). `long` spells out why. */
+export function BountyChip({ bounty, className = "", long = false }) {
+  if (!bounty) return null;
+  const why = bounty.parts.map((p) => (p.key === "podium" ? p.label : KIND[p.key])).join(" + ");
   return (
     <span
       className={`inline-flex shrink-0 items-center gap-1 rounded-sm border border-brand/50 bg-brand/10 px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-brand ${className}`}
-      title={`Beat them in a ranked match: +${b.rating} rating (taken from them) and +${b.xp} xp. Once a week per player.`}
+      title={`Bounty (${bounty.parts.map((p) => p.label).join(", ")}): beat them in a ranked match for +${bounty.rating} rating (taken from them) and +${bounty.xp} xp. Once a week.`}
       data-testid="bounty"
     >
       <Crosshair />
-      {long ? `Bounty: beat them for +${b.rating} elo · +${b.xp} xp` : `+${b.rating} · ${b.xp}xp`}
+      {long ? `Bounty · ${why}: +${bounty.rating} elo · +${bounty.xp} xp` : `+${bounty.rating} · ${bounty.xp}xp`}
     </span>
   );
 }

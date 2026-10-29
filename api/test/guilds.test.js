@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterAll } from 'vitest';
-import { env, dispose, reset, call, mkPlayer as mkUser } from './helpers.js';
+import { app, env, dispose, reset, call, mkPlayer as mkUser } from './helpers.js';
 import { weekStartIso, MAX_MEMBERS } from '../src/guilds.js';
 
 beforeEach(reset);
@@ -281,5 +281,25 @@ describe('guilds', () => {
     await call(a, 'updatePlayer', { username: 'Alicia', display_name: 'Ali' });
     const v = await view(null, g);
     expect(v.members[0].player).toMatchObject({ username: 'Alicia', display_name: 'Ali' });
+  });
+
+  it('guild picture: only an image the leader uploaded; the old one is replaced', async () => {
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+    const upload = async (u) => {
+      const fd = new FormData();
+      fd.append('file', new File([png], 'a.png', { type: 'image/png' }));
+      return (await (await app.request('/api/uploads', { method: 'POST', headers: { Cookie: u.cookie }, body: fd })).json()).file_url;
+    };
+    const lead = await mkPlayer('Leader');
+    const b = await mkPlayer('Bobby');
+    const mine = await upload(lead);
+    const g = await mkGuild(lead, { avatar_url: mine });
+    expect(g.avatar_url).toBe(mine);
+    expect((await call(lead, 'updateGuild', { guild_id: g.id, avatar_url: await upload(b) })).status).toBe(400); // someone else's file
+    expect((await call(lead, 'updateGuild', { guild_id: g.id, avatar_url: 'https://evil.test/x.png' })).status).toBe(400);
+    const next = await upload(lead);
+    expect((await call(lead, 'updateGuild', { guild_id: g.id, avatar_url: next })).body.guild.avatar_url).toBe(next);
+    expect((await env.DB.prepare('SELECT 1 AS x FROM avatars WHERE id = ?').bind(mine.split('/').pop()).first())).toBeNull();
+    expect((await call(lead, 'updateGuild', { guild_id: g.id, avatar_url: '' })).body.guild.avatar_url).toBeNull();
   });
 });

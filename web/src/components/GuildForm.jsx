@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Check } from "lucide-react";
+import { Check, ImagePlus } from "lucide-react";
+import { api } from "@/api/client";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { GuildBadge, GuildTag, GUILD_COLORS, guildColor } from "@/components/GuildBadge";
@@ -10,6 +11,8 @@ export function GuildForm({ initial = {}, submitLabel, onSubmit, onCancel }) {
   const [tag, setTag] = useState(initial.tag || "");
   const [color, setColor] = useState(initial.color || "blue");
   const [description, setDescription] = useState(initial.description || "");
+  const [avatar, setAvatar] = useState(initial.avatar_url || "");
+  const [uploading, setUploading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const cleanTag = tag.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4);
@@ -19,7 +22,7 @@ export function GuildForm({ initial = {}, submitLabel, onSubmit, onCancel }) {
     setBusy(true);
     setError("");
     try {
-      await onSubmit({ name: name.trim(), tag: cleanTag, color, description: description.trim() });
+      await onSubmit({ name: name.trim(), tag: cleanTag, color, description: description.trim(), avatar_url: avatar });
     } catch (err) {
       setError(err.response?.data?.error || err.message || "Something went wrong.");
     } finally {
@@ -29,14 +32,44 @@ export function GuildForm({ initial = {}, submitLabel, onSubmit, onCancel }) {
 
   return (
     <form onSubmit={submit} className="space-y-5">
-      <div className="flex items-center gap-3 rounded-sm border border-border bg-card p-3" aria-hidden="true">
-        <GuildBadge color={color} size={36} />
+      <div className="flex items-center gap-3 rounded-sm border border-border bg-card p-3">
+        <GuildBadge color={color} size={44} src={avatar || undefined} />
         <div className="min-w-0">
           <p className="flex flex-wrap items-center gap-1.5 font-heading text-base font-semibold">
             <GuildTag tag={cleanTag || "TAG"} color={color} />
             <span className="min-w-0 break-words">{name.trim() || "Your guild"}</span>
           </p>
           <p className="mt-0.5 font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">Preview</p>
+        </div>
+        <div className="ml-auto flex shrink-0 flex-col items-end gap-1">
+          <label className="inline-flex min-h-10 cursor-pointer items-center gap-1.5 rounded-sm border border-border bg-background px-3 text-xs font-medium hover:border-foreground/40">
+            <ImagePlus className="h-4 w-4" aria-hidden="true" />
+            {uploading ? "Uploading…" : avatar ? "Change picture" : "Add picture"}
+            <input
+              type="file"
+              accept="image/*"
+              className="sr-only"
+              disabled={uploading}
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                setUploading(true);
+                setError("");
+                try {
+                  setAvatar((await api.uploadPublicFile(file)).file_url);
+                } catch (err) {
+                  setError(err.message || "Could not upload that image.");
+                } finally {
+                  setUploading(false);
+                }
+              }}
+            />
+          </label>
+          {avatar && (
+            <button type="button" onClick={() => setAvatar("")} className="min-h-8 text-xs text-muted-foreground underline underline-offset-2">
+              Use the shield
+            </button>
+          )}
         </div>
       </div>
 

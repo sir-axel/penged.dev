@@ -1,7 +1,8 @@
 import { useState, useMemo } from "react";
 import { ChevronsUpDown, Search } from "lucide-react";
-import { playerName, rankFor, ratingFor, streakFor } from "@/lib/ladder";
+import { playerName, rankFor, ratingFor } from "@/lib/ladder";
 import { BountyChip } from "@/components/BountyChip";
+import { useBounties } from "@/hooks/useBounties";
 import { Avatar } from "@/components/Avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
@@ -14,7 +15,8 @@ export function PlayerPicker({
   format = "singles",
   bounty = false, // an opponent picker: show each top-3 player's bounty
 }) {
-  const chip = (e) => (bounty ? <BountyChip rank={rankFor(e, format)} streak={streakFor(e, format)} /> : null);
+  const bountyOf = useBounties(format);
+  const chip = (e) => (bounty && bountyOf(e) ? <BountyChip bounty={bountyOf(e)} /> : null);
   let [open, setOpen] = useState(false),
     [query, setQuery] = useState(""),
     selected = players.find((e) => e.id === value),

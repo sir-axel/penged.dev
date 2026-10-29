@@ -4,8 +4,20 @@ import { Link } from "react-router-dom";
 export const GUILD_COLORS = ["red", "orange", "yellow", "green", "teal", "blue", "purple", "pink"];
 export const guildColor = (c) => `var(--guild-${GUILD_COLORS.includes(c) ? c : "blue"})`;
 
-/** Pixel shield in the guild's color. */
-export function GuildBadge({ color, size = 28, className = "" }) {
+/** The guild's picture when it has one (`src`), otherwise a pixel shield in the guild's color. */
+export function GuildBadge({ color, size = 28, className = "", src }) {
+  if (src)
+    return (
+      <img
+        src={src}
+        alt=""
+        loading="lazy"
+        width={size}
+        height={size}
+        className={`shrink-0 rounded-sm border-2 object-cover ${className}`}
+        style={{ width: size, height: size, borderColor: guildColor(color) }}
+      />
+    );
   return (
     <svg
       width={size}

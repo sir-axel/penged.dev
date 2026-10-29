@@ -184,7 +184,7 @@ export function GuildPage() {
       <div className="border-b border-border">
         <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
           <div className="flex items-start gap-4">
-            <GuildBadge color={g.color} size={56} />
+            <GuildBadge color={g.color} size={56} src={g.avatar_url || undefined} />
             <div className="min-w-0 flex-1">
               <p className="font-display text-[0.58rem] uppercase tracking-[0.22em] text-brand">
                 {`Guild · #${g.rank} this week`}

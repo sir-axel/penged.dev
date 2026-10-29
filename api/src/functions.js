@@ -17,7 +17,7 @@ import {
   RANK_SQL, DOUBLES_RANK_SQL, rankPlayers, ACTIVE_DAYS, meetingWeight, NOVELTY_DAYS, stakes, currentRd, RATING_FLOOR, challengePenalty, WALKOVER_XP, COOLDOWN_DAYS, WAIVER_DAYS, FATIGUE_DAYS,
   CHALLENGE_CAP_DAYS, CHALLENGES_RECEIVED_PER_WEEK, CHALLENGES_SENT_PER_WEEK,
 } from './rating.js';
-import { bountyFor, BOUNTY_CLAIM_DAYS } from './bounty.js';
+import { bountyFor, BOUNTY_CLAIM_DAYS, BOUNTY_RISE_DAYS } from './bounty.js';
 import { weekdayDeadline, cleanTimeZone, DEFAULT_TZ } from './weekdays.js';
 import { withCtx } from './email.js';
 import { notify } from './notify.js';
@@ -496,31 +496,67 @@ function unrankedPlan(env, m, now, players, parts, sideOf) {
   return { stmts, changes };
 }
 
-/**
- * Bounty claims a verified ranked match pays: every losing player in the top BOUNTY_RANKS of this format's ladder carries
- * bountyFor(rank, current win streak). Each winner collects the full XP and an equal share of the rating, unless they
- * already claimed that player's bounty in the last BOUNTY_CLAIM_DAYS. Returns [{ from, from_name, to, rank, rating, xp }].
- */
-async function bountyClaims(env, m, players, sideOf) {
-  const rk = `${m.format}_rank`, sc = `${m.format}_win_streak`;
-  const winners = players.filter((p) => sideOf(p.id) === m.winner_side);
-  const bountied = players.filter((p) => sideOf(p.id) !== m.winner_side).map((p) => ({ p, b: bountyFor(p[rk], p[sc]) })).filter((x) => x.b);
-  if (!bountied.length) return [];
+/** Rating each player gained (net) in `fmt` over the last BOUNTY_RISE_DAYS of verified ranked matches. */
+async function risesOf(env, fmt, ids, excludeId = '') {
+  const out = Object.fromEntries(ids.map((id) => [id, 0]));
+  if (!ids.length) return out;
   const rows = await all(env,
     `SELECT rating_changes FROM matches WHERE status = 'verified' AND ranked = 1 AND format = ? AND id <> ? AND verified_at > ?
-       AND EXISTS (SELECT 1 FROM json_each(all_player_ids) WHERE value IN (${placeholders(bountied.length)}))`,
-    m.format, m.id, daysAgoIso(BOUNTY_CLAIM_DAYS), ...bountied.map((x) => x.p.id));
+       AND EXISTS (SELECT 1 FROM json_each(all_player_ids) WHERE value IN (${placeholders(ids.length)}))`,
+    fmt, excludeId, daysAgoIso(BOUNTY_RISE_DAYS), ...ids);
+  for (const r of rows) for (const c of JSON.parse(r.rating_changes || '[]')) if (c.player_id in out) out[c.player_id] += c.delta || 0;
+  return out;
+}
+
+/** "hunter:target" pairs whose bounty was claimed in the last BOUNTY_CLAIM_DAYS (format `fmt`), for these targets. */
+async function claimedPairs(env, fmt, targetIds, excludeId = '') {
   const claimed = new Set();
+  if (!targetIds.length) return claimed;
+  const rows = await all(env,
+    `SELECT rating_changes FROM matches WHERE status = 'verified' AND ranked = 1 AND format = ? AND id <> ? AND verified_at > ?
+       AND EXISTS (SELECT 1 FROM json_each(all_player_ids) WHERE value IN (${placeholders(targetIds.length)}))`,
+    fmt, excludeId, daysAgoIso(BOUNTY_CLAIM_DAYS), ...targetIds);
   for (const r of rows) for (const c of JSON.parse(r.rating_changes || '[]')) for (const b of c.bounties || []) claimed.add(`${c.player_id}:${b.from}`);
+  return claimed;
+}
+
+const bountyState = (p, fmt, rises) => ({ id: p.id, rank: p[`${fmt}_rank`], streak: p[`${fmt}_win_streak`], rise: rises[p.id] || 0 });
+
+/**
+ * Bounty claims a verified ranked match pays: each winner collects bountyFor(winner, loser) for every loser (podium /
+ * streak / riser, see bounty.js), full XP and the rating split across the winning side, unless that winner already
+ * claimed that loser in the last BOUNTY_CLAIM_DAYS. Returns [{ from, from_name, to, rating, xp, parts }].
+ */
+async function bountyClaims(env, m, players, sideOf) {
+  const fmt = m.format;
+  const winners = players.filter((p) => sideOf(p.id) === m.winner_side);
+  const losers = players.filter((p) => sideOf(p.id) !== m.winner_side);
+  const rises = await risesOf(env, fmt, losers.map((p) => p.id), m.id);
+  const claimed = await claimedPairs(env, fmt, losers.map((p) => p.id), m.id);
   const out = [];
-  for (const { p, b } of bountied) {
+  for (const l of losers) {
     for (const w of winners) {
-      if (claimed.has(`${w.id}:${p.id}`)) continue;
-      out.push({ from: p.id, from_name: nameOf(p), to: w.id, rank: b.rank, rating: Math.round(b.rating / winners.length), xp: b.xp });
+      if (claimed.has(`${w.id}:${l.id}`)) continue;
+      const b = bountyFor(bountyState(w, fmt, {}), bountyState(l, fmt, rises));
+      if (!b) continue;
+      out.push({ from: l.id, from_name: nameOf(l), to: w.id, rating: Math.round(b.rating / winners.length), xp: b.xp, parts: b.parts.map((x) => x.key) });
     }
   }
   return out;
 }
+
+/** Everything a page needs to show viewer-relative bounties: each player's 7-day rise per format and who you claimed. */
+fns.bountyBoard = async ({ env, user }) => {
+  const players = await all(env, 'SELECT id FROM players');
+  const ids = players.map((p) => p.id);
+  const me = user ? await getPlayerByUser(env, user.id) : null;
+  const out = { rise: {}, claimed: {} };
+  for (const fmt of ['singles', 'doubles']) {
+    out.rise[fmt] = await risesOf(env, fmt, ids);
+    out.claimed[fmt] = me ? [...await claimedPairs(env, fmt, ids)].filter((k) => k.startsWith(`${me.id}:`)).map((k) => k.split(':')[1]) : [];
+  }
+  return out;
+};
 
 /** Builds the guarded statements that verify a match (ratings, xp, records, ladder). */
 async function verifyPlan(env, m, now) {
@@ -587,7 +623,7 @@ async function verifyPlan(env, m, now) {
         challenge: g.challenge, novelty: g.novelty,
       })),
       xp_gained: xpGain, xp_parts: xpRes.parts, win_streak: streak,
-      ...(got.length ? { bounties: got.map((c) => ({ from: c.from, name: c.from_name, rank: c.rank, rating: c.rating, xp: c.xp })) } : null),
+      ...(got.length ? { bounties: got.map((c) => ({ from: c.from, name: c.from_name, parts: c.parts, rating: c.rating, xp: c.xp })) } : null),
       ...(paid.length ? { bounty_paid: paid.reduce((t, c) => t + c.rating, 0) } : null),
       matches_played: p[wc] + p[lc] + 1, // in this format, including this match (placement badge)
       // Tier crossing (derived from rating); only once placed (5+ matches in this format before this one).
@@ -1049,7 +1085,7 @@ for (const n of [
 ]) fns[n] = guilds[n];
 
 // The only functions callable without a session (they get user = null).
-const PUBLIC_FNS = new Set(['submitFeedback', 'listTopics', 'getTopic', 'roomPosts', 'roomAround', 'listDisputes', 'disputeCounts', 'playerSearch', 'listGuilds', 'getGuild', 'guildTags']);
+const PUBLIC_FNS = new Set(['submitFeedback', 'listTopics', 'getTopic', 'roomPosts', 'roomAround', 'listDisputes', 'disputeCounts', 'playerSearch', 'listGuilds', 'getGuild', 'guildTags', 'bountyBoard']);
 
 export const functions = new Hono();
 functions.post('/:name', async (c) => {
