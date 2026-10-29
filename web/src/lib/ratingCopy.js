@@ -74,6 +74,7 @@ export const CHALLENGE_POINTS = [
   "Every duck counts: there is no weekly limit on ducking penalties. The weekly challenge limits (3 sent, 2 received) are what stop anyone farming you.",
   "Played that challenger in the last 7 days? Declining is free. Played 3 or more matches this week? A decline costs half.",
   "After a decline or no answer, the same challenger cannot challenge you again for 7 days.",
+  "Changed your mind about a challenge you sent? Swap it to someone else: free, and it does not use up one of your weekly sends. Revoke it for good and it costs you what ducking that player would (and still counts as a send). Doubles challenges are always free to take back; weekly matches use Back out instead.",
   "Penalised unfairly? Ask for a review; an admin can reverse it and give back your rating.",
   "An accepted challenge that never gets played expires with no penalty.",
   "Doubles challenges: pick a partner and two opponents, anyone with a profile. Your partner and both opponents all have to accept; one no closes it. Nobody loses rating for declining or ignoring a doubles challenge. Played as challenged, it counts ×1.25 like a singles one.",

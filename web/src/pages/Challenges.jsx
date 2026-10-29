@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, LoaderCircle } from "lucide-react";
+import { Check, LoaderCircle, Undo2 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useMyPlayer } from "@/hooks/useMyPlayer";
 import { PageHeader } from "@/components/PageHeader";
@@ -74,6 +74,11 @@ export function outcomeText(t, asChallenger) {
     if (t.status === "expired") return "Ran out of time · no penalty for anyone";
     return null;
   }
+  if (t.revoke_kind === "swapped") return asChallenger ? "You swapped this challenge to someone else · free" : `${t.challenger_name} swapped to someone else · free`;
+  if (t.revoke_kind === "revoked")
+    return asChallenger
+      ? `You revoked it${t.revoke_penalty > 0 ? ` · ${minus(t.revoke_penalty)} rating` : " · free"}`
+      : `${t.challenger_name} revoked it${t.revoke_penalty > 0 ? ` · ${minus(t.revoke_penalty)} rating for them` : ""}`;
   if (!t.penalty_reason) return null;
   if (t.reversed) return "Penalty reversed by an admin";
   const rankMoved = t.penalty_rank_after != null && t.penalty_rank_after !== t.penalty_rank_before;
@@ -107,7 +112,7 @@ export function outcomeText(t, asChallenger) {
 // Wording for a row you are not part of (the list is public): third person, no "you".
 export function publicOutcomeText(t) {
   const pen = t.penalty_rating || 0;
-  if (isDoubles(t)) return outcomeText(t, false);
+  if (isDoubles(t) || t.revoke_kind) return outcomeText(t, false);
   if (!t.penalty_reason) return null;
   if (t.reversed) return "Penalty reversed by an admin";
   if (t.penalty_reason === "waived_recent_match") return "Declined · no penalty — they played this week";
@@ -193,6 +198,78 @@ function FreeNote({ challenge }) {
       {why}
       {data.expire?.penalty > 0 && ` Ignoring it still costs ${data.expire.penalty}.`}
     </p>
+  );
+}
+
+/**
+ * Take back a challenge you sent: swap it to someone else (free, open challenges only) or revoke it for good (costs what
+ * ducking them would). Weekly matches use Back out on the match card instead.
+ */
+function RevokeButton({ challenge, targets, atLimit, busy, onSwap, onRevoke }) {
+  const [open, setOpen] = useState(false);
+  const [swapTo, setSwapTo] = useState("");
+  const { data } = useQuery({
+    queryKey: ["revoke-quote", challenge.id],
+    enabled: open,
+    queryFn: async () => (await api.functions.invoke("revokeQuote", { challenge_id: challenge.id })).data,
+  });
+  const cost = data?.revoke?.penalty ?? null;
+  const options = targets.filter((p) => p.id !== challenge.defender_player_id && !atLimit[p.id]);
+  return (
+    <AlertDialog open={open} onOpenChange={setOpen}>
+      <AlertDialogTrigger asChild>
+        <button
+          type="button"
+          disabled={busy}
+          className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-sm border border-border bg-card px-3 text-sm font-medium transition-colors hover:border-foreground/40 disabled:opacity-50"
+          data-testid="revoke"
+        >
+          <Undo2 className="h-4 w-4" aria-hidden="true" />
+          Revoke
+        </button>
+      </AlertDialogTrigger>
+      <AlertDialogContent className="w-[calc(100%-2rem)] rounded-sm">
+        <AlertDialogHeader>
+          <AlertDialogTitle>Take back your challenge?</AlertDialogTitle>
+          <AlertDialogDescription>
+            {`Send it to someone else instead and it's free. Revoke it for good and it costs you what ducking ${challenge.defender_name} would.`}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        {data?.can_swap !== false && (
+          <div className="space-y-2 rounded-sm border border-success/40 bg-success/5 p-3">
+            <label htmlFor={`swap-${challenge.id}`} className="block text-sm font-medium">
+              Swap to someone else <span className="font-mono text-xs text-success">· free</span>
+            </label>
+            <select
+              id={`swap-${challenge.id}`}
+              value={swapTo}
+              onChange={(e) => setSwapTo(e.target.value)}
+              className="h-11 w-full rounded-sm border border-input bg-card px-2 text-base lg:text-sm"
+            >
+              <option value="">Pick a player</option>
+              {options.map((p) => (
+                <option key={p.id} value={p.id}>{`#${p.singles_rank} ${playerName(p)} · ${p.singles_rating}`}</option>
+              ))}
+            </select>
+            <Button className="h-11 w-full rounded-sm" disabled={!swapTo || busy} onClick={async () => (await onSwap(swapTo), setOpen(false))}>
+              Swap challenge
+            </Button>
+          </div>
+        )}
+        <AlertDialogFooter>
+          <AlertDialogCancel className="min-h-10 rounded-sm">Keep it</AlertDialogCancel>
+          <Button
+            variant="outline"
+            className="min-h-10 rounded-sm border-destructive/50 text-destructive hover:bg-destructive/10"
+            disabled={busy || cost == null}
+            onClick={async () => (await onRevoke(), setOpen(false))}
+            data-testid="revoke-confirm"
+          >
+            {cost == null ? "Working out the cost…" : cost > 0 ? `Revoke for good · ${minus(cost)}` : "Revoke for good · free"}
+          </Button>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 
@@ -456,6 +533,16 @@ export function Challenges() {
           </div>
         )}
         {e.status === "accepted" && <RecordButton challenge={e} userId={uid} />}
+        {mine && !e.matchup_id && (e.status === "open" || e.status === "accepted") && (
+          <RevokeButton
+            challenge={e}
+            targets={ladder}
+            atLimit={atLimit}
+            busy={!!busy}
+            onSwap={(to) => act("revokeChallenge", { challenge_id: e.id, swap_to_player_id: to }, `revoke-${e.id}`)}
+            onRevoke={() => act("revokeChallenge", { challenge_id: e.id }, `revoke-${e.id}`)}
+          />
+        )}
       </li>
     );
   };

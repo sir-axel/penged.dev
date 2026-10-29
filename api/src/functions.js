@@ -211,8 +211,9 @@ const fmtUtc = (iso) => {
 
 // ---------- weekly challenge caps (rolling CHALLENGE_CAP_DAYS, both formats, any status, reversed ones excluded) ----------
 const capSince = () => daysAgoIso(CHALLENGE_CAP_DAYS);
-const SENT_N = `(SELECT count(*) FROM challenges WHERE created_date > ? AND reversed = 0 AND matchup_id IS NULL AND challenger_player_id = ?)`;
-const RECEIVED_N = `(SELECT count(*) FROM challenges WHERE created_date > ? AND reversed = 0 AND matchup_id IS NULL AND (defender_player_id = ? OR defender_partner_player_id = ?))`;
+// A swapped challenge counts for nobody; a revoked one still counts as the challenger's send but not as anyone's receive.
+const SENT_N = `(SELECT count(*) FROM challenges WHERE created_date > ? AND reversed = 0 AND matchup_id IS NULL AND revoke_kind IS NOT 'swapped' AND challenger_player_id = ?)`;
+const RECEIVED_N = `(SELECT count(*) FROM challenges WHERE created_date > ? AND reversed = 0 AND matchup_id IS NULL AND revoke_kind IS NULL AND (defender_player_id = ? OR defender_partner_player_id = ?))`;
 /** When a capped player gets a slot back: `dates` ascending; null while under `cap`. */
 const freesAt = (dates, cap) =>
   (dates.length >= cap ? new Date(Date.parse(dates[dates.length - cap]) + CHALLENGE_CAP_DAYS * 86400000).toISOString() : null);
@@ -220,14 +221,14 @@ const times = (n) => (n === 1 ? 'once' : n === 2 ? 'twice' : `${n} times`);
 /** Refuses when the challenger is out of sends or a defender is out of receives; returns the guards that keep it so at commit. */
 async function capGuards(env, me, defenders) {
   const since = capSince();
-  const sent = (await all(env, `SELECT created_date FROM challenges WHERE created_date > ? AND reversed = 0 AND matchup_id IS NULL AND challenger_player_id = ? ORDER BY created_date`, since, me.id))
+  const sent = (await all(env, `SELECT created_date FROM challenges WHERE created_date > ? AND reversed = 0 AND matchup_id IS NULL AND revoke_kind IS NOT 'swapped' AND challenger_player_id = ? ORDER BY created_date`, since, me.id))
     .map((r) => r.created_date);
   const again = freesAt(sent, CHALLENGES_SENT_PER_WEEK);
   if (again) throw new HttpError(409, `You have sent ${CHALLENGES_SENT_PER_WEEK} challenges this week. You can send another after ${fmtUtc(again)}.`);
   const guards = [guard(env, `${SENT_N} < ?`, since, me.id, CHALLENGES_SENT_PER_WEEK)];
   for (const d of defenders) {
     const got = (await all(env,
-      `SELECT created_date FROM challenges WHERE created_date > ? AND reversed = 0 AND matchup_id IS NULL AND (defender_player_id = ? OR defender_partner_player_id = ?) ORDER BY created_date`,
+      `SELECT created_date FROM challenges WHERE created_date > ? AND reversed = 0 AND matchup_id IS NULL AND revoke_kind IS NULL AND (defender_player_id = ? OR defender_partner_player_id = ?) ORDER BY created_date`,
       since, d.id, d.id)).map((r) => r.created_date);
     const until = freesAt(got, CHALLENGES_RECEIVED_PER_WEEK);
     if (until) {
@@ -877,6 +878,94 @@ fns.createChallenge = ({ env, user }, body) =>
     return { challenge: pub('Challenge', await getChallenge(env, id)) };
   });
 
+/**
+ * What taking back your own regular singles challenge `c` would cost you: the same as ducking that player (you as the
+ * defender, them as the challenger; half when they are rated above you), waived if you played them this week.
+ */
+async function revokeCost(env, c, me, def) {
+  const ranks = rankPlayers(await rankRows(env), activeCut());
+  const gap = ranks[me.id] != null && ranks[def.id] != null ? Math.abs(ranks[me.id] - ranks[def.id]) : 1;
+  const facts = await penaltyFacts(env, c);
+  return penaltyOf('declined', me, def, gap, { ...facts, direction: def.singles_rating > me.singles_rating ? 'down' : 'up' });
+}
+
+async function ownLiveChallenge(env, user, id) {
+  if (!isStr(id)) throw bad('Missing challenge.');
+  const c = await getChallenge(env, id);
+  if (!c) throw new HttpError(404, 'Challenge not found.');
+  if (c.challenger_user_id !== user.id) throw new HttpError(403, 'Only the player who sent a challenge can take it back.');
+  if (c.matchup_id) throw bad("This is your weekly match: use Back out on the match card.");
+  if (c.status !== 'open' && c.status !== 'accepted') throw bad('This challenge is no longer live.');
+  return c;
+}
+
+/** Cost preview for the Revoke dialog: { revoke: { penalty, reason }, can_swap }. */
+fns.revokeQuote = async ({ env, user }, body) => {
+  const c = await ownLiveChallenge(env, user, body.challenge_id);
+  if (c.format === 'doubles') return { revoke: { penalty: 0, reason: 'doubles' }, can_swap: false };
+  const [me, def] = [(await getPlayers(env, [c.challenger_player_id]))[0], (await getPlayers(env, [c.defender_player_id]))[0]];
+  if (!me || !def) return { revoke: { penalty: 0, reason: 'gone' }, can_swap: c.status === 'open' };
+  const r = await revokeCost(env, c, me, def);
+  return { revoke: { penalty: r.penalty, reason: r.reason }, can_swap: c.status === 'open' };
+};
+
+/**
+ * Take back a challenge you sent. { challenge_id, swap_to_player_id?, message? }.
+ * swap_to_player_id: send it to that player instead (open challenges only): free, and the old one counts toward nobody's
+ * weekly caps. Without it: revoked for good, costing you what ducking them would (doubles: always free).
+ */
+fns.revokeChallenge = ({ env, user }, body) =>
+  retrying(async () => {
+    const c = await ownLiveChallenge(env, user, body.challenge_id);
+    const now = nowIso();
+    const close = (kind, penalty, swappedTo = null) =>
+      stmt(env, `UPDATE challenges SET status = 'cancelled', revoke_kind = ?, revoke_penalty = ?, revoked_at = ?, swapped_to_id = ?,
+        updated_date = ?, version = version + 1 WHERE id = ?`, kind, penalty, now, swappedTo, now, c.id);
+    if (c.format === 'doubles') {
+      await commit(env, [guardRow(env, 'challenges', c.id, c.version, c.status), close('revoked', 0)]);
+      return { challenge: pub('Challenge', await getChallenge(env, c.id)) };
+    }
+    const lv = await ladderVersion(env);
+    const me = await requirePlayer(env, user);
+    if (body.swap_to_player_id != null) {
+      if (c.status !== 'open') throw bad('They already accepted. You can only swap a challenge nobody has answered yet.');
+      if (!isStr(body.swap_to_player_id)) throw bad('Pick a player to challenge.');
+      if (body.swap_to_player_id === me.id) throw bad('You cannot challenge yourself.');
+      if (body.swap_to_player_id === c.defender_player_id) throw bad('Pick someone else to swap to.');
+      const def = (await getPlayers(env, [body.swap_to_player_id]))[0];
+      if (!def) throw new HttpError(404, 'That player does not exist.');
+      if (me.singles_rank == null || def.singles_rank == null) throw bad('Both players need a ladder position.');
+      const cool = await first(env,
+        `SELECT penalized_at FROM challenges WHERE challenger_player_id = ? AND defender_player_id = ? AND penalized_at > ? AND reversed = 0
+           ORDER BY penalized_at DESC LIMIT 1`, me.id, def.id, daysAgoIso(COOLDOWN_DAYS));
+      if (cool) throw new HttpError(409, `You challenged ${nameOf(def)} recently. You can challenge them again after ${fmtUtc(new Date(Date.parse(cool.penalized_at) + COOLDOWN_DAYS * 86400000).toISOString())}.`);
+      const since = capSince();
+      const got = (await first(env, `SELECT ${RECEIVED_N} AS n`, since, def.id, def.id)).n;
+      if (got >= CHALLENGES_RECEIVED_PER_WEEK) throw new HttpError(409, `${nameOf(def)} has already been challenged ${times(CHALLENGES_RECEIVED_PER_WEEK)} this week.`);
+      const id = uuid();
+      await commit(env, [
+        guardLadder(env, lv),
+        guardRow(env, 'challenges', c.id, c.version, 'open'),
+        guard(env, `${RECEIVED_N} < ?`, since, def.id, def.id, CHALLENGES_RECEIVED_PER_WEEK),
+        close('swapped', 0, id),
+        insertSinglesChallenge(env, { id, me, def, message: body.message != null ? cleanMessage(body.message) : c.message || '', now }),
+        touch(env, me.id, now),
+      ]);
+      await notify(env, 'challenge_received', { challenge_id: id, actor_user_id: user.id });
+      return { challenge: pub('Challenge', await getChallenge(env, id)), swapped_from: c.id };
+    }
+    const def = (await getPlayers(env, [c.defender_player_id]))[0];
+    const cost = def ? await revokeCost(env, c, me, def) : { penalty: 0 };
+    const p = Math.max(0, Math.min(cost.penalty, me.singles_rating - RATING_FLOOR));
+    const stmts = [guardLadder(env, lv), guardRow(env, 'challenges', c.id, c.version, c.status), guardRow(env, 'players', me.id, me.version), close('revoked', p)];
+    if (p > 0) {
+      stmts.push(stmt(env, 'UPDATE players SET singles_rating = singles_rating - ?, updated_date = ?, version = version + 1 WHERE id = ?', p, now, me.id));
+      stmts.push(...rankStmts(env));
+    }
+    await commit(env, stmts);
+    return { challenge: pub('Challenge', await getChallenge(env, c.id)), penalty: p };
+  });
+
 /** Doubles: you + partner vs two opponents, any four players. Partner and both opponents must all accept; nobody is penalised. */
 async function createDoublesChallenge(env, user, body) {
   const ids = [body.partner_player_id, body.defender_player_id, body.defender_partner_player_id];
@@ -1029,11 +1118,11 @@ async function duckCosts(env, c, def, chal) {
 fns.challengeLimits = async ({ env, user }) => {
   const me = await getPlayerByUser(env, user.id);
   const rows = await all(env,
-    `SELECT challenger_player_id, defender_player_id, defender_partner_player_id, created_date FROM challenges
+    `SELECT challenger_player_id, defender_player_id, defender_partner_player_id, created_date, revoke_kind FROM challenges
        WHERE created_date > ? AND reversed = 0 AND matchup_id IS NULL ORDER BY created_date`, capSince());
-  const sent = me ? rows.filter((r) => r.challenger_player_id === me.id).map((r) => r.created_date) : [];
+  const sent = me ? rows.filter((r) => r.challenger_player_id === me.id && r.revoke_kind !== 'swapped').map((r) => r.created_date) : [];
   const got = {};
-  for (const r of rows) for (const d of [r.defender_player_id, r.defender_partner_player_id]) if (d) (got[d] ||= []).push(r.created_date);
+  for (const r of rows) if (!r.revoke_kind) for (const d of [r.defender_player_id, r.defender_partner_player_id]) if (d) (got[d] ||= []).push(r.created_date);
   const atLimit = {};
   for (const [id, ds] of Object.entries(got)) {
     const until = freesAt(ds, CHALLENGES_RECEIVED_PER_WEEK);
