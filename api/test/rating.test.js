@@ -110,12 +110,6 @@ describe('challenge penalties', () => {
     expect(pen('expired', { direction: 'down' })).toMatchObject({ penalty: 12, reason: 'expired_down', dropsRank: true, walkover: false });
     expect(pen('expired', { direction: 'down', rankGap: 6 }).penalty).toBe(3);
   });
-  it('weekly cap: a second penalisable duck is free; already-free ones keep their reason', () => {
-    expect(pen('expired', { weeklyCapped: true })).toMatchObject({ penalty: 0, reason: 'weekly_penalty_cap', walkover: false, dropsRank: false });
-    expect(pen('declined', { weeklyCapped: true, recentPairMatch: true }).reason).toBe('waived_recent_match');
-    expect(pen('declined', { weeklyCapped: true, direction: 'down', rankGap: 3 }).reason).toBe('declined_down');
-    expect(pen('declined', { weeklyCapped: true, direction: 'down' }).reason).toBe('weekly_penalty_cap');
-  });
   it('repeat meetings reduce it', () => {
     expect(pen('expired', { meetings: 2 }).penalty).toBeLessThan(pen('expired').penalty);
     expect(dodgeBase({ ...base, meetings: 1 })).toBeCloseTo(24 * repeatFactor(1), 6);

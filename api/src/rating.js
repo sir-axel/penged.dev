@@ -465,8 +465,6 @@ export const CHALLENGES_SENT_PER_WEEK = 3;
 // ignoring it costs DOWN_MULT x the upward expiry penalty at any gap. Never a walkover for the challenger.
 export const DOWN_MULT = 0.5;
 export const DOWN_CLOSE_GAP = 2;
-// At most one ducking penalty per defender per rolling DUCK_PENALTY_DAYS: a second penalisable duck closes free ('weekly_penalty_cap').
-export const DUCK_PENALTY_DAYS = 7;
 
 // The defender's K for a dodge: the Glicko step a typical match (DODGE_GAMES_PER_MATCH games) would imply at their current
 // RD, kept within DODGE_K_MIN..DODGE_K_MAX (the old Elo 24..48): settled players (RD 50) 24, settling ones (RD 74+) 48.
@@ -491,16 +489,12 @@ export function dodgeBase({ defRating, defRd, chalRating, meetings = 0, rankGap 
 
 /**
  * Penalty for a ducked challenge.
- * kind: 'expired' | 'declined'; direction: 'up' (challenger rated below) | 'down'; weeklyCapped: the defender already paid a
- * ducking penalty in the last DUCK_PENALTY_DAYS. Returns { penalty (rating points actually lost), reason, dropsRank, walkover }.
+ * kind: 'expired' | 'declined'; direction: 'up' (challenger rated below) | 'down'. Every duck the rules allow costs; there is no weekly cap.
+ * Returns { penalty (rating points actually lost), reason, dropsRank, walkover }.
  */
-export function challengePenalty(o) {
-  const r = duckPenalty(o);
-  return o.weeklyCapped && r.penalty > 0 ? { penalty: 0, reason: 'weekly_penalty_cap', dropsRank: false, walkover: false } : r;
-}
-function duckPenalty({ kind, direction = 'up', ...o }) {
+export function challengePenalty({ kind, direction = 'up', ...o }) {
   if (direction === 'down') {
-    const up = duckPenalty({ ...o, kind });
+    const up = challengePenalty({ ...o, kind });
     if (kind === 'expired') return { penalty: Math.round(DOWN_MULT * up.penalty), reason: 'expired_down', dropsRank: true, walkover: false };
     if (up.penalty === 0) return up; // waived (played this week)
     if (Math.round(o.rankGap || 1) > DOWN_CLOSE_GAP) return { penalty: 0, reason: 'declined_down', dropsRank: false, walkover: false };

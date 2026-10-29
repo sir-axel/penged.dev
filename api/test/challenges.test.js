@@ -104,7 +104,7 @@ describe('anyone can challenge anyone (singles)', () => {
     expect(await ent('Player', a.player.id)).toMatchObject({ singles_rating: 1401, xp: 0 });
   });
 
-  it('at most one ducking penalty per defender per 7 days', async () => {
+  it('every duck costs: no weekly cap on ducking penalties', async () => {
     const [, b, c, d] = await ladder('Aa1', 'Bb2', 'Cc3', 'Dd4');
     const ch1 = (await single(c, b)).body.challenge;
     expect((await answer(b, ch1, 'decline')).body.challenge.penalty_rating).toBe(12);
@@ -112,12 +112,15 @@ describe('anyone can challenge anyone (singles)', () => {
     const ch2 = (await single(d, b)).body.challenge;
     expect(ch2.direction).toBe('up');
     const pv = (await call(b, 'challengePenaltyPreview', { challenge_id: ch2.id })).body;
-    expect(pv.expire).toMatchObject({ penalty: 0, reason: 'weekly_penalty_cap', challenger_gain: 0 });
+    expect(pv.expire.reason).toBe('expired');
+    expect(pv.expire.penalty).toBeGreaterThan(0);
     await sql('UPDATE challenges SET expires_at = ? WHERE id = ?', past(), ch2.id);
     await call(d, 'syncLadder');
-    expect(await ent('Challenge', ch2.id)).toMatchObject({ status: 'expired', penalty_rating: 0, penalty_reason: 'weekly_penalty_cap', challenger_rating_gain: 0 });
-    expect((await ent('Player', b.player.id)).singles_rating).toBe(1388);
-    expect(await ent('Player', d.player.id)).toMatchObject({ singles_rating: 1300, xp: 0 });
+    const c2 = await ent('Challenge', ch2.id);
+    expect(c2).toMatchObject({ status: 'expired', penalty_reason: 'expired' });
+    expect(c2.penalty_rating).toBeGreaterThan(0);
+    expect((await ent('Player', b.player.id)).singles_rating).toBe(1388 - c2.penalty_rating);
+    expect((await ent('Player', d.player.id)).singles_rating).toBe(1300 + c2.challenger_rating_gain);
   });
 });
 

@@ -54,7 +54,7 @@ describe('explainer quotes the shipped constants', () => {
     has(`×${f[1]} one place apart, ×${f[2]} two, ×${f[3]} three, ×${f[4]} four or five, ×${f[6]} six or more`);
     expect(f[5]).toBe(f[4]);
     expect(R.DOWN_MULT).toBe(0.5); expect(R.DOWN_CLOSE_GAP).toBe(2); has('costs half the usual amount if they are 1 or 2 places above you'); has('costs half the usual amount, with no walkover');
-    has(`At most one ducking penalty in any ${R.DUCK_PENALTY_DAYS} days`);
+    has('there is no weekly limit on ducking penalties'); expect(R.DUCK_PENALTY_DAYS).toBeUndefined();
     has(`send ${R.CHALLENGES_SENT_PER_WEEK} challenges and receive ${R.CHALLENGES_RECEIVED_PER_WEEK} in any ${R.CHALLENGE_CAP_DAYS} days`);
     has(`earns ${R.WALKOVER_XP} xp`); has(`counts ×${R.CHALLENGE_STAKES} like a singles one`);
   });

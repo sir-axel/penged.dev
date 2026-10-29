@@ -14,7 +14,7 @@ import { decodeInternal, pub } from './schema.js';
 import {
   START_RATING, REPEAT_WINDOW_DAYS, rateMatch, xpForMatch, levelForXp, validateGames, summarizeGames,
   RANK_SQL, DOUBLES_RANK_SQL, rankPlayers, ACTIVE_DAYS, meetingWeight, NOVELTY_DAYS, stakes, currentRd, RATING_FLOOR, challengePenalty, WALKOVER_XP, COOLDOWN_DAYS, WAIVER_DAYS, FATIGUE_DAYS,
-  CHALLENGE_CAP_DAYS, CHALLENGES_RECEIVED_PER_WEEK, CHALLENGES_SENT_PER_WEEK, DUCK_PENALTY_DAYS,
+  CHALLENGE_CAP_DAYS, CHALLENGES_RECEIVED_PER_WEEK, CHALLENGES_SENT_PER_WEEK,
 } from './rating.js';
 import { weekdayDeadline, cleanTimeZone, DEFAULT_TZ } from './weekdays.js';
 import { withCtx } from './email.js';
@@ -118,11 +118,7 @@ async function penaltyFacts(env, c) {
   const defRecentMatches = (await first(env,
     `SELECT count(*) AS n FROM matches WHERE status = 'verified' AND ranked = 1 AND verified_at > ?
        AND EXISTS (SELECT 1 FROM json_each(all_player_ids) WHERE value = ?)`, daysAgoIso(FATIGUE_DAYS), c.defender_player_id)).n;
-  // One ducking penalty per defender per rolling DUCK_PENALTY_DAYS.
-  const weeklyCapped = !!(await first(env,
-    `SELECT 1 AS x FROM challenges WHERE defender_player_id = ? AND penalty_rating > 0 AND reversed = 0 AND penalized_at > ? AND id <> ? LIMIT 1`,
-    c.defender_player_id, daysAgoIso(DUCK_PENALTY_DAYS), c.id));
-  return { meetings, recentPairMatch, defRecentMatches, weeklyCapped, direction: c.direction || 'up' };
+  return { meetings, recentPairMatch, defRecentMatches, direction: c.direction || 'up' };
 }
 /** A player's current singles/doubles RD (stored RD grown by the days since it was last updated). */
 const rdOf = (p, fmt, nowMs = Date.now()) =>
@@ -155,7 +151,6 @@ async function penaltyPlan(env, challenges, kind, now, lv) {
     return pl[id];
   };
   let changed = 0;
-  const paid = new Set(); // defenders penalised earlier in this same plan (weekly cap)
   for (const c of challenges) {
     if (penaltyFree(c)) {
       guards.push(guardRow(env, 'challenges', c.id, c.version, 'open'));
@@ -172,8 +167,7 @@ async function penaltyPlan(env, challenges, kind, now, lv) {
     const before = ranks[def.id] ?? null;
     const gap = ranks[def.id] != null && ranks[chal.id] != null ? Math.abs(ranks[chal.id] - ranks[def.id]) : 1;
     const facts = await penaltyFacts(env, c);
-    const res = penaltyOf(kind, def, chal, gap, { ...facts, weeklyCapped: facts.weeklyCapped || paid.has(def.id) });
-    if (res.penalty > 0) paid.add(def.id);
+    const res = penaltyOf(kind, def, chal, gap, facts);
     let gain = 0;
     if (res.penalty > 0) {
       def.singles_rating -= res.penalty; dirty.add(def.id); byId[def.id].rating = def.singles_rating;
