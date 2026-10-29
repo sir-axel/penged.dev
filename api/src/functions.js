@@ -16,6 +16,8 @@ import {
   RANK_SQL, DOUBLES_RANK_SQL, rankPlayers, ACTIVE_DAYS, meetingWeight, NOVELTY_DAYS, stakes, currentRd, RATING_FLOOR, challengePenalty, WALKOVER_XP, COOLDOWN_DAYS, WAIVER_DAYS, FATIGUE_DAYS,
 } from './rating.js';
 import { weekdayDeadline, cleanTimeZone, DEFAULT_TZ } from './weekdays.js';
+import { withCtx } from './email.js';
+import { notify } from './notify.js';
 
 const MATCH_EXPIRY_MS = 7 * 86400000;
 const CHALLENGE_MS = 72 * 3600000; // weekday hours only: Sat/Sun in either player's zone pause the clock (weekdays.js)
@@ -210,6 +212,13 @@ fns.setTimezone = async ({ env, user }, body) => {
   return { timezone: tz };
 };
 
+/** Notification emails (challenges, results) on/off for this account. Stored on the Better Auth user row. */
+fns.setEmailNotifications = async ({ env, user }, body) => {
+  if (typeof body.enabled !== 'boolean') throw bad('enabled must be true or false.');
+  await env.DB.prepare('UPDATE "user" SET "email_notifications" = ? WHERE "id" = ?').bind(body.enabled ? 1 : 0, user.id).run();
+  return { email_notifications: body.enabled };
+};
+
 fns.createPlayer = ({ env, user }, body) =>
   retrying(async () => {
     const lv = await ladderVersion(env);
@@ -329,6 +338,7 @@ fns.submitMatch = ({ env, user }, body) =>
         inFutureIso(MATCH_EXPIRY_MS), now, now, user.id),
       touch(env, me.id, now),
     ]);
+    await notify(env, 'match_submitted', { match_id: id, actor_user_id: user.id });
     return { match: pub('Match', await first(env, 'SELECT * FROM matches WHERE id = ?', id)) };
   });
 
@@ -547,6 +557,7 @@ fns.respondMatch = ({ env, user }, body) =>
     }
     if (me) stmts.push(touch(env, me.id, now));
     await commit(env, stmts);
+    if (decision === 'accept') await notify(env, 'match_verified', { match_id: id, actor_user_id: user.id }); // no-op unless now verified
     return { match: pub('Match', await first(env, 'SELECT * FROM matches WHERE id = ?', id)) };
   });
 
@@ -588,6 +599,7 @@ fns.createChallenge = ({ env, user }, body) =>
         weekdayDeadline(Date.parse(now), CHALLENGE_MS, [me.timezone, def.timezone]), now, now, user.id),
       touch(env, me.id, now),
     ]);
+    await notify(env, 'challenge_received', { challenge_id: id, actor_user_id: user.id });
     return { challenge: pub('Challenge', await getChallenge(env, id)) };
   });
 
@@ -607,6 +619,7 @@ fns.respondChallenge = ({ env, user }, body) =>
       const plan = await penaltyPlan(env, [c], 'declined', now, lv);
       if (!plan.changed) throw new HttpError(409, 'That challenge can no longer be answered.');
       await commit(env, [...plan.guards, ...plan.stmts, flagsStmt(env)]);
+      await notify(env, 'challenge_declined', { challenge_id: id, actor_user_id: user.id });
       return { challenge: pub('Challenge', await getChallenge(env, id)) };
     }
     // Accepting starts a fresh 72h (weekday) window to actually play; unplayed accepted challenges expire in syncLadder.
@@ -617,6 +630,7 @@ fns.respondChallenge = ({ env, user }, body) =>
       stmt(env, 'UPDATE challenges SET status = ?, responded_at = ?, expires_at = ?, updated_date = ?, version = version + 1 WHERE id = ?',
         'accepted', now, playBy, now, c.id),
     ]);
+    await notify(env, 'challenge_accepted', { challenge_id: id, actor_user_id: user.id });
     return { challenge: pub('Challenge', await getChallenge(env, id)) };
   });
 
@@ -700,10 +714,11 @@ export const runSyncLadder = ({ env }) =>
     const overdue = await all(env, `SELECT * FROM challenges WHERE status = 'open' AND responded_at IS NULL AND expires_at < ? ORDER BY expires_at, id`, now);
     const plan = overdue.length ? await penaltyPlan(env, overdue, 'expired', now, lv) : { guards: [], stmts: [], changed: 0 };
     const stmts = [...plan.guards, ...plan.stmts];
-    const iC = stmts.push(stmt(env, `UPDATE challenges SET status = 'expired', updated_date = ?, version = version + 1 WHERE status IN ('open','accepted') AND expires_at < ?`, now, now)) - 1;
+    const iC = stmts.push(stmt(env, `UPDATE challenges SET status = 'expired', updated_date = ?, version = version + 1 WHERE status IN ('open','accepted') AND expires_at < ? RETURNING id`, now, now)) - 1;
     const iM = stmts.push(stmt(env, `UPDATE matches SET status = 'expired', updated_date = ?, version = version + 1 WHERE status = 'pending' AND expires_at < ?`, now, now)) - 1;
     stmts.push(flagsStmt(env), stmt(env, RANK_SQL, activeCut()), stmt(env, DOUBLES_RANK_SQL, activeCut())); // ranks are derived from ratings; idempotent
     const res = await commit(env, stmts);
+    await notify(env, 'challenge_expired', { challenge_ids: [...overdue.map((c) => c.id), ...(res[iC].results || []).map((r) => r.id)] });
     return { ok: true, expired_challenges: plan.changed + res[iC].meta.changes, expired_matches: res[iM].meta.changes };
   });
 
@@ -764,5 +779,11 @@ functions.post('/:name', async (c) => {
     }
   }
   if (body === null || typeof body !== 'object' || Array.isArray(body)) throw bad('Request body must be a JSON object.');
-  return c.json(await fn({ env: c.env, user, request: c.req.raw }, body));
+  let ctx;
+  try {
+    ctx = c.executionCtx;
+  } catch {
+    /* no ExecutionContext (tests): notification emails are awaited instead */
+  }
+  return c.json(await withCtx(ctx, () => fn({ env: c.env, user, request: c.req.raw }, body)));
 });
