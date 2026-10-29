@@ -493,18 +493,23 @@ describe('smooth K (games), rust, certainty, target-21, recency, teammate, chall
     expect(mk([{ a: 21, b: 5 }, { a: 21, b: 5 }], 21).games.every((g) => Math.abs(g.evidence - 1.1) < 1e-9)).toBe(true);
     expect(mk([{ a: 21, b: 10 }], 21).delta).toBeGreaterThan(mk([{ a: 11, b: 5 }], 11).delta * 0 + 0);
   });
-  it('repeat factor weights recent meetings fully and older ones by half; many meetings damp but never freeze', () => {
+  it('meeting weight fades with a 3-day half-life, so the multiplier recovers between games', () => {
     expect(meetingWeight(0)).toBe(1);
-    expect(meetingWeight(30)).toBe(1);
-    expect(meetingWeight(31)).toBe(0.5);
-    expect(meetingWeight(179)).toBe(0.5);
-    const old = computeDelta({ ...base, earlierMeetings: 2 * meetingWeight(60) });
-    const recent = computeDelta({ ...base, earlierMeetings: 2 * meetingWeight(10) });
-    expect(old.delta).toBeGreaterThan(recent.delta);
-    expect(old.repeat).toBeCloseTo(0.7, 9);
-    const six = computeDelta({ ...base, earlierMeetings: 6 }).delta;
-    expect(six).toBeGreaterThan(0);
-    expect(six).toBeLessThan(computeDelta({ ...base, earlierMeetings: 2 }).delta);
+    expect(meetingWeight(3)).toBeCloseTo(0.5, 9);
+    expect(meetingWeight(6)).toBeCloseTo(0.25, 9);
+    expect(meetingWeight(30)).toBeLessThan(0.001);
+    for (let d = 0; d < 30; d++) expect(meetingWeight(d + 1)).toBeLessThan(meetingWeight(d));
+    // Same pair, steady schedule: daily play is damped more than every-few-days, weekly barely, monthly not at all.
+    const steady = (gap) => { let w = 0; for (let d = gap; d <= 180; d += gap) w += meetingWeight(d); return repeatFactor(w); };
+    expect(steady(1)).toBeLessThan(steady(3));
+    expect(steady(3)).toBeLessThan(steady(7));
+    expect(steady(1)).toBeGreaterThan(0.45);
+    expect(steady(30)).toBeGreaterThan(0.99);
+    const yesterday = computeDelta({ ...base, earlierMeetings: meetingWeight(1) });
+    const lastWeek = computeDelta({ ...base, earlierMeetings: meetingWeight(7) });
+    expect(lastWeek.delta).toBeGreaterThan(yesterday.delta);
+    const many = computeDelta({ ...base, earlierMeetings: 6 }).delta;
+    expect(many).toBeGreaterThan(0);
     expect(computeDelta({ ...base, won: false, earlierMeetings: 6 }).delta).toBeLessThan(0);
   });
   it('teammate factor: stronger partner gains less on a win and loses more on a loss', () => {

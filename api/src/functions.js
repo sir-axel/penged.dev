@@ -13,7 +13,7 @@ import { tierChange, PROVISIONAL } from './tiers.js';
 import { decodeInternal, pub } from './schema.js';
 import {
   START_RATING, REPEAT_WINDOW_DAYS, rateMatch, xpForMatch, levelForXp, validateGames, summarizeGames,
-  RANK_SQL, DOUBLES_RANK_SQL, rankPlayers, ACTIVE_DAYS, REPEAT_RECENT_DAYS, meetingWeight, RATING_FLOOR, challengePenalty, WALKOVER_XP, COOLDOWN_DAYS, WAIVER_DAYS, FATIGUE_DAYS,
+  RANK_SQL, DOUBLES_RANK_SQL, rankPlayers, ACTIVE_DAYS, meetingWeight, RATING_FLOOR, challengePenalty, WALKOVER_XP, COOLDOWN_DAYS, WAIVER_DAYS, FATIGUE_DAYS,
 } from './rating.js';
 
 const MATCH_EXPIRY_MS = 7 * 86400000;
@@ -101,7 +101,11 @@ async function penaltyFacts(env, c) {
     `SELECT count(*) AS n FROM matches WHERE status = 'verified' AND format = 'singles' AND verified_at > ?
        AND EXISTS (SELECT 1 FROM json_each(all_player_ids) WHERE value = ?) AND EXISTS (SELECT 1 FROM json_each(all_player_ids) WHERE value = ?)`,
     daysAgoIso(days), ...ids);
-  const meetings = (await pair(REPEAT_WINDOW_DAYS)).n;
+  const meetingRows = await all(env,
+    `SELECT verified_at FROM matches WHERE status = 'verified' AND format = 'singles' AND verified_at > ?
+       AND EXISTS (SELECT 1 FROM json_each(all_player_ids) WHERE value = ?) AND EXISTS (SELECT 1 FROM json_each(all_player_ids) WHERE value = ?)`,
+    daysAgoIso(REPEAT_WINDOW_DAYS), ...ids);
+  const meetings = meetingRows.reduce((s, r) => s + meetingWeight((Date.now() - Date.parse(r.verified_at)) / 86400000), 0);
   const recentPairMatch = (await pair(WAIVER_DAYS)).n > 0;
   const defRecentMatches = (await first(env,
     `SELECT count(*) AS n FROM matches WHERE status = 'verified' AND verified_at > ?
@@ -326,7 +330,7 @@ async function verifyPlan(env, m, now) {
 
   // Earlier VERIFIED same-format meetings in the last 180 days. For player P, a meeting is an earlier match
   // where P was opposite at least one of P's opponents in this match (singles: the same opponent).
-  // Each counts 1 if within REPEAT_RECENT_DAYS, else 0.5 (meetingWeight).
+  // Each counts 0.5 ^ (days ago / REPEAT_HALF_LIFE_DAYS) (meetingWeight): it fades as time passes.
   const prevRows = await all(env,
     `SELECT side_a, side_b, verified_at FROM matches WHERE status = 'verified' AND format = ? AND id <> ? AND verified_at > ?
        AND EXISTS (SELECT 1 FROM json_each(all_player_ids) WHERE value IN (${placeholders(ids.length)}))`,

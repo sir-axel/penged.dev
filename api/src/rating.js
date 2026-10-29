@@ -36,12 +36,12 @@ export const CERT_FULL_GAMES = 10;
 // Target 21: a game to 21 is a more reliable result than a game to 11 (the old by-number-of-games evidence factor is gone:
 // every game counts on its own now).
 export const EVIDENCE_TARGET_21 = 1.1;
-// Rematches: earlier meetings in the last REPEAT_WINDOW_DAYS count 1 if within REPEAT_RECENT_DAYS, else REPEAT_OLD_WEIGHT.
+// Rematches: each earlier meeting in the last REPEAT_WINDOW_DAYS counts 0.5 ^ (days ago / REPEAT_HALF_LIFE_DAYS), so the
+// multiplier recovers as time passes between games (daily rematches count less than a rematch after a few days off).
 // repeat = REPEAT_FLOOR + (1 - REPEAT_FLOOR) / (1 + REPEAT_STEP * weightedMeetings): frequent rematches count less but
 // never stop counting (a small group plays the same people all the time; regulars must not be frozen).
 export const REPEAT_WINDOW_DAYS = 180;
-export const REPEAT_RECENT_DAYS = 30;
-export const REPEAT_OLD_WEIGHT = 0.5;
+export const REPEAT_HALF_LIFE_DAYS = 3;
 export const REPEAT_STEP = 0.75;
 export const REPEAT_FLOOR = 0.3;
 // Doubles: a stronger partner gains less / loses more. teammate = clamp(1 -/+ TEAMMATE_SLOPE * (own - partner) / 400, MIN, MAX)
@@ -101,7 +101,7 @@ export function evidenceWeight(target = 11) {
 
 /** How much one earlier meeting counts, by how long ago it was. */
 export function meetingWeight(daysAgo) {
-  return daysAgo <= REPEAT_RECENT_DAYS ? 1 : REPEAT_OLD_WEIGHT;
+  return Math.pow(0.5, Math.max(0, Number(daysAgo) || 0) / REPEAT_HALF_LIFE_DAYS);
 }
 
 /** Doubles: stronger partner gains less / loses more. */

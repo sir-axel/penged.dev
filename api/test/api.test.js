@@ -235,8 +235,8 @@ describe('challenge penalties', () => {
     const { b, c } = await trio();
     await verified(b, c, 8 * 86400e3);
     const ch = (await call(c, 'createChallenge', { defender_player_id: b.player.id })).body.challenge;
-    // 1 earlier meeting in 180d: repeatFactor 0.3 + 0.7/1.75 = 0.7 => 12 * 0.7 = 8.4 -> 8
-    expect((await call(b, 'respondChallenge', { challenge_id: ch.id, decision: 'decline' })).body.challenge.penalty_rating).toBe(8);
+    // 1 meeting 8 days ago weighs 0.5^(8/3) = 0.157 -> repeat 0.3 + 0.7/1.118 = 0.926 => 12 * 0.926 = 11.1 -> 11
+    expect((await call(b, 'respondChallenge', { challenge_id: ch.id, decision: 'decline' })).body.challenge.penalty_rating).toBe(11);
   });
 
   it('fatigue: 3+ verified matches in 7 days halve a decline', async () => {
