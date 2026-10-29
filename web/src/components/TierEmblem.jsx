@@ -5,6 +5,21 @@ import { TIERS } from "@/lib/tiers";
 // Grandmaster sits on a solid red tile, so it gets its own palette: white ball, orange and yellow flames.
 const GM = { "#": "#ffffff", x: "#d6d3d1", "+": "#f97316", o: "#fde047" };
 const ART = {
+  // No tier yet: a dashed-edge ball with a question mark.
+  unranked: [
+    "....#.#.....",
+    "..#......#..",
+    ".....oo.....",
+    "#...o..o...#",
+    ".......o....",
+    "#.....o....#",
+    "......o.....",
+    "#..........#",
+    "......o.....",
+    "..#......#..",
+    "....#.#.#...",
+    "............",
+  ],
   wood: [
     "...######...",
     "..##x#####..",
@@ -137,7 +152,9 @@ const ART = {
 export function TierEmblem({ tierKey, size = 24, className = "", title }) {
   const art = ART[tierKey] || ART.bronze;
   const fill =
-    tierKey === "grandmaster"
+    tierKey === "unranked"
+      ? { "#": "hsl(var(--muted-foreground))", o: "hsl(var(--foreground))" }
+      : tierKey === "grandmaster"
       ? GM
       : { "#": `var(--tier-${tierKey}-fg)`, "+": `var(--tier-${tierKey}-bd)`, o: "rgba(255,255,255,0.9)", x: `var(--tier-${tierKey}-bd)` };
   const rects = [];

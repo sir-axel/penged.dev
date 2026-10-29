@@ -26,7 +26,10 @@ export function EloButton({ format = "singles", className = "" }) {
   const counts = useMemo(() => {
     const c = {};
     for (const p of players) {
-      if (matchesPlayed(p, fmt) < PROVISIONAL) continue; // placement players hold no tier yet
+      if (matchesPlayed(p, fmt) < PROVISIONAL) {
+        c.unranked = (c.unranked || 0) + 1; // new and placement players hold no tier yet
+        continue;
+      }
       const k = tierFor(ratingFor(p, fmt)).key;
       c[k] = (c[k] || 0) + 1;
     }
@@ -43,7 +46,7 @@ export function EloButton({ format = "singles", className = "" }) {
           type="button"
           className={`inline-flex min-h-[40px] items-center gap-1.5 self-start rounded-sm bg-secondary px-3 font-heading text-sm font-medium text-foreground hover:bg-secondary/70 sm:self-auto ${className}`}
         >
-          <TierEmblem tierKey={mine || "gold"} size={16} />
+          <TierEmblem tierKey={mine || (me ? "unranked" : "gold")} size={16} />
           elo :)
         </button>
       </DialogTrigger>
@@ -71,6 +74,20 @@ export function EloButton({ format = "singles", className = "" }) {
               </div>
               <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.1em]" style={{ color: `var(--tier-${mine}-fg)` }}>
                 {nextTier(myRating) ? `${nextTier(myRating).pointsToGo} to ${nextTier(myRating).tier.name}` : "Top of the ladder"}
+              </p>
+            </div>
+          </div>
+        )}
+        {me && placing > 0 && (
+          <div className="flex items-center gap-3 rounded-sm border border-dashed border-muted-foreground/60 bg-secondary/60 p-3" data-testid="elo-you">
+            <TierEmblem tierKey="unranked" size={36} />
+            <div className="min-w-0 flex-1">
+              <p className="font-heading text-sm font-bold">You: Unranked</p>
+              <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-background/70">
+                <div className="h-full rounded-full bg-muted-foreground" style={{ width: `${Math.round(((PROVISIONAL - placing) / PROVISIONAL) * 100)}%` }} />
+              </div>
+              <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+                {`${PROVISIONAL - placing}/${PROVISIONAL} placement · ${placing} more ${fmt} match${placing === 1 ? "" : "es"} to reveal your tier`}
               </p>
             </div>
           </div>
@@ -115,10 +132,30 @@ export function EloButton({ format = "singles", className = "" }) {
               </li>
             );
           })}
+          <li data-testid="tier-unranked" className="relative flex items-center gap-4 py-1.5">
+            <span
+              className={`relative z-10 flex h-16 w-16 shrink-0 items-center justify-center rounded-sm border-2 border-dashed border-muted-foreground/60 bg-secondary ${me && placing > 0 ? "ring-2 ring-foreground ring-offset-2 ring-offset-background" : ""}`}
+            >
+              <TierEmblem tierKey="unranked" size={44} />
+            </span>
+            <div className={`flex min-w-0 flex-1 items-center justify-between gap-3 rounded-sm border px-3 py-2.5 ${me && placing > 0 ? "border-dashed border-muted-foreground/60 bg-secondary/60" : "border-transparent"}`}>
+              <div className="min-w-0">
+                <p className="flex items-center gap-2 font-heading text-base font-bold leading-tight text-muted-foreground">
+                  Unranked
+                  {me && placing > 0 && (
+                    <span className="rounded-sm bg-foreground px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.1em] text-background">you</span>
+                  )}
+                </p>
+                <p className="mt-0.5 font-mono text-xs text-muted-foreground">{`new or under ${PROVISIONAL} matches`}</p>
+              </div>
+              <div className="shrink-0 text-right">
+                <p className="font-heading text-lg font-bold leading-none tabular-nums">{counts.unranked || 0}</p>
+                <p className="font-mono text-[9px] uppercase tracking-[0.1em] text-muted-foreground">{counts.unranked === 1 ? "player" : "players"}</p>
+              </div>
+            </div>
+          </li>
         </ol>
-        {me && placing > 0 && (
-          <p className="text-xs text-muted-foreground">{`You are in placement: ${placing} more ${fmt} match${placing === 1 ? "" : "es"} to reveal your tier.`}</p>
-        )}
+
         <Link to="/rules" className="inline-flex min-h-10 items-center text-xs text-brand underline underline-offset-2">
           How ratings work
         </Link>
