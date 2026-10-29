@@ -148,7 +148,8 @@ describe('validateGames', () => {
     expect(validateGames(15, ok)).toBe('Choose a game target of 11 or 21.');
     expect(validateGames(11, [])).toBe('Add at least one game.');
     expect(validateGames(11, undefined)).toBe('Add at least one game.');
-    expect(validateGames(11, Array(6).fill({ a: 11, b: 0 }))).toBe('A match is at most five games.');
+    expect(validateGames(11, Array(10).fill({ a: 11, b: 0 }))).toBeNull();
+    expect(validateGames(11, Array(11).fill({ a: 11, b: 0 }))).toBe('A match is at most 10 games.');
     expect(validateGames(11, [{ a: 11.5, b: 2 }])).toBe('Scores must be whole numbers.');
     expect(validateGames(11, [{ a: -1, b: 2 }])).toBe('Scores must be whole numbers.');
     expect(validateGames(11, [{ a: '11', b: 2 }])).toBe('Scores must be whole numbers.');

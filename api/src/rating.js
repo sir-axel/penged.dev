@@ -13,6 +13,7 @@ export const START_RATING = 1400;
 export const RATING_FLOOR = 100;
 export const MAX_DELTA = 80; // hard cap on one player's TOTAL change in one match (all its games together)
 export const MAX_GAME_DELTA = 40; // cap on one game
+export const MAX_GAMES = 10; // games in one match
 // ---- Glicko-2 core ----
 // Confidence = RD (rating deviation, in rating points): how sure the ladder is about your rating. High RD = you move fast.
 // Each game: step = GLICKO_SCALE x (Q x phi'^2 x g(opponent RD)) x (result - expected) x multipliers, where phi' is your
@@ -455,7 +456,7 @@ export function xpForLevel(level) {
 export function validateGames(target, games) {
   if (target !== 11 && target !== 21) return 'Choose a game target of 11 or 21.';
   if (!Array.isArray(games) || games.length < 1) return 'Add at least one game.';
-  if (games.length > 5) return 'A match is at most five games.';
+  if (games.length > MAX_GAMES) return `A match is at most ${MAX_GAMES} games.`;
   let wa = 0;
   let wb = 0;
   for (const g of games) {

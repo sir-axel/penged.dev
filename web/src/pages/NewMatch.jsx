@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Plus, LoaderCircle, Trash2 } from "lucide-react";
 import { useMyPlayer } from "@/hooks/useMyPlayer";
-import { validateGames } from "@/lib/validateGames";
+import { validateGames, MAX_GAMES } from "@/lib/validateGames";
 import { PageHeader } from "@/components/PageHeader";
 import { SegmentedControl } from "@/components/match/SegmentedControl";
 import { Avatar } from "@/components/Avatar";
@@ -284,7 +284,7 @@ export function NewMatch() {
               </div>
             ))}
           </div>
-          {games.length < 5 && (
+          {games.length < MAX_GAMES && (
             <button
               type="button"
               onClick={() =>

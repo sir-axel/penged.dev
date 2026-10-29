@@ -1,3 +1,5 @@
+/** Games in one match (mirrors MAX_GAMES in api/src/rating.js). */
+export const MAX_GAMES = 10;
 export function validateGames(e, t) {
   let n = Number(t);
   if (n !== 11 && n !== 21)
@@ -10,10 +12,10 @@ export function validateGames(e, t) {
       ok: false,
       error: "Add at least one game.",
     };
-  if (e.length > 5)
+  if (e.length > MAX_GAMES)
     return {
       ok: false,
-      error: "A match is at most five games.",
+      error: `A match is at most ${MAX_GAMES} games.`,
     };
   let r = 0,
     i = 0;
