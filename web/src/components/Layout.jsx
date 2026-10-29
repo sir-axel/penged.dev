@@ -75,10 +75,17 @@ export function Layout() {
   }, []);
   return (
     <div className="flex min-h-screen flex-col bg-background">
+      <a
+        href="#main"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-50 focus:rounded-sm focus:border focus:border-foreground focus:bg-background focus:px-3 focus:py-2 focus:text-sm"
+      >
+        Skip to content
+      </a>
       <header className="sticky top-0 z-30 border-b-2 border-foreground/80 bg-background/95 backdrop-blur">
-        <div className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-3 px-4 sm:px-6">
+        <div className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-2 px-4 sm:gap-3 sm:px-6">
           <Link to="/" aria-label="Penged.dev home" className="inline-flex min-h-10 items-center rounded-none py-1">
-            <Logo />
+            <Logo showWordmark={false} className="min-[340px]:hidden" />
+            <Logo className="hidden min-[340px]:inline-flex" />
           </Link>
           <nav aria-label="Main" className="hidden min-w-0 items-center gap-1.5 md:flex lg:gap-2">
             {DESKTOP_NAV.map(({ to: e, short: t, badge, chat }) => (
@@ -95,13 +102,13 @@ export function Layout() {
               </NavLink>
             ))}
           </nav>
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
           <button
             type="button"
             onClick={toggleTheme}
             aria-label={dark ? "Switch to light mode" : "Switch to dark mode"}
             aria-pressed={dark}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-sm border border-border bg-secondary hover:bg-accent"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-sm border border-border bg-secondary hover:bg-accent md:h-9 md:w-9"
           >
             {dark ? <Sun className="h-4 w-4" aria-hidden="true" /> : <Moon className="h-4 w-4" aria-hidden="true" />}
           </button>
@@ -119,9 +126,10 @@ export function Layout() {
               className="relative inline-flex min-h-10 items-center gap-1.5 whitespace-nowrap rounded-sm border border-border bg-secondary px-3 font-display text-[0.55rem] uppercase tracking-[0.12em] hover:bg-accent md:h-9 md:min-h-0 md:px-2.5 lg:px-3"
             >
               <User className="h-3.5 w-3.5" aria-hidden="true" />
-              My profile
-              <CountBadge n={newFeedback} />
-              <UnreadDot n={unreadReplies} />
+              <span className="hidden sm:inline">My </span>
+              profile
+              <CountBadge n={newFeedback} className="absolute -right-2 -top-2 rounded-full sm:static sm:rounded-full" />
+              <UnreadDot n={unreadReplies} className="absolute -right-1 -top-1 sm:static" />
             </Link>
           ) : (
             <Link
@@ -135,7 +143,7 @@ export function Layout() {
           </div>
         </div>
       </header>
-      <main className="flex-1 pb-[calc(6rem+env(safe-area-inset-bottom))] md:pb-0">
+      <main id="main" tabIndex={-1} className="flex-1 outline-none">
         <Outlet />
       </main>
       {/* Grey band (light theme) so the footer reads as a footer: logo on the left, vertically centred;
