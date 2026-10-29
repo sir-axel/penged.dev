@@ -837,14 +837,14 @@ fns.respondMatch = ({ env, user }, body) =>
   });
 
 /** INSERT for a singles challenge me -> def. Direction: 'down' when the challenger is rated above. matchupId = sent from a matchup. */
-function insertSinglesChallenge(env, { id, me, def, message, now, matchupId = null }) {
+function insertSinglesChallenge(env, { id, me, def, message, now, matchupId = null, expiresAt = null }) {
   return stmt(env,
     `INSERT INTO challenges (id, challenger_user_id, challenger_player_id, challenger_name, challenger_rank, defender_user_id,
        defender_player_id, defender_name, defender_rank, message, status, expires_at, created_date, updated_date, created_by_id,
        format, direction, all_user_ids, all_player_ids, matchup_id)
      VALUES (?,?,?,?,?,?,?,?,?,?,'open',?,?,?,?,'singles',?,?,?,?)`,
     id, me.user_id, me.id, nameOf(me), me.singles_rank, def.user_id, def.id, nameOf(def), def.singles_rank, message,
-    weekdayDeadline(Date.parse(now), CHALLENGE_MS, [me.timezone, def.timezone]), now, now, me.user_id,
+    expiresAt || weekdayDeadline(Date.parse(now), CHALLENGE_MS, [me.timezone, def.timezone]), now, now, me.user_id,
     me.singles_rating > def.singles_rating ? 'down' : 'up', J([me.user_id, def.user_id]), J([me.id, def.id]), matchupId);
 }
 
@@ -1061,7 +1061,9 @@ fns.respondChallenge = ({ env, user }, body) =>
     }
     // Accepting starts a fresh 72h (weekday) window to actually play; unplayed accepted challenges expire in syncLadder.
     const pair = await getPlayers(env, [c.challenger_player_id, c.defender_player_id]);
-    const playBy = weekdayDeadline(Date.parse(now), CHALLENGE_MS, pair.map((p) => p.timezone));
+    let playBy = weekdayDeadline(Date.parse(now), CHALLENGE_MS, pair.map((p) => p.timezone));
+    // A weekly match is due when its matchmaking week ends, never later.
+    if (c.matchup_id) playBy = minIso(playBy, (await first(env, 'SELECT week_end FROM matchups WHERE id = ?', c.matchup_id))?.week_end);
     await commit(env, [
       guardRow(env, 'challenges', c.id, c.version, 'open'),
       stmt(env, 'UPDATE challenges SET status = ?, responded_at = ?, expires_at = ?, updated_date = ?, version = version + 1 WHERE id = ?',
@@ -1519,12 +1521,16 @@ fns.matchupYes = async ({ env, user }) => {
       stmts.push(guardRow(env, 'challenges', live.id, live.version, live.status));
       if (live.status === 'open' && live.defender_player_id === me.id) {
         stmts.push(stmt(env, `UPDATE challenges SET status = 'accepted', responded_at = ?, expires_at = ?, updated_date = ?, version = version + 1 WHERE id = ?`,
-          now, weekdayDeadline(Date.parse(now), CHALLENGE_MS, [me.timezone, opp.timezone]), now, live.id));
+          now, minIso(weekdayDeadline(Date.parse(now), CHALLENGE_MS, [me.timezone, opp.timezone]), m.week_end), now, live.id));
+      } else {
+        // It now plays this week's match: due when the week ends, like any matched challenge.
+        stmts.push(stmt(env, 'UPDATE challenges SET expires_at = ?, updated_date = ?, version = version + 1 WHERE id = ?',
+          minIso(live.expires_at, m.week_end), now, live.id));
       }
     } else {
       chId = uuid();
       sent = true;
-      stmts.push(insertSinglesChallenge(env, { id: chId, me, def: opp, message: '', now, matchupId: m.id }), touch(env, me.id, now));
+      stmts.push(insertSinglesChallenge(env, { id: chId, me, def: opp, message: '', now, matchupId: m.id, expiresAt: m.week_end }), touch(env, me.id, now));
     }
     stmts.push(stmt(env,
       `UPDATE matchups SET status = 'committed', said_yes_at = ?, challenge_id = ?, updated_date = ?, version = version + 1 WHERE id = ?`,
@@ -1590,8 +1596,16 @@ fns.matchupBackOut = ({ env, user }) =>
     return matchupView(env, (await getPlayers(env, [me.id]))[0]);
   });
 
+const minIso = (a, b) => (!a ? b : !b ? a : a < b ? a : b);
+const CLAMP_MATCHED_SQL = `UPDATE challenges SET expires_at = (SELECT m.week_end FROM matchups m WHERE m.id = challenges.matchup_id),
+    updated_date = ?, version = version + 1
+  WHERE matchup_id IS NOT NULL AND status IN ('open','accepted')
+    AND expires_at > (SELECT m.week_end FROM matchups m WHERE m.id = challenges.matchup_id)`;
+
 /** Expire overdue challenges/matches, recompute flags and ranks; settle last week's matchups and make this week's. Session-free (also run by cron). */
 export const runSyncLadder = async ({ env }) => {
+  // Safety net: a matched challenge is never due after its matchmaking week ends (also repairs older rows).
+  await stmt(env, CLAMP_MATCHED_SQL, nowIso()).run();
   const res = await syncCore(env);
   res.matchups_settled = await settleMatchups(env);
   res.matchups_assigned = await ensureMatchupWeek(env);

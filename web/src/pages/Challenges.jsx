@@ -5,7 +5,7 @@ import { ArrowLeftRight, Check, LoaderCircle, Search, Undo2 } from "lucide-react
 import { useAuth } from "@/context/AuthContext";
 import { useMyPlayer } from "@/hooks/useMyPlayer";
 import { PageHeader } from "@/components/PageHeader";
-import { challengeClock, playerName } from "@/lib/ladder";
+import { clockFor, playerName } from "@/lib/ladder";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/EmptyState";
@@ -374,9 +374,9 @@ export function DoublesCard({ challenge: c, userId, busy, onRespond }) {
       </div>
       <p className="mt-2 text-xs text-muted-foreground">
         {c.status === "open"
-          ? `Needs all three to accept · ${challengeClock(c.expires_at)}`
+          ? `Needs all three to accept · ${clockFor(c)}`
           : c.status === "accepted"
-            ? `Everyone is in — play by ${challengeClock(c.expires_at)}`
+            ? `Everyone is in · ${clockFor(c, { left: "left to play" })}`
             : outcomeText(c, false)}
       </p>
       {c.message && <p className="mt-2 rounded-sm bg-secondary/60 px-2.5 py-1.5 text-xs">“{c.message}”</p>}
@@ -648,7 +648,7 @@ export function Challenges() {
               <MatchedChip challenge={e} />
             </p>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              {e.status === "open" ? challengeClock(e.expires_at) : `Accepted — play by ${challengeClock(e.expires_at)}`}
+              {e.status === "open" ? clockFor(e) : `Accepted · ${clockFor(e, { left: "left to play" })}`}
             </p>
           </div>
           <StatusBadge status={e.status} />

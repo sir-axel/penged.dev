@@ -505,11 +505,15 @@ describe('week end', () => {
     const [a, b] = await ladder('Aa1', 'Bb2');
     await only(a, b);
     await call(a, 'matchupYes');
-    const r = await rating(a);
+    const [ra, rb] = [await rating(a), await rating(b)];
     await endWeek();
     await sync();
     expect(await rowOf(a)).toMatchObject({ status: 'cleared' });
-    expect(await rating(a)).toBe(r);
+    // the matched challenge was due at week end: b ignored it, so b pays the normal expiry and a gets the walkover
+    const ch = await one('SELECT * FROM challenges WHERE id = ?', (await rowOf(a)).challenge_id);
+    expect(ch.status).toBe('expired');
+    expect(await rating(b)).toBe(rb - ch.penalty_rating);
+    expect(await rating(a)).toBe(ra + (ch.challenger_rating_gain || 0));
   });
 });
 
@@ -558,5 +562,23 @@ describe('emails', () => {
     expect(msgs.map((m) => m.subject)).toEqual(["Bb2 wants this week's matched game with you"]);
     expect(msgs[0].text).toContain("this week's match");
     void appWith; void ORIGIN;
+  });
+});
+
+describe('weekly match deadlines', () => {
+  it('a matched challenge is due exactly when the week ends: when sent, when accepted, and repaired by sync', async () => {
+    const [a, b] = await ladder('Aa1', 'Bb2');
+    await only(a, b);
+    await call(a, 'matchupYes');
+    const row = await rowOf(a);
+    const ch = await one('SELECT * FROM challenges WHERE id = ?', row.challenge_id);
+    expect(ch.expires_at).toBe(row.week_end);
+    expect((await call(b, 'respondChallenge', { challenge_id: ch.id, decision: 'accept' })).status).toBe(200);
+    expect((await one('SELECT expires_at FROM challenges WHERE id = ?', ch.id)).expires_at).toBe(row.week_end);
+    // an older row that runs past the week (the bug this guards against) is pulled back in by the next sync
+    const later = new Date(Date.parse(row.week_end) + 2 * 86400e3).toISOString();
+    await sql('UPDATE challenges SET expires_at = ? WHERE id = ?', later, ch.id);
+    await sync();
+    expect((await one('SELECT expires_at FROM challenges WHERE id = ?', ch.id)).expires_at).toBe(row.week_end);
   });
 });

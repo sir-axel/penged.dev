@@ -53,19 +53,23 @@ export function weekdayMsBetween(fromMs, toMs) {
  * Challenge clock: weekday time left (weekends don't count, same as the deadline), plus the local due time.
  * e.g. "1d 4h left · due Mon 1:44pm · weekends off", with "Weekend pause · " in front on Sat/Sun.
  */
-export function challengeClock(iso, nowMs = Date.now()) {
+export function challengeClock(iso, nowMs = Date.now(), { wallClock = false, left: leftWord = "left" } = {}) {
   if (!iso) return "";
   const end = new Date(iso).getTime();
   if (Number.isNaN(end) || end <= nowMs) return "Window closed";
-  const ms = weekdayMsBetween(nowMs, end);
+  // Weekly matches run on the wall clock to the end of the matchmaking week; everything else counts weekdays only.
+  const ms = wallClock ? end - nowMs : weekdayMsBetween(nowMs, end);
   const h = Math.floor(ms / 36e5);
-  const left = h >= 24 ? `${Math.floor(h / 24)}d ${h % 24}h left` : `${h}h ${Math.floor((ms % 36e5) / 6e4)}m left`;
+  const left = h >= 24 ? `${Math.floor(h / 24)}d ${h % 24}h ${leftWord}` : `${h}h ${Math.floor((ms % 36e5) / 6e4)}m ${leftWord}`;
   const d = new Date(iso);
   const day = d.toLocaleDateString("en-US", { weekday: "short" });
   const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }).replace(" AM", "am").replace(" PM", "pm");
+  if (wallClock) return `${left} · due ${day} ${time}`;
   const dow = new Date(nowMs).getDay();
   return `${dow === 0 || dow === 6 ? "Weekend pause · " : ""}${left} · due ${day} ${time} · weekends off`;
 }
+/** challengeClock for a challenge row: matched challenges (weekly matches) use the wall clock. */
+export const clockFor = (c, opts = {}) => challengeClock(c?.expires_at, Date.now(), { wallClock: !!c?.matchup_id, ...opts });
 /** The browser's IANA time zone (e.g. "America/Chicago"), or null. */
 export function browserTimeZone() {
   try {

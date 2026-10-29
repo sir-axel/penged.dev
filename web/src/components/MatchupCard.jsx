@@ -6,7 +6,7 @@ import { useMyPlayer } from "@/hooks/useMyPlayer";
 import { Avatar } from "@/components/Avatar";
 import { TierEmblem } from "@/components/TierEmblem";
 import { Button } from "@/components/ui/button";
-import { challengeClock, playerName } from "@/lib/ladder";
+import { clockFor, playerName } from "@/lib/ladder";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -303,7 +303,7 @@ export function MatchupCard({ onRecord, className = "" }) {
   );
   const statusLine = {
     open: `Accept and the challenge goes to ${name}.`,
-    waiting: `Waiting for ${name} to answer${ch?.expires_at ? ` · ${challengeClock(ch.expires_at)}` : ""}.`,
+    waiting: `Waiting for ${name} to answer${ch?.expires_at ? ` · ${clockFor({ ...ch, matchup_id: ch.matchup_id || true })}` : ""}.`,
     accepted: `${name} is in. Play it by ${deadline} and record the result.`,
     unplayed: `The challenge window closed, but the week hasn't: play ${name} by ${deadline} or lose ${m.miss_cost}.`,
     cleared: `${name} didn't take it, so you're cleared for this week.`,
