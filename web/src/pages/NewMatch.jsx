@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Plus, LoaderCircle, Trash2 } from "lucide-react";
 import { useMyPlayer } from "@/hooks/useMyPlayer";
@@ -16,14 +16,16 @@ import { Button } from "@/components/ui/button";
 import { api } from "@/api/client";
 
 export function NewMatch() {
-  let navigate = useNavigate(),
+  // Pre-filled from an accepted challenge's "Record result": ?format=&partner=&opp=&opp2=
+  let [params] = useSearchParams(),
+    navigate = useNavigate(),
     { player } = useMyPlayer(),
-    [format, setFormat] = useState("singles"),
+    [format, setFormat] = useState(() => (params.get("format") === "doubles" ? "doubles" : "singles")),
     [target, setTarget] = useState(11),
     [ranked, setRanked] = useState(true),
-    [partnerId, setPartnerId] = useState(""),
-    [opponentId, setOpponentId] = useState(""),
-    [opponent2Id, setOpponent2Id] = useState(""),
+    [partnerId, setPartnerId] = useState(() => params.get("partner") || ""),
+    [opponentId, setOpponentId] = useState(() => params.get("opp") || ""),
+    [opponent2Id, setOpponent2Id] = useState(() => params.get("opp2") || ""),
     [paddles, setPaddles] = useState({}),
     [games, setGames] = useState([
       {

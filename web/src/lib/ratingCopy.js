@@ -61,13 +61,16 @@ export const XP_POINTS = [
 ];
 
 export const CHALLENGE_POINTS = [
-  "Challenges are singles-only: you can challenge a player up to three singles ranks above you. One open challenge at a time.",
+  "Anyone on the singles ladder can challenge anyone else on it, at any rank (your first ranked singles match puts you on the ladder). One open singles challenge at a time.",
+  "Weekly limits: you can send 3 challenges and receive 2 in any 7 days, singles and doubles together.",
   "The defender has 72 hours to accept, and accepted challenges have 72 hours to be played. Weekends don't count: the clock pauses all of Saturday and Sunday in each player's own time zone (if you live in different cities, it runs only while it is a weekday for both of you). Ducking a challenge costs rating, and rank follows rating.",
-  "Decline: the defender loses rating.",
-  "No answer in 72 weekday hours: the defender loses twice as much, the challenger gains the same points as a walkover and earns 15 xp.",
-  "The cost peaks when you are evenly rated and close in rank, and is larger while your rating is still settling (up to 24 for silence between equals, 12 at ±50 confidence). Ducking someone far below you costs little (at least 5 for silence, 3 for a decline). Rematches cost less.",
+  "Challenged by someone rated below you: declining costs you rating. No answer in 72 weekday hours costs twice as much, and the challenger gains the same points as a walkover and earns 15 xp.",
+  "Challenged by someone rated above you: declining is free. No answer in 72 weekday hours costs half the usual amount, with no walkover.",
+  "The cost peaks when you are evenly rated and close in rank, and is larger while your rating is still settling (up to 24 for silence between equals, 12 at ±50 confidence). It shrinks with the rank gap: ×1 one place apart, ×0.8 two, ×0.6 three, ×0.4 four or five, ×0.25 six or more. Ducking someone far away costs little (at least 5 for silence, 3 for a decline). Rematches cost less.",
+  "At most one ducking penalty in any 7 days: duck again that week and it costs nothing.",
   "Played that challenger in the last 7 days? Declining is free. Played 3 or more matches this week? A decline costs half.",
   "After a decline or no answer, the same challenger cannot challenge you again for 7 days.",
   "Penalised unfairly? Ask for a review; an admin can reverse it and give back your rating.",
   "An accepted challenge that never gets played expires with no penalty.",
+  "Doubles challenges: pick a partner and two opponents, anyone with a profile. Your partner and both opponents all have to accept; one no closes it. Nobody loses rating for declining or ignoring a doubles challenge. Played as challenged, it counts ×1.25 like a singles one.",
 ];

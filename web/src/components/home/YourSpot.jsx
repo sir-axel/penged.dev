@@ -78,7 +78,7 @@ export function YourSpot({ player, toConfirm = 0 }) {
               to="/challenges"
               className="flex-1 rounded-sm border border-border px-3 py-3 text-center text-xs font-medium sm:py-2 hover:border-foreground/40 sm:flex-none"
             >
-              Challenge up (singles)
+              Challenge someone
             </Link>
           </div>
         </div>

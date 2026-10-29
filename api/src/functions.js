@@ -830,6 +830,23 @@ fns.challengePenaltyPreview = async ({ env, user }, body) => {
   }
   const [def, chal] = await Promise.all([getPlayers(env, [c.defender_player_id]), getPlayers(env, [c.challenger_player_id])]).then((r) => [r[0][0], r[1][0]]);
   if (!def || !chal) throw new HttpError(404, 'Player not found.');
+  return duckCosts(env, c, def, chal);
+};
+
+/** Before sending a singles challenge: what declining / ignoring it would cost `defender_player_id` (and pay you), and its direction. */
+fns.challengeQuote = async ({ env, user }, body) => {
+  if (!isStr(body.defender_player_id)) throw bad('Pick a player to challenge.');
+  const me = await requirePlayer(env, user);
+  const def = (await getPlayers(env, [body.defender_player_id]))[0];
+  if (!def) throw new HttpError(404, 'That player does not exist.');
+  if (def.id === me.id) throw bad('You cannot challenge yourself.');
+  const direction = me.singles_rating > def.singles_rating ? 'down' : 'up';
+  const c = { id: '', challenger_player_id: me.id, defender_player_id: def.id, direction };
+  return { direction, ...(await duckCosts(env, c, def, me)) };
+};
+
+/** { decline, expire }: { penalty, reason, drops_rank, rank_after, challenger_gain } for singles challenge `c` (real or quoted). */
+async function duckCosts(env, c, def, chal) {
   const facts = await penaltyFacts(env, c);
   const roster = await rankRows(env);
   const ranks = rankPlayers(roster, activeCut());
@@ -847,7 +864,7 @@ fns.challengePenaltyPreview = async ({ env, user }, body) => {
     };
   }
   return out;
-};
+}
 
 /**
  * Weekly allowance for the signed-in player (both formats): sends left, when the next send frees up, and which players

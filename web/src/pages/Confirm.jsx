@@ -7,7 +7,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { ResultRow } from "@/components/ResultRow";
 import { Button } from "@/components/ui/button";
-import { DeclineButton } from "@/pages/Challenges";
+import { DeclineButton, DoublesCard, awaitsMe } from "@/pages/Challenges";
 import { StakesLine } from "@/components/match/StakesLine";
 import { challengeClock, timeLeft } from "@/lib/ladder";
 import { timeAgo } from "@/lib/timeAgo";
@@ -131,11 +131,12 @@ export function Confirm() {
     enabled: !!user?.id,
     refetchOnMount: "always",
     queryFn: async () => {
-      const [m, c] = await Promise.all([
+      const [m, c, d] = await Promise.all([
         api.entities.Match.filter({ all_user_ids: user.id, status: "pending" }, { sort: "-created_date", limit: 100 }),
-        api.entities.Challenge.filter({ defender_user_id: user.id, status: "open" }, { sort: "-created_date", limit: 50 }),
+        api.entities.Challenge.filter({ defender_user_id: user.id, format: "singles", status: "open" }, { sort: "-created_date", limit: 50 }),
+        api.entities.Challenge.filter({ all_user_ids: user.id, format: "doubles", status: "open" }, { sort: "-created_date", limit: 50 }),
       ]);
-      return { matches: m.items || [], challenges: c.items || [] };
+      return { matches: m.items || [], challenges: c.items || [], doubles: (d.items || []).filter((x) => awaitsMe(x, user.id)) };
     },
   });
 
@@ -143,8 +144,10 @@ export function Confirm() {
   const live = (data?.matches || []).filter((m) => !m.expires_at || new Date(m.expires_at).getTime() > now);
   const toConfirm = live.filter((m) => !(m.accepted_user_ids || []).includes(user?.id));
   const waiting = live.filter((m) => (m.accepted_user_ids || []).includes(user?.id));
-  const challenges = (data?.challenges || []).filter((c) => !c.expires_at || new Date(c.expires_at).getTime() > now);
-  const empty = toConfirm.length === 0 && challenges.length === 0;
+  const fresh = (c) => !c.expires_at || new Date(c.expires_at).getTime() > now;
+  const challenges = (data?.challenges || []).filter(fresh);
+  const doubles = (data?.doubles || []).filter(fresh);
+  const empty = toConfirm.length === 0 && challenges.length === 0 && doubles.length === 0;
 
   // Whatever changed can show up on the ladder, home, feed and badges: refresh everything cheap.
   const refresh = () => queryClient.invalidateQueries();
@@ -227,6 +230,22 @@ export function Confirm() {
                         />
                       </div>
                     </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+            {doubles.length > 0 && (
+              <section>
+                <H2 n={doubles.length}>Doubles challenges for you</H2>
+                <ul className="mt-2 space-y-3">
+                  {doubles.map((c) => (
+                    <DoublesCard
+                      key={c.id}
+                      challenge={c}
+                      userId={user?.id}
+                      busy={busy}
+                      onRespond={(x, decision) => act(`${decision}-${x.id}`, "respondChallenge", { challenge_id: x.id, decision })}
+                    />
                   ))}
                 </ul>
               </section>

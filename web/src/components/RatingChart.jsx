@@ -41,7 +41,7 @@ function buildSeries(player, format, matches, dodged, walkovers) {
     ev.push({ at: m.verified_at || m.created_date, before: rc.before, after: rc.after, label: `${won ? "Beat" : "Lost to"} ${oppName} ${score}`, href: `/matches/${m.id}` });
   }
   if (format === "singles") {
-    for (const c of dodged) ev.push({ at: c.penalized_at, delta: -(c.penalty_rating || 0), label: `${c.penalty_reason === "expired" ? "Ignored" : "Declined"} ${c.challenger_name}'s challenge` });
+    for (const c of dodged) ev.push({ at: c.penalized_at, delta: -(c.penalty_rating || 0), label: `${c.penalty_reason?.startsWith("expired") ? "Ignored" : "Declined"} ${c.challenger_name}'s challenge` });
     for (const c of walkovers) ev.push({ at: c.penalized_at, delta: c.challenger_rating_gain || 0, label: `Walkover: ${c.defender_name} ignored your challenge` });
   }
   ev.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));

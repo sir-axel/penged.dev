@@ -68,6 +68,11 @@ describe('anyone can challenge anyone (singles)', () => {
   it('downward: declining is free (but starts the pair cooldown)', async () => {
     const [a, b] = await ladder('Aa1', 'Bb2', 'Cc3');
     await rate(a, 1401);
+    // the quote before sending matches the preview after
+    const q = (await call(a, 'challengeQuote', { defender_player_id: b.player.id })).body;
+    expect(q).toMatchObject({ direction: 'down', decline: { penalty: 0, reason: 'declined_down' }, expire: { penalty: 12, challenger_gain: 0 } });
+    expect((await call(b, 'challengeQuote', { defender_player_id: a.player.id })).body)
+      .toMatchObject({ direction: 'up', decline: { penalty: 12, reason: 'declined' }, expire: { penalty: 24, challenger_gain: 24 } });
     const ch = (await single(a, b)).body.challenge;
     const pv = (await call(b, 'challengePenaltyPreview', { challenge_id: ch.id })).body;
     expect(pv.decline).toMatchObject({ penalty: 0, reason: 'declined_down', drops_rank: false, challenger_gain: 0 });
