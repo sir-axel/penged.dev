@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/api/client";
 import { TIERS } from "@/lib/tiers";
+import { EloButton } from "@/components/EloButton";
 import { ratingFor } from "@/lib/ladder";
 
 const START = 1400;
@@ -97,7 +98,10 @@ export function RatingChart({ player }) {
   return (
     <section className="mt-8" aria-label="Rating history" data-testid="rating-chart">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="font-display text-[0.58rem] uppercase tracking-[0.22em] text-muted-foreground">Rating history</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="font-display text-[0.58rem] uppercase tracking-[0.22em] text-muted-foreground">Rating history</h2>
+          <EloButton format={format} />
+        </div>
         <div className="flex gap-1" role="tablist" aria-label="Rating chart format">
           {["singles", "doubles"].map((f) => (
             <button
