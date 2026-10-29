@@ -5,7 +5,7 @@ import { api } from "@/api/client";
 import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { TierEmblem } from "@/components/TierEmblem";
 import { useMyPlayer } from "@/hooks/useMyPlayer";
-import { TIERS, tierFor, PROVISIONAL } from "@/lib/tiers";
+import { TIERS, tierFor, nextTier, tierProgress, PROVISIONAL } from "@/lib/tiers";
 import { matchesPlayed, ratingFor } from "@/lib/ladder";
 
 const range = (i) => {
@@ -33,6 +33,7 @@ export function EloButton({ format = "singles", className = "" }) {
     return c;
   }, [players, fmt]);
   const mine = me && matchesPlayed(me, fmt) >= PROVISIONAL ? tierFor(ratingFor(me, fmt)).key : null;
+  const myRating = me ? ratingFor(me, fmt) : 0;
   const placing = me ? Math.max(0, PROVISIONAL - matchesPlayed(me, fmt)) : 0;
 
   return (
@@ -46,7 +47,7 @@ export function EloButton({ format = "singles", className = "" }) {
           elo :)
         </button>
       </DialogTrigger>
-      <DialogContent className="max-h-[88dvh] max-w-2xl overflow-y-auto overscroll-contain p-4 sm:p-6">
+      <DialogContent className="max-h-[88dvh] max-w-md overflow-y-auto overscroll-contain p-4 sm:p-6">
         <div>
           <p className="font-display text-[0.58rem] uppercase tracking-[0.2em] text-brand">{`${fmt} ladder`}</p>
           <DialogTitle className="mt-2 font-heading text-2xl font-bold tracking-tight">The ranks</DialogTitle>
@@ -54,28 +55,62 @@ export function EloButton({ format = "singles", className = "" }) {
             {`Your tier comes straight from your ${fmt} rating. Everyone starts at 1400 and plays ${PROVISIONAL} placement matches before a tier shows.`}
           </DialogDescription>
         </div>
-        <ol className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          {TIERS.map((t, i) => {
+        {mine && (
+          <div
+            className="flex items-center gap-3 rounded-sm border p-3"
+            style={{ backgroundColor: `var(--tier-${mine}-bg)`, borderColor: `var(--tier-${mine}-bd)` }}
+            data-testid="elo-you"
+          >
+            <TierEmblem tierKey={mine} size={36} />
+            <div className="min-w-0 flex-1">
+              <p className="font-heading text-sm font-bold" style={{ color: `var(--tier-${mine}-fg)` }}>
+                {`You: ${tierFor(myRating).name} · ${myRating}`}
+              </p>
+              <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-background/70">
+                <div className="h-full rounded-full" style={{ width: `${Math.round(tierProgress(myRating) * 100)}%`, backgroundColor: `var(--tier-${mine}-bd)` }} />
+              </div>
+              <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.1em]" style={{ color: `var(--tier-${mine}-fg)` }}>
+                {nextTier(myRating) ? `${nextTier(myRating).pointsToGo} to ${nextTier(myRating).tier.name}` : "Top of the ladder"}
+              </p>
+            </div>
+          </div>
+        )}
+        <ol className="relative" aria-label="Tiers, highest first">
+          {/* the ladder rail behind the emblems */}
+          <span aria-hidden="true" className="absolute bottom-8 left-[31px] top-8 w-[3px] rounded-full bg-gradient-to-b from-[var(--tier-grandmaster-bd)] via-[var(--tier-diamond-bd)] to-[var(--tier-wood-bd)] opacity-60" />
+          {[...TIERS.keys()].reverse().map((i) => {
+            const t = TIERS[i];
             const you = mine === t.key;
+            const n = counts[t.key] || 0;
             return (
-              <li
-                key={t.key}
-                data-testid={`tier-${t.key}`}
-                className={`flex items-center gap-3 rounded-sm border p-3 ${you ? "border-foreground" : "border-border"}`}
-                style={{ backgroundColor: `var(--tier-${t.key}-bg)` }}
-              >
-                <TierEmblem tierKey={t.key} size={48} />
-                <div className="min-w-0 flex-1">
-                  <p className="flex items-center gap-2 font-heading text-base font-bold" style={{ color: `var(--tier-${t.key}-fg)` }}>
-                    {t.name}
-                    {you && (
-                      <span className="rounded-sm bg-foreground px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.1em] text-background">you</span>
-                    )}
-                  </p>
-                  <p className="font-mono text-xs tabular-nums" style={{ color: `var(--tier-${t.key}-fg)` }}>{range(i)}</p>
-                  <p className="font-mono text-[10px] uppercase tracking-[0.1em] opacity-75" style={{ color: `var(--tier-${t.key}-fg)` }}>
-                    {counts[t.key] ? `${counts[t.key]} player${counts[t.key] === 1 ? "" : "s"}` : "nobody yet"}
-                  </p>
+              <li key={t.key} data-testid={`tier-${t.key}`} className="relative flex items-center gap-4 py-1.5">
+                <span
+                  className={`relative z-10 flex h-16 w-16 shrink-0 items-center justify-center rounded-sm border-2 shadow-sm ${you ? "ring-2 ring-foreground ring-offset-2 ring-offset-background" : ""}`}
+                  style={{ backgroundColor: `var(--tier-${t.key}-bg)`, borderColor: `var(--tier-${t.key}-bd)` }}
+                >
+                  <TierEmblem tierKey={t.key} size={44} />
+                </span>
+                <div
+                  className={`flex min-w-0 flex-1 items-center justify-between gap-3 rounded-sm border px-3 py-2.5 ${you ? "" : "border-transparent"}`}
+                  style={you ? { borderColor: `var(--tier-${t.key}-bd)`, backgroundColor: `var(--tier-${t.key}-bg)` } : undefined}
+                >
+                  <div className="min-w-0">
+                    <p
+                      className="flex items-center gap-2 font-heading text-base font-bold leading-tight"
+                      // Grandmaster's fg is white for its solid tile; off the tile its name takes the tile colour.
+                      style={{ color: t.key === "grandmaster" && !you ? "var(--tier-grandmaster-bg)" : `var(--tier-${t.key}-fg)` }}
+                    >
+                      {t.name}
+                      {you && (
+                        <span className="rounded-sm bg-foreground px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.1em] text-background">you</span>
+                      )}
+                    </p>
+                    <p className={`mt-0.5 font-mono text-xs tabular-nums ${you ? "" : "text-muted-foreground"}`} style={you ? { color: `var(--tier-${t.key}-fg)` } : undefined}>{range(i)}</p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="font-heading text-lg font-bold leading-none tabular-nums">{n}</p>
+                    <p className="font-mono text-[9px] uppercase tracking-[0.1em] text-muted-foreground">{n === 1 ? "player" : "players"}</p>
+                  </div>
                 </div>
               </li>
             );
