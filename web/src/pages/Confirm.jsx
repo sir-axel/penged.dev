@@ -9,6 +9,7 @@ import { ResultRow } from "@/components/ResultRow";
 import { Button } from "@/components/ui/button";
 import { DeclineButton, DoublesCard, awaitsMe } from "@/pages/Challenges";
 import { StakesLine } from "@/components/match/StakesLine";
+import { MatchedChip } from "@/components/MatchupCard";
 import { challengeClock, timeLeft } from "@/lib/ladder";
 import { timeAgo } from "@/lib/timeAgo";
 import { api } from "@/api/client";
@@ -206,10 +207,13 @@ export function Confirm() {
                 <ul className="mt-2 space-y-3">
                   {challenges.map((c) => (
                     <li className="rounded-sm border border-border bg-card p-3" key={c.id} data-testid="challenge-card">
-                      <p className="font-heading text-sm font-semibold">
-                        {c.challenger_name}
-                        {" (#"}
-                        {c.challenger_rank})
+                      <p className="flex flex-wrap items-center gap-1.5 font-heading text-sm font-semibold">
+                        <span>
+                          {c.challenger_name}
+                          {" (#"}
+                          {c.challenger_rank})
+                        </span>
+                        <MatchedChip challenge={c} />
                       </p>
                       <p className="mt-0.5 text-xs text-muted-foreground">{challengeClock(c.expires_at)}</p>
                       {c.message && <p className="mt-2 rounded-sm bg-secondary/60 px-2.5 py-1.5 text-xs">“{c.message}”</p>}

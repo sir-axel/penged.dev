@@ -6,6 +6,7 @@ import { useMyPlayer } from "@/hooks/useMyPlayer";
 import { Hero } from "@/components/home/Hero";
 import { BallStrip } from "@/components/home/BallStrip";
 import { YourSpot } from "@/components/home/YourSpot";
+import { HomeMatchup } from "@/components/MatchupCard";
 import { TopLadder } from "@/components/home/TopLadder";
 import { RecentMatches } from "@/components/home/RecentMatches";
 import { HouseRules } from "@/components/home/HouseRules";
@@ -114,6 +115,7 @@ export function Home() {
       />
       <BallStrip />
       {player && <YourSpot player={player} toConfirm={toConfirm} />}
+      {player && <HomeMatchup />}
       <TopLadder players={home.top} />
       <BallStrip className="hidden sm:block" />
       <RecentMatches matches={home.recent} />

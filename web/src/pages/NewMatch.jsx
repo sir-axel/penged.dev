@@ -12,6 +12,7 @@ import { PaddleToggle } from "@/components/match/PaddleToggle";
 import { PlayerPicker } from "@/components/match/PlayerPicker";
 import { ScoreStepper } from "@/components/match/ScoreStepper";
 import { StakesLine } from "@/components/match/StakesLine";
+import { MatchupCard } from "@/components/MatchupCard";
 import { Button } from "@/components/ui/button";
 import { api } from "@/api/client";
 
@@ -91,6 +92,13 @@ export function NewMatch() {
         description="Every player in the match has to confirm the result before it counts."
       />
       <div className="mx-auto max-w-2xl space-y-6 px-4 py-6 sm:px-6">
+        <MatchupCard
+          onRecord={(id) => {
+            setFormat("singles");
+            setRanked(true);
+            setOpponentId(id);
+          }}
+        />
         <section className="space-y-2">
           <p className="font-display text-[0.58rem] uppercase tracking-[0.22em] text-muted-foreground">
             Format

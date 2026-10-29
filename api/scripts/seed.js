@@ -25,7 +25,7 @@ async function main() {
   const existing = (await env.DB.prepare('SELECT (SELECT count(*) FROM "user") u, (SELECT count(*) FROM players) p').first());
   if (existing.u || existing.p) {
     if (!reset) throw new Error(`Database already has data (${existing.u} users, ${existing.p} players). Re-run with: npm run seed -- --reset`);
-    for (const t of ['players', 'matches', 'challenges', '_guard', 'session', 'account', 'verification', 'avatars', 'guild_requests', 'guild_members', 'guilds', '"user"']) await run(`DELETE FROM ${t}`);
+    for (const t of ['players', 'matches', 'challenges', '_guard', 'session', 'account', 'verification', 'avatars', 'guild_requests', 'guild_members', 'guilds', 'matchups', 'matchup_weeks', '"user"']) await run(`DELETE FROM ${t}`);
   }
 
   async function signUp(email, name) {

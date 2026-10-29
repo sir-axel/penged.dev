@@ -1288,6 +1288,7 @@ async function matchupView(env, me) {
     matchup = {
       id: mine.id, status: matchupState(mine, ch), opponent: pub('Player', ps[mine.opponent_player_id]), why: whyText(mine),
       said_yes_at: mine.said_yes_at, max_win: q.max_win, max_loss: q.max_loss, backout_cost: backoutCost(q.max_loss, me.singles_rating),
+      miss_cost: missCost(q.max_loss, me.singles_rating),
       frozen: !live, challenge: pub('Challenge', ch), match_id: mine.match_id, penalty_rating: mine.penalty_rating,
       penalty_reason: mine.penalty_reason, mutual: incoming.some((r) => r.player_id === mine.opponent_player_id),
     };

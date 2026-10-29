@@ -14,6 +14,7 @@ import { PlayerPicker } from "@/components/match/PlayerPicker";
 import { BountyChip } from "@/components/BountyChip";
 import { useBounties } from "@/hooks/useBounties";
 import { StakesLine, useStakes } from "@/components/match/StakesLine";
+import { MatchupCard, MatchedChip, WeekMatchesList } from "@/components/MatchupCard";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -357,6 +358,7 @@ export function Challenges() {
           queryClient.invalidateQueries({ queryKey: ["challenges"] });
           queryClient.invalidateQueries({ queryKey: ["players"] });
           queryClient.invalidateQueries({ queryKey: ["my-player"] });
+          queryClient.invalidateQueries({ queryKey: ["matchup"] });
         })
         .catch(() => {});
   }, [user?.id, queryClient]);
@@ -367,6 +369,7 @@ export function Challenges() {
     queryClient.invalidateQueries({ queryKey: ["players"] });
     queryClient.invalidateQueries({ queryKey: ["challenge-quote"] });
     queryClient.invalidateQueries({ queryKey: ["queue"] });
+    queryClient.invalidateQueries({ queryKey: ["matchup"] });
   };
   const act = async (name, payload, key) => {
     setBusy(key);
@@ -426,10 +429,13 @@ export function Challenges() {
       <li className="rounded-sm border border-border bg-card p-3" key={e.id}>
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <p className="font-heading text-sm font-semibold">
-              {mine ? "vs " : ""}
-              {other}
-              {otherRank != null && ` (#${otherRank})`}
+            <p className="flex flex-wrap items-center gap-1.5 font-heading text-sm font-semibold">
+              <span>
+                {mine ? "vs " : ""}
+                {other}
+                {otherRank != null && ` (#${otherRank})`}
+              </span>
+              <MatchedChip challenge={e} />
             </p>
             <p className="mt-0.5 text-xs text-muted-foreground">
               {e.status === "open" ? challengeClock(e.expires_at) : `Accepted — play by ${challengeClock(e.expires_at)}`}
@@ -464,6 +470,10 @@ export function Challenges() {
         description="Challenge anyone on the ladder, or set up a doubles challenge. The window is 72 hours, not counting weekends. Ducking a singles challenge from someone rated below you costs rating."
       />
       <div className="mx-auto max-w-2xl space-y-7 px-4 py-6 sm:px-6">
+        <div className="space-y-2">
+          <MatchupCard />
+          <WeekMatchesList />
+        </div>
         {error && (
           <p className="rounded-sm border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>
         )}
@@ -683,6 +693,7 @@ export function Challenges() {
                     <div className="flex items-center justify-between gap-2">
                       <span className="min-w-0 break-words font-heading text-sm">{title}</span>
                       <span className="flex shrink-0 items-center gap-1.5">
+                        <MatchedChip challenge={t} />
                         {mine && (
                           <span className="rounded-sm border border-foreground px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.1em]">
                             You
