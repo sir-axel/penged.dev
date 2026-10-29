@@ -13,7 +13,7 @@ import { tierChange, PROVISIONAL } from './tiers.js';
 import { decodeInternal, pub } from './schema.js';
 import {
   START_RATING, REPEAT_WINDOW_DAYS, rateMatch, xpForMatch, levelForXp, validateGames, summarizeGames,
-  RANK_SQL, DOUBLES_RANK_SQL, rankPlayers, ACTIVE_DAYS, meetingWeight, RATING_FLOOR, challengePenalty, WALKOVER_XP, COOLDOWN_DAYS, WAIVER_DAYS, FATIGUE_DAYS,
+  RANK_SQL, DOUBLES_RANK_SQL, rankPlayers, ACTIVE_DAYS, meetingWeight, NOVELTY_DAYS, stakes, RATING_FLOOR, challengePenalty, WALKOVER_XP, COOLDOWN_DAYS, WAIVER_DAYS, FATIGUE_DAYS,
 } from './rating.js';
 
 const MATCH_EXPIRY_MS = 7 * 86400000;
@@ -319,55 +319,68 @@ fns.submitMatch = ({ env, user }, body) =>
     return { match: pub('Match', await first(env, 'SELECT * FROM matches WHERE id = ?', id)) };
   });
 
-/** Builds the guarded statements that verify a match (ratings, xp, records, ladder). */
-async function verifyPlan(env, m, now) {
-  const players = await getPlayers(env, m.all_player_ids);
-  if (players.length !== m.all_player_ids.length) throw new HttpError(409, 'A player in this match no longer exists.');
-  const fmt = m.format;
-  const sides = { a: m.side_a.map((e) => e.player_id), b: m.side_b.map((e) => e.player_id) };
+/**
+ * rateMatch participants for a (real or previewed) match: ratings, games played, recency-weighted earlier meetings,
+ * days since the last verified match and novelty, all in format `fmt`. `excludeId` = the match itself (verify).
+ * Returns { players, parts, sideOf }.
+ */
+async function ratingParts(env, { fmt, sides, paddleOf, excludeId = '', now }) {
+  const ids = [...sides.a, ...sides.b];
+  const players = await getPlayers(env, ids);
+  if (players.length !== ids.length) throw new HttpError(409, 'A player in this match no longer exists.');
   const sideOf = (id) => (sides.a.includes(id) ? 'a' : 'b');
-  const ids = m.all_player_ids;
-
   // Earlier VERIFIED same-format meetings in the last 180 days. For player P, a meeting is an earlier match
   // where P was opposite at least one of P's opponents in this match (singles: the same opponent).
   // Each counts 0.5 ^ (days ago / REPEAT_HALF_LIFE_DAYS) (meetingWeight): it fades as time passes.
   const prevRows = await all(env,
     `SELECT side_a, side_b, verified_at FROM matches WHERE status = 'verified' AND format = ? AND id <> ? AND verified_at > ?
        AND EXISTS (SELECT 1 FROM json_each(all_player_ids) WHERE value IN (${placeholders(ids.length)}))`,
-    fmt, m.id, daysAgoIso(REPEAT_WINDOW_DAYS), ...ids);
-  const prev = prevRows.map((r) => ({
-    A: JSON.parse(r.side_a).map((e) => e.player_id), B: JSON.parse(r.side_b).map((e) => e.player_id),
-    w: meetingWeight((Date.parse(now) - Date.parse(r.verified_at)) / 86400000),
-  }));
-  const earlier = (pid) => {
+    fmt, excludeId, daysAgoIso(REPEAT_WINDOW_DAYS), ...ids);
+  const prev = prevRows.map((r) => {
+    const days = (Date.parse(now) - Date.parse(r.verified_at)) / 86400000;
+    return { A: JSON.parse(r.side_a).map((e) => e.player_id), B: JSON.parse(r.side_b).map((e) => e.player_id), w: meetingWeight(days), days };
+  });
+  const meetings = (pid) => {
     const opps = sides[sideOf(pid) === 'a' ? 'b' : 'a'];
-    let n = 0;
-    for (const { A, B, w } of prev) {
+    return prev.filter(({ A, B }) => {
       const mine = A.includes(pid) ? A : B.includes(pid) ? B : null;
-      if (!mine) continue;
+      if (!mine) return false;
       const theirs = mine === A ? B : A;
-      if (opps.some((o) => theirs.includes(o))) n += w;
-    }
-    return n;
+      return opps.some((o) => theirs.includes(o));
+    });
   };
+  const rc = `${fmt}_rating`, wc = `${fmt}_wins`, lc = `${fmt}_losses`, gwc = `${fmt}_game_wins`, glc = `${fmt}_game_losses`, vc = `${fmt}_last_verified_at`;
+  const parts = players.map((p) => {
+    const met = meetings(p.id);
+    return {
+      id: p.id, side: sideOf(p.id), paddle: paddleOf(p.id), rating: p[rc], gamesPlayed: p[gwc] + p[glc], matchesPlayed: p[wc] + p[lc],
+      earlierMeetings: met.reduce((t, x) => t + x.w, 0),
+      // novelty / New rival: no meeting with these opponents in NOVELTY_DAYS (or ever)
+      novel: !met.some((x) => x.days < NOVELTY_DAYS),
+      daysSinceLast: p[vc] ? Math.max(0, (Date.parse(now) - Date.parse(p[vc])) / 86400000) : null,
+    };
+  });
+  return { players, parts, sideOf };
+}
+
+/** An accepted singles challenge between these two players (accepted before `before`), still in its play window. */
+const acceptedChallenge = (env, x, y, before, now) => first(env,
+  `SELECT * FROM challenges WHERE status = 'accepted' AND responded_at <= ? AND (expires_at IS NULL OR expires_at > ?)
+     AND ((challenger_player_id = ? AND defender_player_id = ?) OR (challenger_player_id = ? AND defender_player_id = ?)) LIMIT 1`,
+  before, now, x, y, y, x);
+
+/** Builds the guarded statements that verify a match (ratings, xp, records, ladder). */
+async function verifyPlan(env, m, now) {
+  const fmt = m.format;
+  const sides = { a: m.side_a.map((e) => e.player_id), b: m.side_b.map((e) => e.player_id) };
+  const paddleOf = (id) => [...m.side_a, ...m.side_b].find((e) => e.player_id === id)?.paddle;
+  const { players, parts, sideOf } = await ratingParts(env, { fmt, sides, paddleOf, excludeId: m.id, now });
 
   // An accepted challenge between these two players, accepted before this result was submitted, is played by this match.
   let ch = null;
-  if (fmt === 'singles') {
-    const winner = sides[m.winner_side][0];
-    const loser = sides[m.winner_side === 'a' ? 'b' : 'a'][0];
-    ch = await first(env,
-      `SELECT * FROM challenges WHERE status = 'accepted' AND responded_at <= ? AND (expires_at IS NULL OR expires_at > ?)
-         AND ((challenger_player_id = ? AND defender_player_id = ?) OR (challenger_player_id = ? AND defender_player_id = ?)) LIMIT 1`,
-      m.created_date, now, winner, loser, loser, winner);
-  }
+  if (fmt === 'singles') ch = await acceptedChallenge(env, sides.a[0], sides.b[0], m.created_date, now);
 
   const rc = `${fmt}_rating`, wc = `${fmt}_wins`, lc = `${fmt}_losses`, gwc = `${fmt}_game_wins`, glc = `${fmt}_game_losses`, vc = `${fmt}_last_verified_at`, sc = `${fmt}_win_streak`, bc = `${fmt}_best_streak`;
-  const paddleOf = (id) => [...m.side_a, ...m.side_b].find((e) => e.player_id === id)?.paddle;
-  const parts = players.map((p) => ({
-    id: p.id, side: sideOf(p.id), paddle: paddleOf(p.id), rating: p[rc], gamesPlayed: p[gwc] + p[glc], earlierMeetings: earlier(p.id),
-    daysSinceLast: p[vc] ? Math.max(0, (Date.parse(now) - Date.parse(p[vc])) / 86400000) : null,
-  }));
   const results = rateMatch(parts, m.winner_side, m.games, { target: m.target, challenge: !!ch });
   const sideAvg = (s) => sides[s].reduce((t, id) => t + players.find((x) => x.id === id)[rc], 0) / sides[s].length;
   const today = now.slice(0, 10);
@@ -390,6 +403,7 @@ async function verifyPlan(env, m, now) {
       skunks: m.games.filter((g) => mine(g) > theirs(g) && theirs(g) === 0).length,
       lostFirstGame: mine(m.games[0]) < theirs(m.games[0]),
       firstOfDay: p.last_match_day !== today,
+      newRival: parts.find((x) => x.id === p.id).novel,
     });
     const xpGain = xpRes.total;
     const xp = p.xp + xpGain;
@@ -400,12 +414,12 @@ async function verifyPlan(env, m, now) {
       res.after, gamesWon, m.games.length - gamesWon, xp, levelForXp(xp), now, streak, best, today, now, now, p.id));
     changes.push({
       player_id: p.id, name: nameOf(p), before: res.before, after: res.after, delta: res.delta,
-      dominance: res.dominance, rust: res.rust, repeat: res.repeat, evidence: res.evidence, challenge: res.challenge,
+      dominance: res.dominance, rust: res.rust, repeat: res.repeat, evidence: res.evidence, challenge: res.challenge, novelty: res.novelty,
       games: res.games.map((g) => ({
         game: g.game, score: g.score, won: g.won, before: g.before, after: g.after, delta: g.delta,
         expected: g.expected, dominance: g.dominance, mov: g.mov, ac: g.ac, paddle_edge: g.paddle_edge, k: g.k,
         rust: g.rust, opp_certainty: g.opp_certainty, evidence: g.evidence, repeat: g.repeat, teammate: g.teammate,
-        challenge: g.challenge,
+        challenge: g.challenge, novelty: g.novelty,
       })),
       xp_gained: xpGain, xp_parts: xpRes.parts, win_streak: streak,
       matches_played: p[wc] + p[lc] + 1, // in this format, including this match (placement badge)
@@ -422,6 +436,66 @@ async function verifyPlan(env, m, now) {
   }
   return { stmts, changes };
 }
+
+/**
+ * "What's on the line": rating change for each player if their side wins / loses a typical 2-1 (STAKES_GAMES), plus
+ * any tier crossing. Body: { match_id } (a pending match you are in) | { challenge_id } (an open/accepted challenge you
+ * are in; singles, played as a challenge) | { format, target, side_a: [{ player_id, paddle }], side_b } (Record a match).
+ */
+fns.matchStakes = async ({ env, user }, body) => {
+  const me = await requirePlayer(env, user);
+  const now = nowIso();
+  let fmt, target, sides, paddles = {}, challenge = false, match = null;
+  if (body.match_id != null) {
+    if (!isStr(body.match_id)) throw bad('Missing match.');
+    const m = await getMatch(env, body.match_id);
+    if (!m) throw new HttpError(404, 'Match not found.');
+    if (!m.all_user_ids.includes(user.id)) throw new HttpError(403, 'Only players in this match can see this.');
+    fmt = m.format; target = m.target; match = m;
+    sides = { a: m.side_a.map((e) => e.player_id), b: m.side_b.map((e) => e.player_id) };
+    for (const e of [...m.side_a, ...m.side_b]) paddles[e.player_id] = e.paddle;
+    if (fmt === 'singles') challenge = !!(await acceptedChallenge(env, sides.a[0], sides.b[0], m.created_date, now));
+  } else if (body.challenge_id != null) {
+    if (!isStr(body.challenge_id)) throw bad('Missing challenge.');
+    const c = await getChallenge(env, body.challenge_id);
+    if (!c) throw new HttpError(404, 'Challenge not found.');
+    if (c.challenger_user_id !== user.id && c.defender_user_id !== user.id) throw new HttpError(403, 'Only the two players can see this.');
+    fmt = 'singles'; target = 11; challenge = true;
+    sides = { a: [c.defender_player_id], b: [c.challenger_player_id] };
+  } else {
+    fmt = body.format; target = body.target;
+    if (fmt !== 'singles' && fmt !== 'doubles') throw bad('Choose singles or doubles.');
+    if (target !== 11 && target !== 21) throw bad('Choose a game target of 11 or 21.');
+    const size = fmt === 'singles' ? 1 : 2;
+    const a = parseSide(body.side_a, size, 'your side');
+    const b = parseSide(body.side_b, size, 'the other side');
+    const ids = [...a, ...b].map((e) => e.player_id);
+    if (new Set(ids).size !== ids.length) throw bad('Every player can only appear once.');
+    if (!a.some((e) => e.player_id === me.id)) throw bad('You must be on the first side of the match.');
+    sides = { a: a.map((e) => e.player_id), b: b.map((e) => e.player_id) };
+    for (const e of [...a, ...b]) paddles[e.player_id] = e.paddle;
+    if (fmt === 'singles') challenge = !!(await acceptedChallenge(env, sides.a[0], sides.b[0], now, now));
+  }
+  const { players, parts } = await ratingParts(env, { fmt, sides, paddleOf: (id) => paddles[id] || 'default', now });
+  const bySide = { a: parts.filter((p) => p.side === 'a'), b: parts.filter((p) => p.side === 'b') };
+  const out = stakes({ format: fmt, target, sides: bySide, paddles, challenge }, tierChange);
+  const nameById = Object.fromEntries(players.map((p) => [p.id, nameOf(p)]));
+  // A pending match already has its scores: also say exactly what confirming it does (same rules verification uses).
+  const actual = match
+    ? Object.fromEntries(rateMatch(parts.map((p) => ({ ...p, paddle: paddles[p.id] || 'default' })), match.winner_side, match.games,
+      { target, challenge }).map((r) => [r.id, r]))
+    : null;
+  return {
+    format: fmt, target, challenge, assumed: 'a 2-1 match with typical scores',
+    players: out.map((x) => {
+      const r = actual?.[x.id];
+      return {
+        ...x, player_id: x.id, name: nameById[x.id], you: x.id === me.id,
+        ...(r ? { result: r.delta, result_after: r.after, result_tier: x.placing ? null : tierChange(x.rating, r.after) } : null),
+      };
+    }),
+  };
+};
 
 fns.respondMatch = ({ env, user }, body) =>
   retrying(async () => {

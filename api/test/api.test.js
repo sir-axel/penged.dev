@@ -75,12 +75,12 @@ describe('match flow', () => {
     expect(acc.status).toBe(200);
     expect(acc.body.match.status).toBe('verified');
     const rc = acc.body.match.rating_changes;
-    expect(rc.find((x) => x.player_id === b.player.id)).toMatchObject({ before: 1400, after: 1427, delta: 27, xp_gained: 25 + 25 + 10 + 10 });
-    expect(rc.find((x) => x.player_id === a.player.id)).toMatchObject({ delta: -27, xp_gained: 25 + 10 });
+    expect(rc.find((x) => x.player_id === b.player.id)).toMatchObject({ before: 1400, after: 1429, delta: 29, xp_gained: 25 + 25 + 10 + 10 + 10 }); // +10 new rival
+    expect(rc.find((x) => x.player_id === a.player.id)).toMatchObject({ delta: -29, xp_gained: 25 + 10 + 10 });
     const players = (await get('/api/entities/Player?sort=singles_rank')).body.items;
     expect(players.map((p) => [p.username, p.singles_rank])).toEqual([['Bobby', 1], ['Carol', 2], ['Alice', 3]]);
-    expect(players[0]).toMatchObject({ singles_wins: 1, xp: 70, level: 2, singles_rating: 1427, singles_win_streak: 1, singles_best_streak: 1 });
-    expect(players[2]).toMatchObject({ singles_losses: 1, xp: 35, singles_rating: 1373, singles_win_streak: 0 });
+    expect(players[0]).toMatchObject({ singles_wins: 1, xp: 80, level: 2, singles_rating: 1429, singles_win_streak: 1, singles_best_streak: 1 });
+    expect(players[2]).toMatchObject({ singles_losses: 1, xp: 45, singles_rating: 1371, singles_win_streak: 0 });
     // second response after verification is rejected
     expect((await call(a, 'respondMatch', { match_id: m.id, decision: 'accept' })).status).toBe(400);
   });
@@ -95,7 +95,9 @@ describe('match flow', () => {
     const first = await play();
     const second = await play();
     const d = (rc, id) => rc.find((x) => x.player_id === id).delta;
-    expect(d(first, a.player.id)).toBe(27);
+    expect(d(first, a.player.id)).toBe(29); // first meeting: x1.1 novelty
+    expect(first.find((x) => x.player_id === a.player.id).novelty).toBeCloseTo(1.1, 9);
+    expect(second.find((x) => x.player_id === a.player.id).novelty).toBe(1);
     expect(d(second, a.player.id)).toBeLessThan(d(first, a.player.id));
   });
 
@@ -128,7 +130,7 @@ describe('match flow', () => {
     expect(last.body.match.status).toBe('verified');
     const ps = (await get('/api/entities/Player?sort=singles_rank')).body.items;
     expect(ps.map((p) => p.username)).toEqual(['Aa1', 'Bb2', 'Cc3', 'Dd4']);
-    expect(ps.find((p) => p.username === 'Dd4')).toMatchObject({ doubles_wins: 1, doubles_game_wins: 1, doubles_game_losses: 0, singles_game_wins: 0, doubles_rating: 1413, singles_rating: 1400 });
+    expect(ps.find((p) => p.username === 'Dd4')).toMatchObject({ doubles_wins: 1, doubles_game_wins: 1, doubles_game_losses: 0, singles_game_wins: 0, doubles_rating: 1415, singles_rating: 1400 });
   });
 });
 
@@ -315,8 +317,8 @@ describe('rating-derived ranks', () => {
 
   it('a win moves you past everyone you now out-rate, not just the opponent', async () => {
     const a = await mkPlayer('Aa1'); const b = await mkPlayer('Bb2'); const c = await mkPlayer('Cc3');
-    await win(c, a); // c 1427, a 1373, b 1400
-    expect(await ranks()).toEqual([['Cc3', 1, 1427], ['Bb2', 2, 1400], ['Aa1', 3, 1373]]);
+    await win(c, a); // c 1429, a 1371, b 1400
+    expect(await ranks()).toEqual([['Cc3', 1, 1429], ['Bb2', 2, 1400], ['Aa1', 3, 1371]]);
     void b;
   });
 
@@ -333,12 +335,12 @@ describe('rating-derived ranks', () => {
 
   it('new players join at 1400 in the right position; deleting leaves no gaps', async () => {
     const a = await mkPlayer('Aa1'); const b = await mkPlayer('Bb2');
-    await win(a, b); // a 1427, b 1373
+    await win(a, b); // a 1429, b 1371
     const c = await mkPlayer('Cc3'); // 1400 -> between them
-    expect(await ranks()).toEqual([['Aa1', 1, 1427], ['Cc3', 2, 1400], ['Bb2', 3, 1373]]);
+    expect(await ranks()).toEqual([['Aa1', 1, 1429], ['Cc3', 2, 1400], ['Bb2', 3, 1371]]);
     expect(c.player.singles_rank).toBe(2); // derived in the same batch as the insert
     await call(c, 'deleteAccount', { confirm: 'DELETE' });
-    expect(await ranks()).toEqual([['Aa1', 1, 1427], ['Bb2', 2, 1373]]);
+    expect(await ranks()).toEqual([['Aa1', 1, 1429], ['Bb2', 2, 1371]]);
   });
 
   it('ties are deterministic: more games played first, then earlier joiner', async () => {
@@ -555,7 +557,7 @@ describe('atomicity / races (D1 batch guards)', () => {
     expect(m.rating_changes).toHaveLength(4);
     const ps = (await get('/api/entities/Player')).body.items;
     expect(ps.every((p) => p.doubles_wins + p.doubles_losses === 1)).toBe(true);
-    expect(ps.reduce((n, p) => n + p.xp, 0)).toBe(2 * (25 + 25 + 10 + 10) + 2 * (25 + 10));
+    expect(ps.reduce((n, p) => n + p.xp, 0)).toBe(2 * (25 + 25 + 10 + 10 + 10) + 2 * (25 + 10 + 10)); // everyone: +10 new rival
   });
 
   it('a stale guard rolls back the whole batch', async () => {

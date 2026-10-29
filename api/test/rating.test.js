@@ -80,7 +80,7 @@ describe('elo (per game)', () => {
     const s = duel(1400, 1400, SWEEP, reg, reg).w.delta;
     const gr = duel(1400, 1400, GRIND, reg, reg).w.delta;
     const c = duel(1400, 1400, CLOSE20, reg, reg).w.delta;
-    expect([s, gr, c]).toEqual([41, 10, 22]);
+    expect([s, gr, c]).toEqual([44, 10, 23]);
     expect(s).toBeGreaterThan(2 * gr);
     expect(c).toBeGreaterThan(gr);
     expect(c).toBeLessThan(s);
@@ -108,15 +108,15 @@ describe('elo (per game)', () => {
     expect(huge.l.delta).toBe(-80);
     expect(huge.w.after).toBe(1180);
   });
-  it('first match 1400 beats 1600 (regulars): blowout +77, narrow 2-1 +30, narrow sweep +52, mirrored for the loser', () => {
+  it('first match 1400 beats 1600 (regulars): blowout +80 (match cap), narrow 2-1 +33, narrow sweep, mirrored for the loser', () => {
     const b = duel(1400, 1600, BLOW);
-    expect([b.w.delta, b.l.delta]).toEqual([77, -77]);
-    expect(b.w).toMatchObject({ before: 1400, after: 1477 });
-    expect(b.w.games.map((g) => g.delta)).toEqual([29, 24, 24]);
+    expect([b.w.delta, b.l.delta]).toEqual([80, -80]);
+    expect(b.w).toMatchObject({ before: 1400, after: 1480 });
+    expect(b.w.games.map((g) => g.delta)).toEqual([32, 26, 22]);
     const n = duel(1400, 1600, NARROW);
-    expect([n.w.delta, n.l.delta]).toEqual([30, -30]);
-    expect(n.w.games.map((g) => g.delta)).toEqual([19, -6, 17]);
-    expect(duel(1400, 1600, [{ a: 11, b: 9 }, { a: 11, b: 9 }, { a: 12, b: 10 }]).w.delta).toBe(52);
+    expect([n.w.delta, n.l.delta]).toEqual([33, -33]);
+    expect(n.w.games.map((g) => g.delta)).toEqual([20, -6, 19]);
+    expect(duel(1400, 1600, [{ a: 11, b: 9 }, { a: 11, b: 9 }, { a: 12, b: 10 }]).w.delta).toBe(56);
     expect(b.w.games[0].mov).toBeCloseTo(0.75 + 1.25 * Math.sqrt(9 / 13), 6);
     expect(b.w.games[0].ac).toBeGreaterThan(1);
   });
@@ -143,8 +143,8 @@ describe('elo (per game)', () => {
     const crushedByLower = duel(1400, 1600, BLOW).l.delta;
     const narrowToHigher = duel(1600, 1400, [{ a: 11, b: 9 }, { a: 11, b: 9 }, { a: 12, b: 10 }]).l.delta;
     expect(Math.abs(crushedByLower)).toBeGreaterThan(Math.abs(narrowToHigher));
-    expect(crushedByLower).toBe(-77);
-    expect(narrowToHigher).toBe(-14);
+    expect(crushedByLower).toBe(-80);
+    expect(narrowToHigher).toBe(-15);
   });
   it('loser loses less in a narrow loss than a blowout loss', () => {
     expect(duel(1400, 1400, NARROW).l.delta).toBeGreaterThan(duel(1400, 1400, BLOW).l.delta);
@@ -436,10 +436,11 @@ describe('paddle edge', () => {
 describe('smooth K (games), rust, certainty, target-21, recency, teammate, challenge', () => {
   const G = [{ a: 11, b: 5 }, { a: 11, b: 6 }];
   const base = { rating: 1400, oppRating: 1400, gamesPlayed: 20, won: true, dominance: 0.25 };
-  it('K decays smoothly with GAMES from 48 toward 32', () => {
+  it('K decays smoothly with GAMES from 48 toward 32 (decay 60 games)', () => {
     expect(kSmooth(0)).toBe(48);
-    expect(kSmooth(30)).toBeCloseTo(32 + 16 / Math.E, 9);
-    expect(kSmooth(1000)).toBeCloseTo(32, 6);
+    expect(kSmooth(60)).toBeCloseTo(32 + 16 / Math.E, 9);
+    expect(kSmooth(25)).toBeCloseTo(42.55, 2);
+    expect(kSmooth(2000)).toBeCloseTo(32, 6);
     for (let g = 0; g < 90; g++) expect(kSmooth(g + 1)).toBeLessThan(kSmooth(g));
     // within one match K already eases game by game
     const r = duel(1400, 1400, SWEEP, { gamesPlayed: 0 }, { gamesPlayed: 0 }).w.games;
@@ -447,21 +448,24 @@ describe('smooth K (games), rust, certainty, target-21, recency, teammate, chall
     expect(r[1].k).toBeCloseTo(kSmooth(1), 9);
     expect(r[2].k).toBeCloseTo(kSmooth(2), 9);
   });
-  it('rust: none under 3 weeks or on a first match, +50% cap after ~3.5 months; first game of the match only', () => {
+  it('rust: none under 3 weeks or on a first match, double K from 61 days; every game of the return match', () => {
     expect(rustFactor(null)).toBe(1);
     expect(rustFactor(0)).toBe(1);
     expect(rustFactor(21)).toBe(1);
-    expect(rustFactor(81)).toBeCloseTo(1.5, 9);
-    expect(rustFactor(51)).toBeCloseTo(1.25, 9);
-    expect(rustFactor(1000)).toBe(1.5);
+    expect(rustFactor(41)).toBeCloseTo(1.5, 9);
+    expect(rustFactor(31)).toBeCloseTo(1.25, 9);
+    expect(rustFactor(61)).toBeCloseTo(2, 9);
+    expect(rustFactor(1000)).toBe(2);
     const rusty = computeDelta({ ...base, daysSinceLast: 141 });
     const fresh = computeDelta({ ...base, daysSinceLast: 5 });
-    expect(rusty.k).toBeCloseTo(fresh.k * 1.5, 9);
+    expect(rusty.k).toBeCloseTo(fresh.k * 2, 9);
     expect(rusty.delta).toBeGreaterThan(fresh.delta);
-    expect(rusty.rust).toBe(1.5);
-    const m = duel(1400, 1400, SWEEP, { ...reg, daysSinceLast: 141 }, reg).w;
-    expect(m.games.map((g) => g.rust)).toEqual([1.5, 1, 1]);
+    expect(rusty.rust).toBe(2);
+    const m = duel(1400, 1400, SWEEP, { ...reg, daysSinceLast: 41 }, reg).w;
+    expect(m.games.map((g) => g.rust)).toEqual([1.5, 1.5, 1.5]);
     expect(m.rust).toBe(1.5);
+    // the opponent who stayed active is not rusty
+    expect(duel(1400, 1400, SWEEP, { ...reg, daysSinceLast: 41 }, reg).l.games.every((g) => g.rust === 1)).toBe(true);
   });
   it('opponent certainty: new opponents move you less, full weight from 10 games', () => {
     expect(certaintyWeight(0)).toBe(0.8);
@@ -571,23 +575,24 @@ describe('worked examples (asserted so the Rules copy stays true)', () => {
     return [r.w.delta, r.l.delta];
   };
   it('1400 beats 1600, both regulars (25 games) with free paddles', () => {
-    expect(run(BLOW)).toEqual([77, -77]);
-    expect(duel(1400, 1600, BLOW).w.games.map((g) => g.delta)).toEqual([29, 24, 24]);
+    expect(run(BLOW)).toEqual([80, -80]); // 32+26+22: the match cap
+    expect(duel(1400, 1600, BLOW).w.games.map((g) => g.delta)).toEqual([32, 26, 22]);
     expect(expectedScore(1400, 1600)).toBeCloseTo(0.24, 2);
-    expect(run(NARROW)).toEqual([30, -30]);
-    expect(duel(1400, 1600, NARROW).w.games.map((g) => g.delta)).toEqual([19, -6, 17]);
+    expect(run(NARROW)).toEqual([33, -33]);
+    expect(duel(1400, 1600, NARROW).w.games.map((g) => g.delta)).toEqual([20, -6, 19]);
   });
   it('the same blowout with a paid paddle for the winner / the loser', () => {
-    expect(run(BLOW, { w: { paddle: 'modded' }, l: {} })).toEqual([70, -70]);
-    expect(run(BLOW, { w: {}, l: { paddle: 'modded' } })).toEqual([80, -80]); // 32+27+21 = 80
+    expect(run(BLOW, { w: { paddle: 'modded' }, l: {} })).toEqual([76, -76]);
+    expect(run(BLOW, { w: {}, l: { paddle: 'modded' } })).toEqual([80, -80]); // 35+29 then capped at 80
   });
-  it('rust and challenge stakes: the match cap of 80 bites; the winner is rusty on game 1 only', () => {
-    expect(run(BLOW, { w: {}, l: {}, ctx: { challenge: true } })).toEqual([80, -80]);
-    expect(run(BLOW, { w: { daysSinceLast: 81 }, l: {} })).toEqual([80, -76]);
+  it('rust and challenge stakes: the match cap of 80 bites; rust covers the whole return match', () => {
+    expect(duel(1400, 1600, BLOW, {}, {}, { challenge: true }).w.games.map((g) => g.delta)).toEqual([40, 32, 8]);
+    expect(duel(1400, 1600, BLOW, { daysSinceLast: 81 }).w.games.map((g) => g.delta)).toEqual([40, 40, 0]);
+    expect(run(BLOW, { w: { daysSinceLast: 81 }, l: {} })).toEqual([80, -80]);
   });
   it('equal 1400s with 20 games each: 3-0 sweep, 2-1 grind, 2-0 close', () => {
     const e = (g) => duel(1400, 1400, g, reg, reg).w.delta;
-    expect([e(SWEEP), e(GRIND), e(CLOSE20)]).toEqual([41, 10, 22]);
+    expect([e(SWEEP), e(GRIND), e(CLOSE20)]).toEqual([44, 10, 23]);
   });
 });
 

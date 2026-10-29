@@ -22,14 +22,17 @@ export const AC_MAX = 1.6;
 // (like home advantage). Scaled by the share of a side's players using one. Stored ratings never include it.
 export const PADDLE_EDGE = 50;
 // K (how far one result moves you): smooth in games played, Glicko-lite. K = K_FLOOR + K_EXTRA * exp(-games / K_DECAY_GAMES), games = GAMES played in that format (before GAME_K_SCALE)
-// => 48 for a brand-new player, easing to 32 once seasoned. (Tuned with scripts/simulate.js: the first-draft 24 floor lagged real skill.)
+// => 48 for a brand-new player, easing to 32 once seasoned. (Tuned with scripts/simulate.js: the first-draft 24 floor lagged real skill;
+// the 2026-10 scenario study moved the decay 30 -> 60 games: sudden improvers / slumps / returners caught up 3-16% sooner with no
+// loss of prediction or ordering in any scenario. See penged-qa/elo-glicko.md.)
 export const K_FLOOR = 32;
 export const K_EXTRA = 16;
-export const K_DECAY_GAMES = 30;
-// Rust: after RUST_FREE_DAYS without a verified match (same format) K grows by (days - free) / RUST_RAMP_DAYS, at most RUST_MAX.
+export const K_DECAY_GAMES = 60;
+// Rust: after RUST_FREE_DAYS without a verified match (same format) K grows by (days - free) / RUST_RAMP_DAYS, at most RUST_MAX,
+// for EVERY game of the first match back (61+ days away = double K for that match).
 export const RUST_FREE_DAYS = 21;
-export const RUST_RAMP_DAYS = 120;
-export const RUST_MAX = 0.5;
+export const RUST_RAMP_DAYS = 40;
+export const RUST_MAX = 1.0;
 // Opponent certainty: your change is scaled by CERT_BASE + (1 - CERT_BASE) * min(1, opponentGames / CERT_FULL_GAMES).
 export const CERT_BASE = 0.8;
 export const CERT_FULL_GAMES = 10;
@@ -50,6 +53,12 @@ export const TEAMMATE_MIN = 0.75;
 export const TEAMMATE_MAX = 1.25;
 // A verified singles match that completes an accepted challenge is worth more.
 export const CHALLENGE_STAKES = 1.25;
+// Novelty: an opponent you have not played (this format) in NOVELTY_DAYS, or ever, is fresh evidence: x NOVELTY_BONUS.
+// (Scenario study: better prediction and earlier ordering, and it rewards reaching out to different players.)
+export const NOVELTY_DAYS = 30;
+export const NOVELTY_BONUS = 1.1;
+// 'What's on the line' preview assumes a typical match: you win 2-1 with games of 11-7, 7-11, 11-7 (21: 21-15, 15-21, 21-15).
+export const STAKES_GAMES = { 11: [[11, 7], [7, 11], [11, 7]], 21: [[21, 15], [15, 21], [21, 15]] };
 // Ladder: no verified match in this many days = off the ranked ladder (listed as inactive); < PROVISIONAL_MATCHES = provisional.
 export const ACTIVE_DAYS = 30;
 export const PROVISIONAL_MATCHES = 5;
@@ -66,6 +75,7 @@ export const XP_STREAK_MAX = 50;
 export const XP_SKUNK = 15;
 export const XP_COMEBACK = 15;
 export const XP_FIRST_OF_DAY = 10;
+export const XP_NEW_RIVAL = 10; // first verified match vs an opponent in this format, or the first in NOVELTY_DAYS+
 
 export function expectedScore(you, opp) {
   return 1 / (1 + Math.pow(10, (opp - you) / 400));
@@ -84,9 +94,9 @@ export function kSmooth(gamesPlayed, decay = K_DECAY_GAMES) {
 }
 
 /** K multiplier for a player returning after daysSinceLast days (null = first ever match: none). */
-export function rustFactor(daysSinceLast) {
+export function rustFactor(daysSinceLast, max = RUST_MAX, ramp = RUST_RAMP_DAYS) {
   if (daysSinceLast == null) return 1;
-  return 1 + Math.min(RUST_MAX, Math.max(0, daysSinceLast - RUST_FREE_DAYS) / RUST_RAMP_DAYS);
+  return 1 + Math.min(max, Math.max(0, daysSinceLast - RUST_FREE_DAYS) / ramp);
 }
 
 /** Weight of your change by how established the opponent(s) are (average games played for doubles). */
@@ -146,8 +156,8 @@ export function autocorrMultiplier(winnerRating, loserRating) {
  */
 export function computeDelta({
   rating, oppRating, gamesPlayed, won, earlierMeetings = 0, dominance: dom = 0, edge = 0, oppEdge = 0,
-  daysSinceLast = null, oppGamesPlayed = CERT_FULL_GAMES, evidence = 1, teammate = 1, challenge = 1,
-  scale = GAME_K_SCALE, kDecay = K_DECAY_GAMES,
+  daysSinceLast = null, oppGamesPlayed = CERT_FULL_GAMES, evidence = 1, teammate = 1, challenge = 1, novelty = 1,
+  scale = GAME_K_SCALE, kDecay = K_DECAY_GAMES, rustMax = RUST_MAX, rustRamp = RUST_RAMP_DAYS,
 }) {
   scale = scale ?? GAME_K_SCALE;
   kDecay = kDecay ?? K_DECAY_GAMES;
@@ -156,17 +166,17 @@ export function computeDelta({
   const expected = expectedScore(eff, oppEff);
   const mov = movMultiplier(dom);
   const ac = won ? autocorrMultiplier(eff, oppEff) : autocorrMultiplier(oppEff, eff);
-  const rust = rustFactor(daysSinceLast);
+  const rust = rustFactor(daysSinceLast, rustMax ?? RUST_MAX, rustRamp ?? RUST_RAMP_DAYS);
   const k = kSmooth(gamesPlayed, kDecay) * rust;
   const certainty = certaintyWeight(oppGamesPlayed);
   const repeat = repeatFactor(earlierMeetings);
   const base = {
     expected, mov, ac, dominance: dom, paddle_edge: oppEdge - edge, k, rust, opp_certainty: certainty,
-    evidence, repeat, teammate, challenge,
+    evidence, repeat, teammate, challenge, novelty,
   };
   if (repeat === 0) return { delta: 0, after: rating, ...base };
   const result = won ? 1 : 0;
-  const raw = k * scale * (result - expected) * repeat * mov * ac * certainty * evidence * teammate * challenge;
+  const raw = k * scale * (result - expected) * repeat * mov * ac * certainty * evidence * teammate * challenge * novelty;
   let delta = Math.sign(raw) * Math.round(Math.abs(raw));
   delta = Math.max(-MAX_GAME_DELTA, Math.min(MAX_GAME_DELTA, delta));
   if (delta === 0) delta = 0; // normalise -0
@@ -193,10 +203,11 @@ export function gameDominance(g) {
  * Rate a verified match GAME BY GAME. Each game is its own Elo event, applied in order: game 2 starts from the
  * ratings game 1 left behind. Each participant:
  * { id, rating, gamesPlayed (this format, before the match), earlierMeetings (recency-weighted MATCHES, not games),
- *   side: 'a'|'b', paddle?: 'default'|'modded', daysSinceLast?: number|null }
+ *   side: 'a'|'b', paddle?: 'default'|'modded', daysSinceLast?: number|null, novel?: boolean (no meeting with these opponents in NOVELTY_DAYS) }
  * Singles uses 1 per side, doubles 2 per side; opposing rating = opposing side average (+ paddle edge).
- * `games` ([{a,b}]) are in play order; `ctx` = { target?: 11|21, challenge?: boolean, gameKScale?, kDecayGames? }.
- * Rust applies on the first game only. K decays with games, so it also eases within the match.
+ * `games` ([{a,b}]) are in play order; `ctx` = { target?: 11|21, challenge?: boolean, gameKScale?, kDecayGames? }
+ * (ctx.rustFirstGameOnly / rustMax / rustRamp only replay older rules in scripts/simulate.js).
+ * Rust applies to every game of the match (it is the first match back). K decays with games, so it also eases within the match.
  * The running match total is clamped to +-MAX_DELTA (a game's delta is trimmed so the total stays inside it).
  * Returns [{ id, before, after, delta (match total), dominance (whole match), rust, repeat, challenge, evidence,
  *            games: [per-game entry] }].
@@ -235,13 +246,16 @@ export function rateMatch(participants, winnerSide, games = [], ctx = {}) {
         dominance: dom,
         edge: edge[p.side],
         oppEdge: edge[opp],
-        daysSinceLast: gi === 0 ? (p.daysSinceLast ?? null) : null,
+        daysSinceLast: gi === 0 || !ctx.rustFirstGameOnly ? (p.daysSinceLast ?? null) : null,
         oppGamesPlayed: avgGames[opp],
         evidence,
         teammate: mate ? teammateFactor(cur[p.id], cur[mate.id], won) : 1,
         challenge,
+        novelty: p.novel ? NOVELTY_BONUS : 1,
         scale: ctx.gameKScale,
         kDecay: ctx.kDecayGames,
+        rustMax: ctx.rustMax,
+        rustRamp: ctx.rustRamp,
       });
     }
     // all of this game's deltas are computed from the same pre-game ratings, then applied together
@@ -267,7 +281,38 @@ export function rateMatch(participants, winnerSide, games = [], ctx = {}) {
     return {
       id: p.id, before: p.rating, after: cur[p.id], delta: cur[p.id] - p.rating,
       dominance: matchDom, rust: gs[0]?.rust ?? 1, repeat: gs[0]?.repeat ?? 1, challenge, evidence,
-      games: gs,
+      novelty: gs[0]?.novelty ?? 1, games: gs,
+    };
+  });
+}
+
+/** The assumed typical games for a stakes preview, from side `winner`'s point of view (a 2-1 win). */
+export function stakesGames(target, winner) {
+  return (STAKES_GAMES[target] || STAKES_GAMES[11]).map(([w, l]) => (winner === 'a' ? { a: w, b: l } : { a: l, b: w }));
+}
+
+/**
+ * "What's on the line" preview. Pure: runs rateMatch on a typical 2-1 result each way.
+ * `sides` = { a: [participant], b: [participant] } with rateMatch's participant fields (id, rating, gamesPlayed,
+ * earlierMeetings, daysSinceLast, novel) plus matchesPlayed (this format, for placement); `paddles` = { id: 'default'|'modded' }.
+ * Returns [{ id, side, rating, win, lose, win_after, lose_after, tier_win, tier_lose, placing }]: win = delta if your side
+ * wins 2-1 (STAKES_GAMES), lose = delta if it loses by the mirror score. tier_* = { tier_before, tier_after } when that result
+ * crosses a tier for a placed player, else null. Pass `tierChange` (tiers.js) to get tier crossings.
+ */
+export function stakes({ format = 'singles', target = 11, sides, paddles = {}, challenge = false }, tierChange = null) {
+  const size = format === 'doubles' ? 2 : 1;
+  if (!sides || sides.a?.length !== size || sides.b?.length !== size) throw new Error('stakes: wrong side sizes');
+  const parts = ['a', 'b'].flatMap((s) => sides[s].map((p) => ({ ...p, side: s, paddle: paddles[p.id] || p.paddle || 'default' })));
+  const ctx = { target, challenge: !!challenge && format === 'singles' };
+  const res = { a: rateMatch(parts, 'a', stakesGames(target, 'a'), ctx), b: rateMatch(parts, 'b', stakesGames(target, 'b'), ctx) };
+  return parts.map((p, i) => {
+    const w = res[p.side][i];
+    const l = res[p.side === 'a' ? 'b' : 'a'][i];
+    const placing = (p.matchesPlayed ?? PROVISIONAL_MATCHES) < PROVISIONAL_MATCHES;
+    const tier = (after) => (tierChange && !placing ? tierChange(p.rating, after) : null);
+    return {
+      id: p.id, side: p.side, rating: p.rating, win: w.delta, lose: l.delta, win_after: w.after, lose_after: l.after,
+      tier_win: tier(w.after), tier_lose: tier(l.after), placing,
     };
   });
 }
@@ -275,10 +320,10 @@ export function rateMatch(participants, winnerSide, games = [], ctx = {}) {
 /**
  * XP for one player in one verified match.
  * { won, gamesWon, ratingGap (opponent side avg - own side avg), streak (win streak including this match, 0 if lost),
- *   skunks (games your side won to 0), lostFirstGame, firstOfDay }
+ *   skunks (games your side won to 0), lostFirstGame, firstOfDay, newRival (first match vs these opponents, or first in 30+ days) }
  * Returns { total, parts: [{ key, label, xp }] }.
  */
-export function xpForMatch({ won, gamesWon = 0, ratingGap = 0, streak = 0, skunks = 0, lostFirstGame = false, firstOfDay = false }) {
+export function xpForMatch({ won, gamesWon = 0, ratingGap = 0, streak = 0, skunks = 0, lostFirstGame = false, firstOfDay = false, newRival = false }) {
   const parts = [{ key: 'played', label: 'played', xp: XP_PLAYED }];
   if (won) parts.push({ key: 'win', label: 'win', xp: XP_WIN });
   const gw = XP_PER_GAME * Math.min(XP_MAX_GAMES, Math.max(0, gamesWon));
@@ -290,6 +335,7 @@ export function xpForMatch({ won, gamesWon = 0, ratingGap = 0, streak = 0, skunk
   if (skunks > 0) parts.push({ key: 'skunk', label: skunks > 1 ? `skunk x${skunks}` : 'skunk', xp: XP_SKUNK * skunks });
   if (won && lostFirstGame) parts.push({ key: 'comeback', label: 'comeback', xp: XP_COMEBACK });
   if (firstOfDay) parts.push({ key: 'first_of_day', label: 'first match of the day', xp: XP_FIRST_OF_DAY });
+  if (newRival) parts.push({ key: 'new_rival', label: 'new rival', xp: XP_NEW_RIVAL });
   return { total: parts.reduce((s, x) => s + x.xp, 0), parts };
 }
 
