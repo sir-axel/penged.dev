@@ -71,7 +71,7 @@ export function NewMatch() {
         title="Record a match"
         description="Every player in the match has to confirm the result before it counts."
       />
-      <div className="mx-auto max-w-2xl space-y-6 px-4 py-6 pb-28 sm:px-6">
+      <div className="mx-auto max-w-2xl space-y-6 px-4 py-6 sm:px-6">
         <section className="space-y-2">
           <p className="font-display text-[0.58rem] uppercase tracking-[0.22em] text-muted-foreground">
             Format
@@ -268,7 +268,8 @@ export function NewMatch() {
           </p>
         )}
       </div>
-      <div className="kb-bar fixed inset-x-0 bottom-[calc(58px+env(safe-area-inset-bottom))] z-20 border-t border-border bg-background/95 px-4 py-3 backdrop-blur md:bottom-0">
+      {/* Sticky, not fixed: stays in view while filling the form, then rests at the end of it, so it never covers the footer. */}
+      <div className="kb-bar sticky bottom-[calc(58px+env(safe-area-inset-bottom))] z-20 border-t border-border bg-background/95 px-4 py-3 backdrop-blur md:bottom-0">
         <div className="mx-auto max-w-2xl">
           <Button
             onClick={async () => {
