@@ -28,6 +28,12 @@
     --brand-soft: 356 70% 94%;
     --success: 148 46% 26%;
     --warning: 32 78% 31%;
+    --tier-wood-fg: #5c4a32;
+    --tier-wood-bg: #efe8dc;
+    --tier-wood-bd: #8b7355;
+    --tier-iron-fg: #4a3f3a;
+    --tier-iron-bg: #ebe5e1;
+    --tier-iron-bd: #7d6b62;
     --tier-bronze-fg: #7a4a1c;
     --tier-bronze-bg: #f6e9dc;
     --tier-bronze-bd: #8a5a2b;
@@ -83,6 +89,12 @@
     --brand-soft: 356 40% 16%;
     --success: 148 45% 52%;
     --warning: 34 85% 58%;
+    --tier-wood-fg: #cdb48f;
+    --tier-wood-bg: #2a241b;
+    --tier-wood-bd: #8b7355;
+    --tier-iron-fg: #c9bdb5;
+    --tier-iron-bg: #29231f;
+    --tier-iron-bd: #7d6b62;
     --tier-bronze-fg: #e8b98a;
     --tier-bronze-bg: #33241a;
     --tier-bronze-bd: #a8713c;

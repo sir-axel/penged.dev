@@ -15,7 +15,7 @@ describe('tiers', () => {
     expect(api).toBe(web);
   });
   it('tierFor boundaries', () => {
-    const cases = [[700, 'bronze'], [1349, 'bronze'], [1350, 'silver'], [1449, 'silver'], [1450, 'gold'], [1549, 'gold'], [1550, 'platinum'],
+    const cases = [[700, 'wood'], [1049, 'wood'], [1050, 'iron'], [1199, 'iron'], [1200, 'bronze'], [1349, 'bronze'], [1350, 'silver'], [1449, 'silver'], [1450, 'gold'], [1549, 'gold'], [1550, 'platinum'],
       [1649, 'platinum'], [1650, 'diamond'], [1799, 'diamond'], [1800, 'master'], [1949, 'master'], [1950, 'grandmaster'], [2400, 'grandmaster']];
     for (const [r, k] of cases) expect(T.tierFor(r).key, String(r)).toBe(k);
   });

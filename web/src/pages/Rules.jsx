@@ -24,7 +24,7 @@ export const RULE_SECTIONS = [
     title: "Tiers",
     items: [
       ...TIERS.map((t, i) =>
-        i === 0 ? `${t.name}: under ${TIERS[1].min}` : i === TIERS.length - 1 ? `${t.name}: ${t.min} and up` : `${t.name}: ${t.min}–${TIERS[i + 1].min - 1}`,
+        i === 0 ? `${t.name}: 700 (the floor)–${TIERS[1].min - 1}` : i === TIERS.length - 1 ? `${t.name}: ${t.min} and up` : `${t.name}: ${t.min}–${TIERS[i + 1].min - 1}`,
       ),
       "Singles and doubles each have their own tier, from their own rating. The Overall board shows the tier of its blended score, for display only.",
       "Placement until you've played 5 matches in that format.",
