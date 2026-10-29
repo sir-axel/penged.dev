@@ -12,7 +12,7 @@ export const PRINCIPLES = [
   {
     tag: "03",
     title: "Challenges, not shortcuts",
-    body: "Your rank is your rating order. Ducking a challenge costs rating, and ignoring it for 72 hours costs double and pays the challenger.",
+    body: "Your rank is your rating order. Ducking a challenge costs rating, and ignoring it for 72 hours (weekends don't count) costs double and pays the challenger.",
   },
 ];
 export function HouseRules() {

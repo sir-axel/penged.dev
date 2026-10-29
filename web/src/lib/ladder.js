@@ -35,6 +35,23 @@ export function timeLeft(e) {
     r = Math.floor(n / 24);
   return r >= 1 ? `${r}d ${n % 24}h left` : `${n}h ${Math.floor((t % 36e5) / 6e4)}m left`;
 }
+/** Challenge clock: time left plus the local due time. Weekends (Sat/Sun) don't count toward the 72 hours, so the due time already skips them. */
+export function challengeClock(iso) {
+  const left = timeLeft(iso);
+  if (!iso || left === "Window closed") return left;
+  const d = new Date(iso);
+  const day = d.toLocaleDateString("en-US", { weekday: "short" });
+  const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }).replace(" AM", "am").replace(" PM", "pm");
+  return `${left} · due ${day} ${time} · weekends off`;
+}
+/** The browser's IANA time zone (e.g. "America/Chicago"), or null. */
+export function browserTimeZone() {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || null;
+  } catch {
+    return null;
+  }
+}
 export function matchesPlayed(e, t) {
   let n = t === "doubles" ? "doubles" : "singles";
   return (Number(e?.[`${n}_wins`]) || 0) + (Number(e?.[`${n}_losses`]) || 0);

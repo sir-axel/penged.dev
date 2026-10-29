@@ -9,7 +9,7 @@ import { ResultRow } from "@/components/ResultRow";
 import { Button } from "@/components/ui/button";
 import { DeclineButton } from "@/pages/Challenges";
 import { StakesLine } from "@/components/match/StakesLine";
-import { timeLeft } from "@/lib/ladder";
+import { challengeClock, timeLeft } from "@/lib/ladder";
 import { timeAgo } from "@/lib/timeAgo";
 import { api } from "@/api/client";
 
@@ -207,7 +207,7 @@ export function Confirm() {
                         {" (#"}
                         {c.challenger_rank})
                       </p>
-                      <p className="mt-0.5 text-xs text-muted-foreground">{timeLeft(c.expires_at)}</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">{challengeClock(c.expires_at)}</p>
                       {c.message && <p className="mt-2 rounded-sm bg-secondary/60 px-2.5 py-1.5 text-xs">“{c.message}”</p>}
                       <StakesLine request={{ challenge_id: c.id }} className="mt-2" />
                       <div className="mt-3 grid grid-cols-2 gap-2">

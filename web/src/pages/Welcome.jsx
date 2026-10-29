@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useMyPlayer } from "@/hooks/useMyPlayer";
 import { api } from "@/api/client";
+import { browserTimeZone } from "@/lib/ladder";
 
 export function Welcome() {
   let navigate = useNavigate(),
@@ -40,6 +41,7 @@ export function Welcome() {
                 username: username.trim(),
                 display_name: displayName.trim() || username.trim(),
                 avatar_url: avatarUrl,
+                timezone: browserTimeZone(),
               });
               if (r.data?.error) throw Error(r.data.error);
               (await queryClient.invalidateQueries({

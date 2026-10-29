@@ -5,7 +5,7 @@ import { LoaderCircle } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useMyPlayer } from "@/hooks/useMyPlayer";
 import { PageHeader } from "@/components/PageHeader";
-import { timeLeft } from "@/lib/ladder";
+import { challengeClock } from "@/lib/ladder";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/EmptyState";
@@ -71,7 +71,7 @@ export function DeclineButton({ challenge, busy, onDecline }) {
   const confirmText = !d
     ? "Decline this challenge?"
     : d.penalty > 0
-      ? `Declining costs ${d.penalty} rating${d.drops_rank ? ` and drops you to #${d.rank_after}` : ""}. Staying silent for 72 hours would cost ${data.expire.penalty} and pay the challenger. Decline anyway?`
+      ? `Declining costs ${d.penalty} rating${d.drops_rank ? ` and drops you to #${d.rank_after}` : ""}. Staying silent for 72 hours (weekends don't count) would cost ${data.expire.penalty} and pay the challenger. Decline anyway?`
       : "Declining is free this time — you played this challenger this week. Decline?";
   return (
     <AlertDialog>
@@ -185,7 +185,7 @@ export function Challenges() {
       <PageHeader
         eyebrow="Rank duels"
         title="Challenges"
-        description="Challenge up to three ranks above you. The window is 72 hours — ducking a challenge costs the defender rating."
+        description="Challenge up to three ranks above you. The window is 72 hours, not counting weekends — ducking a challenge costs the defender rating."
       />
       <div className="mx-auto max-w-2xl space-y-7 px-4 py-6 sm:px-6">
         {error && (
@@ -211,7 +211,7 @@ export function Challenges() {
                         {e.challenger_rank})
                       </p>
                       <p className="mt-0.5 text-xs text-muted-foreground">
-                        {timeLeft(e.expires_at)}
+                        {challengeClock(e.expires_at)}
                       </p>
                     </div>
                     <StatusBadge status={e.status} />
@@ -279,7 +279,7 @@ export function Challenges() {
                       </p>
                       <p className="mt-0.5 text-xs text-muted-foreground">
                         {e.status === "open"
-                          ? timeLeft(e.expires_at)
+                          ? challengeClock(e.expires_at)
                           : "Accepted — record the match when you play it"}
                       </p>
                     </div>
@@ -449,7 +449,7 @@ export function Challenges() {
         )}
         <EmptyState
           title="How challenges move rating"
-          body="Rank follows rating. Declining costs you rating; staying silent for 72 hours costs double and the challenger gains those points."
+          body="Rank follows rating. Declining costs you rating; staying silent for 72 hours (weekends don't count) costs double and the challenger gains those points."
           action={
             <Link
               to="/rules"

@@ -15,9 +15,10 @@ import {
   START_RATING, REPEAT_WINDOW_DAYS, rateMatch, xpForMatch, levelForXp, validateGames, summarizeGames,
   RANK_SQL, DOUBLES_RANK_SQL, rankPlayers, ACTIVE_DAYS, meetingWeight, NOVELTY_DAYS, stakes, currentRd, RATING_FLOOR, challengePenalty, WALKOVER_XP, COOLDOWN_DAYS, WAIVER_DAYS, FATIGUE_DAYS,
 } from './rating.js';
+import { weekdayDeadline, cleanTimeZone, DEFAULT_TZ } from './weekdays.js';
 
 const MATCH_EXPIRY_MS = 7 * 86400000;
-const CHALLENGE_MS = 72 * 3600000;
+const CHALLENGE_MS = 72 * 3600000; // weekday hours only: Sat/Sun in either player's zone pause the clock (weekdays.js)
 const PENDING_CAP = 10;
 
 const nameOf = (p) => p.display_name || p.username;
@@ -201,6 +202,14 @@ fns.setTheme = async ({ env, user }, body) => {
   return { theme: t };
 };
 
+/** The browser's IANA zone, saved on the player so challenge clocks skip THEIR weekends. Unknown zones are ignored. */
+fns.setTimezone = async ({ env, user }, body) => {
+  const tz = cleanTimeZone(body.timezone);
+  if (!tz) throw bad('Unknown time zone.');
+  await env.DB.prepare('UPDATE players SET timezone = ? WHERE user_id = ? AND timezone IS NOT ?').bind(tz, user.id, tz).run();
+  return { timezone: tz };
+};
+
 fns.createPlayer = ({ env, user }, body) =>
   retrying(async () => {
     const lv = await ladderVersion(env);
@@ -218,9 +227,10 @@ fns.createPlayer = ({ env, user }, body) =>
       guardLadder(env, lv),
       stmt(env,
         `INSERT INTO players (id, user_id, username, username_lower, display_name, avatar_url, singles_rating, doubles_rating,
-           singles_rank, last_active_at, created_date, updated_date, created_by_id)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-        id, user.id, username, username.toLowerCase(), display, avatar, START_RATING, START_RATING, rank, now, now, now, user.id),
+           singles_rank, last_active_at, created_date, updated_date, created_by_id, timezone)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        id, user.id, username, username.toLowerCase(), display, avatar, START_RATING, START_RATING, rank, now, now, now, user.id,
+        cleanTimeZone(body.timezone) || DEFAULT_TZ),
       ...rankStmts(env),
     ]);
     return { player: pub('Player', await first(env, 'SELECT * FROM players WHERE id = ?', id)) };
@@ -575,7 +585,7 @@ fns.createChallenge = ({ env, user }, body) =>
            defender_player_id, defender_name, defender_rank, message, status, expires_at, created_date, updated_date, created_by_id)
          VALUES (?,?,?,?,?,?,?,?,?,?,'open',?,?,?,?)`,
         id, user.id, me.id, nameOf(me), me.singles_rank, def.user_id, def.id, nameOf(def), def.singles_rank, message,
-        inFutureIso(CHALLENGE_MS), now, now, user.id),
+        weekdayDeadline(Date.parse(now), CHALLENGE_MS, [me.timezone, def.timezone]), now, now, user.id),
       touch(env, me.id, now),
     ]);
     return { challenge: pub('Challenge', await getChallenge(env, id)) };
@@ -599,11 +609,13 @@ fns.respondChallenge = ({ env, user }, body) =>
       await commit(env, [...plan.guards, ...plan.stmts, flagsStmt(env)]);
       return { challenge: pub('Challenge', await getChallenge(env, id)) };
     }
-    // Accepting starts a fresh 72h window to actually play; unplayed accepted challenges expire in syncLadder.
+    // Accepting starts a fresh 72h (weekday) window to actually play; unplayed accepted challenges expire in syncLadder.
+    const pair = await getPlayers(env, [c.challenger_player_id, c.defender_player_id]);
+    const playBy = weekdayDeadline(Date.parse(now), CHALLENGE_MS, pair.map((p) => p.timezone));
     await commit(env, [
       guardRow(env, 'challenges', c.id, c.version, 'open'),
       stmt(env, 'UPDATE challenges SET status = ?, responded_at = ?, expires_at = ?, updated_date = ?, version = version + 1 WHERE id = ?',
-        'accepted', now, inFutureIso(CHALLENGE_MS), now, c.id),
+        'accepted', now, playBy, now, c.id),
     ]);
     return { challenge: pub('Challenge', await getChallenge(env, id)) };
   });
