@@ -68,7 +68,7 @@ export function Register() {
       }
     >
       {error && (
-        <div className="mb-4 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">{error}</div>
+        <div className="mb-4 p-3 rounded-sm bg-destructive/10 text-destructive text-sm">{error}</div>
       )}
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-2">

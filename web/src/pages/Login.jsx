@@ -32,12 +32,12 @@ export function Login() {
       }
     >
       {new URLSearchParams(window.location.search).get("reset") === "1" && !error && (
-        <div role="status" className="mb-4 p-3 rounded-lg bg-success/10 text-success text-sm">
+        <div role="status" className="mb-4 p-3 rounded-sm bg-success/10 text-success text-sm">
           Password updated. Log in with your new password.
         </div>
       )}
       {error && (
-        <div className="mb-4 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
+        <div className="mb-4 p-3 rounded-sm bg-destructive/10 text-destructive text-sm">
           {error}
         </div>
       )}

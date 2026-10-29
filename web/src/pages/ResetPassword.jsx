@@ -60,7 +60,7 @@ export function ResetPassword() {
   return (
     <AuthShell icon={Lock} title="New password" subtitle="Choose a new password for your account">
       {error && (
-        <div role="alert" className="mb-4 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
+        <div role="alert" className="mb-4 p-3 rounded-sm bg-destructive/10 text-destructive text-sm">
           {error}
         </div>
       )}

@@ -158,11 +158,11 @@ export function Leaderboard() {
             ? "Singles rank is rating order for active players (a verified singles match in the last 30 days). Ties go to whoever has played more."
             : view === "doubles"
               ? "Doubles is its own ladder: doubles rating, doubles rank, doubles activity. It only moves on verified doubles results and never touches singles."
-              : "Overall is only a blend of your two separate ratings, weighted by how much you have played each. It is not used for any rating or rank."}{" "}
-          <Link to="/rules" className="inline-block py-3 text-brand underline underline-offset-2 sm:py-0">
-            How ranking works
-          </Link>
+              : "Overall is only a blend of your two separate ratings, weighted by how much you have played each. It is not used for any rating or rank."}
         </p>
+        <Link to="/rules" className="inline-flex min-h-10 items-center text-xs text-brand underline underline-offset-2">
+          How ranking works
+        </Link>
         {me && view === "overall" && (
           <p className="mt-1 text-xs text-muted-foreground">
             {"You have played "}
