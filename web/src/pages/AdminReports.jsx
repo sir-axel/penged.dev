@@ -20,6 +20,65 @@ const TABS = [
 ];
 const KIND = { post: "Post", topic: "Topic", dm: "Private message" };
 
+/** Reply to the person who reported: opens (or reuses) a private conversation with them and sends the message there. */
+function ReplyToReporter({ report, reporter, author }) {
+  const name = reporter?.display_name || reporter?.username || "them";
+  const what = { post: "post", topic: "topic", dm: "message" }[report.kind] || "post";
+  const by = author ? ` by ${author.display_name || author.username}` : "";
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState(`Thanks for reporting that ${what}${by}. `);
+  const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState(null);
+  const [err, setErr] = useState("");
+  if (!reporter) return null;
+  if (sent)
+    return (
+      <p className="mt-3 text-sm text-success" data-testid="report-replied">
+        {`Sent to ${name}. `}
+        <Link to={`/chat/dm/${sent}`} className="underline underline-offset-2">Open the conversation</Link>
+      </p>
+    );
+  if (!open)
+    return (
+      <Button variant="outline" className="mt-3 h-11 rounded-sm" onClick={() => setOpen(true)}>
+        {`Reply to ${name}`}
+      </Button>
+    );
+  const send = async () => {
+    setBusy(true);
+    setErr("");
+    try {
+      const { thread } = await call("dmStart", { player_id: reporter.id });
+      await call("dmSend", { thread_id: thread.id, body: text.trim() });
+      setSent(thread.id);
+    } catch (e) {
+      setErr(errMsg(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="mt-3 space-y-2 rounded-sm border border-border bg-secondary/40 p-2.5">
+      <label htmlFor={`reply-${report.id}`} className="block font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+        {`Private message to ${name}`}
+      </label>
+      <textarea
+        id={`reply-${report.id}`}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        rows={3}
+        maxLength={2000}
+        className="w-full rounded-sm border border-input bg-card px-3 py-2 text-base outline-none focus:border-foreground/40 lg:text-sm"
+      />
+      {err && <p role="alert" className="text-sm text-destructive">{err}</p>}
+      <div className="flex gap-2">
+        <Button className="h-11 rounded-sm" disabled={busy || !text.trim()} onClick={send}>{busy ? "Sending…" : "Send"}</Button>
+        <Button variant="outline" className="h-11 rounded-sm" onClick={() => setOpen(false)} disabled={busy}>Cancel</Button>
+      </div>
+    </div>
+  );
+}
+
 export function AdminReports() {
   const { user } = useAuth();
   const qc = useQueryClient();
@@ -96,6 +155,7 @@ export function AdminReports() {
                     <Button variant="outline" className="h-11 rounded-sm" onClick={() => resolve(r.id, "open")}>Reopen</Button>
                   )}
                 </div>
+                <ReplyToReporter report={r} reporter={people[r.reporter_player_id]} author={r.target ? people[r.target.author_player_id] : null} />
               </li>
             ))}
           </ul>

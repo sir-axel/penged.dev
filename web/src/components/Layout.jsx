@@ -126,7 +126,7 @@ export function Layout() {
               <User className="h-3.5 w-3.5" aria-hidden="true" />
               <span className="hidden sm:inline">My </span>
               profile
-              <CountBadge n={newFeedback} className="absolute -right-2 -top-2 rounded-full sm:static sm:rounded-full" />
+              <CountBadge n={newFeedback + chatUnread.reports} className="absolute -right-2 -top-2 rounded-full sm:static sm:rounded-full" />
               <UnreadDot n={unreadReplies} className="absolute -right-1 -top-1 sm:static" />
             </Link>
           ) : (
