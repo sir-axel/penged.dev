@@ -623,6 +623,7 @@ async function verifyPlan(env, m, now) {
         challenge: g.challenge, novelty: g.novelty,
       })),
       xp_gained: xpGain, xp_parts: xpRes.parts, win_streak: streak,
+      ...(res.close_loss ? { close_loss: res.close_loss } : null),
       ...(got.length ? { bounties: got.map((c) => ({ from: c.from, name: c.from_name, parts: c.parts, rating: c.rating, xp: c.xp })) } : null),
       ...(paid.length ? { bounty_paid: paid.reduce((t, c) => t + c.rating, 0) } : null),
       matches_played: p[wc] + p[lc] + 1, // in this format, including this match (placement badge)

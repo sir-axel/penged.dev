@@ -59,6 +59,13 @@ export const REPEAT_FLOOR = 0.3;
 export const TEAMMATE_SLOPE = 0.25;
 export const TEAMMATE_MIN = 0.75;
 export const TEAMMATE_MAX = 1.25;
+// Close-loss credit: losing to a side rated at least CLOSE_GAP_MIN above you, while taking more of the points than the
+// gap predicts (expectedPointShare), earns CLOSE_CREDIT_PER x (your point share - expected) rating, at most
+// CLOSE_CREDIT_MAX, instead of a loss, and the winners pay the same: letting a much weaker side get that close is a
+// bad result even in a win. Get beaten clearly and it is an ordinary loss: the underdog still has to prove it.
+export const CLOSE_GAP_MIN = 100;
+export const CLOSE_CREDIT_PER = 150;
+export const CLOSE_CREDIT_MAX = 15;
 // A verified match (singles or doubles) that completes an accepted challenge is worth more.
 export const CHALLENGE_STAKES = 1.25;
 // Novelty: an opponent you have not played (this format) in NOVELTY_DAYS, or ever, is fresh evidence: x NOVELTY_BONUS.
@@ -83,11 +90,53 @@ export const XP_STREAK_MAX = 50;
 export const XP_SKUNK = 15;
 export const XP_COMEBACK = 15;
 export const XP_FIRST_OF_DAY = 10;
+export const XP_SHOT = 15; // "took a shot": lost to a side rated XP_SHOT_GAP+ above you
+export const XP_SHOT_GAP = 100;
 export const XP_NEW_RIVAL = 10; // first verified match vs an opponent in this format, or the first in NOVELTY_DAYS+
 
 /** Plain Elo expectation (closeness of a challenge pair). */
 export function expectedScore(you, opp) {
   return 1 / (1 + Math.pow(10, (opp - you) / 400));
+}
+
+/** Chance of winning one game to `target` (win by 2) when you win each point with probability p. */
+export function gameWinFromPoint(p, target = 11) {
+  const q = 1 - p;
+  const n = target - 1;
+  let win = 0;
+  let c = 1; // C(n + k, k)
+  for (let k = 0; k < n; k++) {
+    win += c * Math.pow(p, target) * Math.pow(q, k);
+    c = (c * (n + k + 1)) / (k + 1);
+  }
+  const deuce = c * Math.pow(p, n) * Math.pow(q, n); // reach n-n
+  return win + (deuce * p * p) / (p * p + q * q);
+}
+
+/** Share of the points a side is expected to take, given its chance E of winning a game (inverts gameWinFromPoint). */
+export function expectedPointShare(E, target = 11) {
+  let lo = 0.01, hi = 0.99;
+  for (let i = 0; i < 40; i++) {
+    const mid = (lo + hi) / 2;
+    if (gameWinFromPoint(mid, target) < E) lo = mid; else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
+
+/**
+ * Close-loss credit for the LOSING side's players: { gap, share, expected, credit } or null. `gap` = winners' effective
+ * rating minus losers' (team means, paddle edges in); credit = round(CLOSE_CREDIT_PER x (share - expected)), max CLOSE_CREDIT_MAX.
+ */
+export function closeLossCredit({ loserEff, winnerEff, games, loserSide, target = 11 }) {
+  const gap = winnerEff - loserEff;
+  if (gap < CLOSE_GAP_MIN || !games.length) return null;
+  let mine = 0, all = 0;
+  for (const g of games) { mine += loserSide === 'a' ? g.a : g.b; all += g.a + g.b; }
+  if (!all) return null;
+  const share = mine / all;
+  const expected = expectedPointShare(expectedScore(loserEff, winnerEff), target);
+  const credit = Math.min(CLOSE_CREDIT_MAX, Math.round(CLOSE_CREDIT_PER * (share - expected)));
+  return credit > 0 ? { gap: Math.round(gap), share, expected, credit } : null;
 }
 
 /** Weight by the game target (21 is worth a little more than 11). */
@@ -301,9 +350,26 @@ export function rateMatch(participants, winnerSide, games = [], ctx = {}) {
     }
   });
   const md = dominance(games, winnerSide);
+  // Close-loss credit (from pre-match ratings): a narrow loss to a much stronger side becomes a small gain.
+  const loserSide = winnerSide === 'a' ? 'b' : 'a';
+  const effOf = (sd) => average(side(sd).map((p) => p.rating)) + edge[sd];
+  const close = games.length && ctx.closeCredit !== false
+    ? closeLossCredit({ loserEff: effOf(loserSide), winnerEff: effOf(winnerSide), games, loserSide, target: ctx.target || 11 })
+    : null;
   return participants.map((p) => {
     const s = st[p.id];
+    // Rematches earn less of it too (same repeat factor as the games), so a friendly 'close loss' can't be farmed.
+    const c = close ? Math.round(close.credit * repeatFactor(p.earlierMeetings || 0)) : 0;
+    let credit = null;
+    if (c > 0 && p.side === loserSide && s.r - p.rating < c) {
+      credit = { ...close, credit: c };
+      s.r = Math.max(RATING_FLOOR, p.rating + c);
+    } else if (c > 0 && p.side === winnerSide && s.r - p.rating > -c) {
+      credit = { ...close, credit: -c }; // the favourite let them get too close: pays what the underdog earned
+      s.r = Math.max(RATING_FLOOR, p.rating - c);
+    }
     return {
+      ...(credit ? { close_loss: { credit: credit.credit, gap: credit.gap, share: +credit.share.toFixed(3), expected: +credit.expected.toFixed(3) } } : null),
       id: p.id, before: p.rating, after: s.r, delta: s.r - p.rating, rd_before: s.rdStart, rd_after: s.phi * Q,
       vol_before: s.volStart, vol_after: s.vol, dominance: md, repeat: s.games[0]?.repeat ?? repeatFactor(p.earlierMeetings || 0),
       challenge, evidence, novelty: s.games[0]?.novelty ?? (p.novel ? NOVELTY_BONUS : 1), games: s.games,
@@ -368,6 +434,7 @@ export function xpForMatch({ won, gamesWon = 0, ratingGap = 0, streak = 0, skunk
   }
   if (won && streak >= 2) parts.push({ key: 'streak', label: 'streak', xp: Math.min(XP_STREAK_MAX, XP_STREAK_STEP * (streak - 1)) });
   if (skunks > 0) parts.push({ key: 'skunk', label: skunks > 1 ? `skunk x${skunks}` : 'skunk', xp: XP_SKUNK * skunks });
+  if (!won && ratingGap >= XP_SHOT_GAP) parts.push({ key: 'shot', label: 'took a shot', xp: XP_SHOT });
   if (won && lostFirstGame) parts.push({ key: 'comeback', label: 'comeback', xp: XP_COMEBACK });
   if (firstOfDay) parts.push({ key: 'first_of_day', label: 'first match of the day', xp: XP_FIRST_OF_DAY });
   if (newRival) parts.push({ key: 'new_rival', label: 'new rival', xp: XP_NEW_RIVAL });
@@ -461,10 +528,8 @@ export const CHALLENGE_CAP_DAYS = 7;
 export const CHALLENGES_RECEIVED_PER_WEEK = 2;
 export const CHALLENGES_SENT_PER_WEEK = 3;
 // Anyone on the ladder may challenge anyone. 'down' = the challenger was rated above the defender at creation:
-// declining costs DOWN_MULT x the upward decline penalty while they are within DOWN_CLOSE_GAP places, and is free beyond;
-// ignoring it costs DOWN_MULT x the upward expiry penalty at any gap. Never a walkover for the challenger.
+// declining or ignoring it costs DOWN_MULT x the upward penalty (it still shrinks with the rank gap). Never a walkover.
 export const DOWN_MULT = 0.5;
-export const DOWN_CLOSE_GAP = 2;
 
 // The defender's K for a dodge: the Glicko step a typical match (DODGE_GAMES_PER_MATCH games) would imply at their current
 // RD, kept within DODGE_K_MIN..DODGE_K_MAX (the old Elo 24..48): settled players (RD 50) 24, settling ones (RD 74+) 48.
@@ -497,8 +562,7 @@ export function challengePenalty({ kind, direction = 'up', ...o }) {
     const up = challengePenalty({ ...o, kind });
     if (kind === 'expired') return { penalty: Math.round(DOWN_MULT * up.penalty), reason: 'expired_down', dropsRank: true, walkover: false };
     if (up.penalty === 0) return up; // waived (played this week)
-    if (Math.round(o.rankGap || 1) > DOWN_CLOSE_GAP) return { penalty: 0, reason: 'declined_down', dropsRank: false, walkover: false };
-    return { penalty: Math.max(1, Math.round(DOWN_MULT * up.penalty)), reason: 'declined_down_close', dropsRank: true, walkover: false };
+    return { penalty: Math.max(1, Math.round(DOWN_MULT * up.penalty)), reason: 'declined_down', dropsRank: true, walkover: false };
   }
   const { defRating, defRd, chalRating, meetings = 0, rankGap = 1, recentPairMatch = false, defRecentMatches = 0 } = o;
   const loss = dodgeBase({ defRating, defRd, chalRating, meetings, rankGap });

@@ -352,6 +352,13 @@ export function MatchDetail() {
                       {`Bounty claimed on ${b.name}${(b.parts || []).length ? ` (${b.parts.map((k) => ({ podium: "top 3", streak: "streak", riser: "riser" })[k] || k).join(" + ")})` : ""}: +${b.rating} rating · +${b.xp} xp`}
                     </p>
                   ))}
+                  {e.close_loss && (
+                    <p className={`mt-1 font-mono text-[10px] uppercase tracking-[0.08em] ${e.close_loss.credit > 0 ? "text-success" : "text-destructive"}`} data-testid="close-loss">
+                      {e.close_loss.credit > 0
+                        ? `Close-loss credit +${e.close_loss.credit}: took ${Math.round(e.close_loss.share * 100)}% of the points vs ${Math.round(e.close_loss.expected * 100)}% expected (${e.close_loss.gap} rating apart)`
+                        : `Let them get close: ${e.close_loss.credit} (they took ${Math.round(e.close_loss.share * 100)}% of the points vs ${Math.round(e.close_loss.expected * 100)}% expected)`}
+                    </p>
+                  )}
                   {e.bounty_paid > 0 && (
                     <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.08em] text-destructive">{`Bounty paid: −${e.bounty_paid} rating`}</p>
                   )}

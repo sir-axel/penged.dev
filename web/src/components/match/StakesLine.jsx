@@ -70,6 +70,16 @@ export function StakesLine({ request, showResult = false, className = "" }) {
             {data.challenge && <span className="text-muted-foreground"> · challenge ×1.25</span>}
             {me.placing && <span className="text-muted-foreground"> · placement</span>}
           </p>
+          {me.lose?.[0] > 0 && (
+            <p className="mt-0.5 font-medium text-success" data-testid="close-loss-hint">
+              {`Keep it close and even a loss gains you up to +${me.lose[0]}.`}
+            </p>
+          )}
+          {me.win?.[0] < 0 && (
+            <p className="mt-0.5 text-destructive" data-testid="close-win-hint">
+              {`Win big: letting them keep it close costs you up to ${me.win[0]}.`}
+            </p>
+          )}
           <p className="sr-only">From {data.assumed}.</p>
         </>
       )}

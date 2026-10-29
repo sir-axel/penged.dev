@@ -13,7 +13,7 @@ import { SegmentedControl } from "@/components/match/SegmentedControl";
 import { PlayerPicker } from "@/components/match/PlayerPicker";
 import { BountyChip } from "@/components/BountyChip";
 import { useBounties } from "@/hooks/useBounties";
-import { StakesLine } from "@/components/match/StakesLine";
+import { StakesLine, useStakes } from "@/components/match/StakesLine";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -83,12 +83,9 @@ export function outcomeText(t, asChallenger) {
       : "Declined · no penalty — you played this week";
   }
   if (t.penalty_reason === "declined_down") {
-    return asChallenger ? `Declined · free — you are rated above ${t.defender_name}` : "Declined · free — they are rated above you";
-  }
-  if (t.penalty_reason === "declined_down_close") {
     return asChallenger
-      ? `Declined · ${t.defender_name} ${minus(pen)} rating${moved} (half: you are just above)`
-      : `Declined · ${minus(pen)} rating${moved} (half: they are just above you)`;
+      ? `Declined · ${t.defender_name} ${minus(pen)} rating${moved} (half: you are rated above)`
+      : `Declined · ${minus(pen)} rating${moved} (half: they are rated above you)`;
   }
   if (t.penalty_reason === "expired_down") {
     return asChallenger
@@ -113,8 +110,7 @@ export function publicOutcomeText(t) {
   if (!t.penalty_reason) return null;
   if (t.reversed) return "Penalty reversed by an admin";
   if (t.penalty_reason === "waived_recent_match") return "Declined · no penalty — they played this week";
-  if (t.penalty_reason === "declined_down") return "Declined · free — challenged by someone rated well above";
-  if (t.penalty_reason === "declined_down_close") return `Declined · ${t.defender_name} ${minus(pen)} rating (half: challenged from just above)`;
+  if (t.penalty_reason === "declined_down") return `Declined · ${t.defender_name} ${minus(pen)} rating (half: challenged from above)`;
   if (t.penalty_reason === "expired_down") return `No response · ${minus(pen)} rating for ${t.defender_name} · no walkover`;
   if (t.penalty_reason === "expired")
     return `No response · walkover for ${t.challenger_name} · ${minus(pen)} rating for ${t.defender_name}`;
@@ -124,7 +120,6 @@ export function publicOutcomeText(t) {
 /** Why ducking is free, in the defender's words (null when it costs). */
 function freeWhy(reason) {
   return {
-    declined_down: "No penalty for declining — they are rated well above you (3+ places up).",
     waived_recent_match: "Declining is free this time — you played this challenger this week.",
     doubles: "No penalty for declining a doubles challenge.",
   }[reason] || null;
@@ -138,6 +133,7 @@ export function DeclineButton({ challenge, busy, onDecline }) {
   });
   const d = isDoubles(challenge) ? { penalty: 0, reason: "doubles" } : data?.decline;
   const e = data?.expire;
+  const growth = closeLossGain(useStakes({ challenge_id: challenge.id }).data);
   const label = !d ? "Decline" : d.penalty > 0 ? `Decline · ${minus(d.penalty)}` : "Decline · free";
   const silence = e
     ? e.penalty > 0
@@ -160,6 +156,11 @@ export function DeclineButton({ challenge, busy, onDecline }) {
         <AlertDialogHeader>
           <AlertDialogTitle>Decline this challenge?</AlertDialogTitle>
           <AlertDialogDescription>{confirmText}</AlertDialogDescription>
+          {growth > 0 && (
+            <p className="rounded-sm border border-success/40 bg-success/10 px-3 py-2 text-sm text-success" data-testid="close-loss-warning">
+              {`Even if you lose, you can still gain: keep it close (a narrow 2-1) and you take +${growth}. Only a clear beating costs you.`}
+            </p>
+          )}
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel className="min-h-10 rounded-sm">Keep it</AlertDialogCancel>
@@ -171,6 +172,12 @@ export function DeclineButton({ challenge, busy, onDecline }) {
     </AlertDialog>
   );
 }
+
+/** Your gain from a narrow loss (the stakes preview's mildest loss), when it is a gain; else 0. */
+const closeLossGain = (stakes) => {
+  const me = stakes?.players?.find((p) => p.you);
+  return me && me.lose?.[0] > 0 ? me.lose[0] : 0;
+};
 
 /** Free-to-decline note on an incoming singles challenge (shown before you open the dialog). */
 function FreeNote({ challenge }) {
@@ -284,7 +291,6 @@ function QuoteLine({ target }) {
     d.penalty > 0
       ? `If ${name} declines: ${minus(d.penalty)} for them.`
       : {
-          declined_down: `Free for ${name} to decline — you are 3+ places above them.`,
           waived_recent_match: `Free for ${name} to decline — you played this week.`,
         }[d.reason] || `Free for ${name} to decline.`;
   const silence =
@@ -514,8 +520,7 @@ export function Challenges() {
                   {targets.map((e) => {
                     const full = atLimit[e.id];
                     const down = (Number(player?.singles_rating) || 0) > (Number(e.singles_rating) || 0);
-                    const farDown = down && player?.singles_rank != null && e.singles_rank != null && Math.abs(e.singles_rank - player.singles_rank) > 2;
-                    const tag = full ? "weekly limit" : selectedId === e.id ? "selected" : farDown ? "free to decline" : down ? "half cost" : "challenge";
+                    const tag = full ? "weekly limit" : selectedId === e.id ? "selected" : down ? "half cost" : "challenge";
                     return (
                       <li key={e.id}>
                         <button
@@ -712,7 +717,7 @@ export function Challenges() {
         )}
         <EmptyState
           title="How challenges move rating"
-          body="Rank follows rating. Saying no to someone rated below you costs rating, and staying silent for 72 hours (weekends don't count) costs double and pays them. Saying no to someone 1–2 places above you costs half, and is free further up; staying silent costs half. Doubles challenges never cost anything."
+          body="Rank follows rating. Saying no to someone rated below you costs rating, and staying silent for 72 hours (weekends don't count) costs double and pays them. Saying no to someone rated above you costs half, and so does staying silent. Losing a close one to a much stronger player still gains you rating. Doubles challenges never cost anything."
           action={
             <Link
               to="/rules"

@@ -14,6 +14,7 @@ export const RATING_POINTS = [
   "Every game you play firms your confidence up. Time away loosens it: a settled ±50 is back to ±76 after 30 days and ±95 after 60, so returning players move fast again until they settle. Your profile shows \"settling ±N\" while it is ±90 or wider.",
   "Your opponent's confidence matters too: a result against someone still settling tells the ladder less about you, so it moves you a little less (and a brand-new player's win barely dents a regular).",
   "Margins matter. Win a game 11-2 and you gain far more than winning it 11-9 — up to double (margin ×0.75 to ×2.0).",
+  "Playing up always means growth. Lose to someone rated 100+ above you but keep it close, taking more of the points than the gap says you should (about 46% against someone 100 above, 39% at 300, 35% at 450), and the loss turns into a gain: 150 rating for every whole share of points above that mark, at most +15. The winner pays the same, so a top player who lets you get close drops even though they won. Get beaten clearly and it is an ordinary loss: you still have to prove it. Rematches earn less of it, like everything else.",
   "Upsets pay. Beat someone rated above you and the win is boosted (up to ×1.6); crushing someone far below you is damped (down to ×0.6).",
   "You lose points the same way you win them. Get crushed in a game and you lose big; lose narrowly to someone better and it barely stings. Between two equally settled players in singles, what the winner gains the loser drops.",
   "One game moves you at most 40 points, and one match (all its games together) at most 80.",
@@ -52,6 +53,7 @@ export const WORKED_EXAMPLE =
 
 export const XP_POINTS = [
   "+25 xp for playing, +25 for winning",
+  "Took a shot: +15 xp for losing to someone rated 100+ above you",
   "Bounty: up to +120 xp for taking down a top-3 player, a hot streak or a fast riser in a ranked match",
   "+5 xp per game you take (five games max)",
   "Upset: +10 xp per full 50 rating points you were behind (max +60)",
@@ -67,7 +69,7 @@ export const CHALLENGE_POINTS = [
   "Weekly limits: you can send 3 challenges and receive 2 in any 7 days, singles and doubles together.",
   "The defender has 72 hours to accept, and accepted challenges have 72 hours to be played. Weekends don't count: the clock pauses all of Saturday and Sunday in each player's own time zone (if you live in different cities, it runs only while it is a weekday for both of you). Ducking a challenge costs rating, and rank follows rating.",
   "Challenged by someone rated below you: declining costs you rating. No answer in 72 weekday hours costs twice as much, and the challenger gains the same points as a walkover and earns 15 xp.",
-  "Challenged by someone rated above you: declining costs half the usual amount if they are 1 or 2 places above you, and is free if they are further up. No answer in 72 weekday hours costs half the usual amount, with no walkover.",
+  "Challenged by someone rated above you: declining or not answering costs half the usual amount, with no walkover. Before you decline you see what a close loss would earn you: often it is a gain.",
   "The cost peaks when you are evenly rated and close in rank, and is larger while your rating is still settling (up to 24 for silence between equals, 12 at ±50 confidence). It shrinks with the rank gap: ×1 one place apart, ×0.8 two, ×0.6 three, ×0.4 four or five, ×0.25 six or more. Ducking someone far away costs little (at least 5 for silence, 3 for a decline). Rematches cost less.",
   "Every duck counts: there is no weekly limit on ducking penalties. The weekly challenge limits (3 sent, 2 received) are what stop anyone farming you.",
   "Played that challenger in the last 7 days? Declining is free. Played 3 or more matches this week? A decline costs half.",

@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import * as R from '../src/rating.js';
 import {
   xpForMatch, levelForXp, xpForLevel, challengePenalty, dodgeBase, closeness, rankFactor, DODGE_RANK_FACTOR, RATING_FLOOR,
   validateGames, summarizeGames, rankPlayers, repeatFactor, RANK_SQL,
@@ -102,11 +103,11 @@ describe('challenge penalties', () => {
   it('far gaps keep decaying: gap 4-5 and 6+ cost less than gap 3', () => {
     expect([3, 4, 5, 6, 12].map((rankGap) => pen('expired', { rankGap }).penalty)).toEqual([14, 10, 10, 6, 6]);
   });
-  it('downward: declining is free, ignoring costs half the upward expiry with no walkover', () => {
-    expect(pen('declined', { direction: 'down' })).toMatchObject({ penalty: 6, reason: 'declined_down_close', dropsRank: true, walkover: false });
-    expect(pen('declined', { direction: 'down', rankGap: 2 }).reason).toBe('declined_down_close');
+  it('downward: declining or ignoring costs half the upward penalty, never a walkover', () => {
+    expect(pen('declined', { direction: 'down' })).toMatchObject({ penalty: 6, reason: 'declined_down', dropsRank: true, walkover: false });
     expect(pen('declined', { direction: 'down', rankGap: 2 }).penalty).toBeLessThan(pen('declined', { rankGap: 2 }).penalty);
-    expect(pen('declined', { direction: 'down', rankGap: 3 })).toMatchObject({ penalty: 0, reason: 'declined_down', dropsRank: false, walkover: false });
+    expect(pen('declined', { direction: 'down', rankGap: 6 })).toMatchObject({ reason: 'declined_down', dropsRank: true });
+    expect(pen('declined', { direction: 'down', rankGap: 6 }).penalty).toBeGreaterThan(0);
     expect(pen('expired', { direction: 'down' })).toMatchObject({ penalty: 12, reason: 'expired_down', dropsRank: true, walkover: false });
     expect(pen('expired', { direction: 'down', rankGap: 6 }).penalty).toBe(3);
   });
@@ -204,3 +205,39 @@ describe('active ranking', () => {
 
 
 
+
+describe('close-loss credit', () => {
+  const P = (id, side, rating, extra = {}) => ({ id, side, rating, rd: 60, vol: 0.06, daysSinceLast: 3, gamesPlayed: 60, earlierMeetings: 0, novel: false, ...extra });
+  const G = (arr) => arr.map(([a, b]) => ({ a, b }));
+  const run = (games, extra = {}) => Object.fromEntries(R.rateMatch([P('top', 'a', 1700, extra), P('low', 'b', 1250, extra)], 'a', G(games), {}).map((x) => [x.id, x]));
+  it('expected point share comes from real game-to-11 odds (deuce included)', () => {
+    expect(R.gameWinFromPoint(0.5)).toBeCloseTo(0.5, 9);
+    expect(R.expectedPointShare(0.5)).toBeCloseTo(0.5, 6);
+    expect(R.expectedPointShare(R.expectedScore(1250, 1700))).toBeCloseTo(0.351, 3);
+    expect(R.expectedPointShare(0.07, 21)).toBeGreaterThan(R.expectedPointShare(0.07, 11)); // longer games: closer to 50%
+  });
+  it('a close loss to a much stronger player is a gain, and the winner pays the same', () => {
+    const r = run([[11, 9], [11, 9]]);
+    expect(r.low.delta).toBe(15);
+    expect(r.top.delta).toBe(-15);
+    expect(r.low.close_loss).toMatchObject({ credit: 15, gap: 450 });
+    expect(r.top.close_loss.credit).toBe(-15);
+    const mid = run([[11, 7], [11, 8]]);
+    expect([mid.low.delta, mid.top.delta]).toEqual([8, -8]);
+  });
+  it('a clear beating is an ordinary loss; peers (gap < 100) get nothing extra', () => {
+    const r = run([[11, 5], [11, 6]]);
+    expect(r.low.delta).toBeLessThan(0);
+    expect(r.low.close_loss).toBeUndefined();
+    const peers = Object.fromEntries(R.rateMatch([P('a', 'a', 1400), P('b', 'b', 1350)], 'a', G([[11, 9], [11, 9]]), {}).map((x) => [x.id, x]));
+    expect(peers.b.close_loss).toBeUndefined();
+    expect(peers.b.delta).toBeLessThan(0);
+  });
+  it('rematches earn less of it', () => {
+    expect(run([[11, 9], [11, 9]], { earlierMeetings: 2 }).low.delta).toBeLessThan(15);
+  });
+  it('took a shot: XP for losing to someone 100+ above', () => {
+    expect(R.xpForMatch({ won: false, ratingGap: 150 }).parts.map((p) => p.key)).toContain('shot');
+    expect(R.xpForMatch({ won: false, ratingGap: 50 }).parts.map((p) => p.key)).not.toContain('shot');
+  });
+});

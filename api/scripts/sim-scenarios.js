@@ -153,6 +153,7 @@ export const SYSTEMS = {
   'G2 s.6': { kind: 'g2', cfg: { scale: 0.6 } },
   'G2 s.6 + momentum': { kind: 'g2', cfg: { ...PICK, scale: 0.6 } },
   'SHIPPED': { kind: 'ship' },
+  'SHIPPED no close-loss credit': { kind: 'ship', closeCredit: false },
 };
 
 function runSystem(sys, world) {
@@ -201,7 +202,7 @@ function runSystem(sys, world) {
     } else if (sys.kind === 'ship') {
       // the production code (src/rating.js): RD/vol per player, new rival x1.1 when not met in 30+ days
       const novel = daysSinceMet == null || daysSinceMet >= 30;
-      res = rateShipped(parts.map((p) => ({ ...p, novel })), m.winner, m.games, { target: m.target });
+      res = rateShipped(parts.map((p) => ({ ...p, novel })), m.winner, m.games, { target: m.target, closeCredit: sys.closeCredit });
       const p0 = predictGame(st.r[i], res[0].rd_before, st.r[j], res[1].rd_before, eA, eB);
       matchPred.push({ p: bestOfProb(p0, m.bestOf), won: m.winner === 'a', k: m.k });
       res[0].games.forEach((g, gi) => {
