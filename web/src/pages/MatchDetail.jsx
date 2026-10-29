@@ -347,6 +347,14 @@ export function MatchDetail() {
                     </span>
                     </>)}
                   </div>
+                  {(e.bounties || []).map((b) => (
+                    <p key={b.from} className="mt-1 font-mono text-[10px] uppercase tracking-[0.08em] text-brand" data-testid="bounty-claimed">
+                      {`Bounty claimed on ${b.name} (#${b.rank}): +${b.rating} rating · +${b.xp} xp`}
+                    </p>
+                  ))}
+                  {e.bounty_paid > 0 && (
+                    <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.08em] text-destructive">{`Bounty paid: −${e.bounty_paid} rating`}</p>
+                  )}
                   {(e.games || []).length > 0 ? <GameLines change={e} /> : e.mov != null && <FactorLines change={e} />}
                   {(e.xp_parts || []).length > 0 && (
                     <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.08em] text-brand">

@@ -4,6 +4,7 @@ import { playerName } from "@/lib/ladder";
 import { TierBadge } from "@/components/TierBadge";
 import { GuildTag } from "@/components/GuildBadge";
 import { useGuildTags } from "@/hooks/useGuildTags";
+import { BountyChip } from "@/components/BountyChip";
 
 export function LadderRow({ rank, player, rating: rating, wins = 0, losses = 0, provisional = false, inactive = false, unrated = false, streak = 0, format = "singles" }) {
   const guild = useGuildTags()[player.id];
@@ -23,6 +24,7 @@ export function LadderRow({ rank, player, rating: rating, wins = 0, losses = 0, 
               {playerName(player)}
             </span>
             {!unrated && <TierBadge rating={rating} played={wins + losses} />}
+            {!unrated && !inactive && format !== "overall" && <BountyChip rank={rank} streak={streak} />}
             {player.under_review && (
               <span className="shrink-0 rounded-sm border border-destructive/40 px-1 font-mono text-[9px] uppercase tracking-[0.08em] text-destructive">
                 review

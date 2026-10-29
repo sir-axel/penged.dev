@@ -46,7 +46,7 @@ describe('explainer quotes the shipped constants', () => {
     const d = R.STAKES_DOMINANT[11].map(([a, b]) => `${a}-${b}`).join(', ');
     has(`narrow 2-1 (${n})`); has(`dominant 2-0 (${d})`);
   });
-  it('dodge penalties', () => {
+  it('dodge penalties and bounties', async () => {
     const p = (defRd) => R.challengePenalty({ kind: 'expired', defRating: 1400, defRd, chalRating: 1400, rankGap: 1 }).penalty;
     has(`up to ${p(R.RD_START)} for silence between equals, ${p(R.RD_MIN)} at ±${R.RD_MIN} confidence`);
     has(`at least ${R.EXPIRE_MIN} for silence, ${R.DECLINE_MIN} for a decline`);
@@ -54,7 +54,10 @@ describe('explainer quotes the shipped constants', () => {
     has(`×${f[1]} one place apart, ×${f[2]} two, ×${f[3]} three, ×${f[4]} four or five, ×${f[6]} six or more`);
     expect(f[5]).toBe(f[4]);
     expect(R.DOWN_MULT).toBe(0.5); expect(R.DOWN_CLOSE_GAP).toBe(2); has('costs half the usual amount if they are 1 or 2 places above you'); has('costs half the usual amount, with no walkover');
-    has('there is no weekly limit on ducking penalties'); expect(R.DUCK_PENALTY_DAYS).toBeUndefined();
+    has('there is no weekly limit on ducking penalties');
+    const B = await import('../src/bounty.js');
+    has(`#1 +${B.BOUNTY_RATING[1]} rating and +${B.BOUNTY_XP[1]} xp, #2 +${B.BOUNTY_RATING[2]} and +${B.BOUNTY_XP[2]}, #3 +${B.BOUNTY_RATING[3]} and +${B.BOUNTY_XP[3]}`);
+    has(`plus ${B.BOUNTY_STREAK_RATING} rating and ${B.BOUNTY_STREAK_XP} xp per win in their current streak, up to +${B.BOUNTY_STREAK_RATING_MAX} and +${B.BOUNTY_STREAK_XP_MAX}`); expect(R.DUCK_PENALTY_DAYS).toBeUndefined();
     has(`send ${R.CHALLENGES_SENT_PER_WEEK} challenges and receive ${R.CHALLENGES_RECEIVED_PER_WEEK} in any ${R.CHALLENGE_CAP_DAYS} days`);
     has(`earns ${R.WALKOVER_XP} xp`); has(`counts ×${R.CHALLENGE_STAKES} like a singles one`);
   });

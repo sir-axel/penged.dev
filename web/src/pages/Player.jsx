@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { BountyChip } from "@/components/BountyChip";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { MessageSquare } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
@@ -113,6 +114,7 @@ function FormatBlock({ player, format }) {
       </p>
       <TierProgress player={player} format={format} />
       <div className="mt-1 flex flex-wrap gap-1.5">
+        {rank > 0 && <BountyChip rank={rank} streak={streak} long />}
         {streak >= 2 && (
           <span className="font-display text-[0.55rem] uppercase tracking-[0.16em] text-brand">{streak}W STREAK</span>
         )}

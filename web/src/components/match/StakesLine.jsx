@@ -37,6 +37,8 @@ export function StakesLine({ request, showResult = false, className = "" }) {
     ? [
         `Win ${rangeText(me.win)}`,
         `Lose ${rangeText(me.lose)}`,
+        me.bounty_win && `incl. bounty +${me.bounty_win.rating} & +${me.bounty_win.xp} xp`,
+        me.bounty_risk && `incl. your bounty −${me.bounty_risk}`,
         me.tier_win && `${tierName(me.tier_win)} if you win`,
         me.tier_lose && `${tierName(me.tier_lose)} if you lose`,
       ].filter(Boolean)
