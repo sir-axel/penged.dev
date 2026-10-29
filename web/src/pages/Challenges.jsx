@@ -206,7 +206,7 @@ function FreeNote({ challenge }) {
  * Take back a challenge you sent: swap it to someone else (free, open challenges only) or revoke it for good (costs what
  * ducking them would). Weekly matches use Back out on the match card instead.
  */
-function RevokeButton({ challenge, targets, atLimit, busy, onSwap, onRevoke }) {
+function RevokeButton({ challenge, me, targets, atLimit, busy, onSwap, onRevoke }) {
   const [open, setOpen] = useState(false);
   const [swapTo, setSwapTo] = useState("");
   const { data } = useQuery({
@@ -224,6 +224,7 @@ function RevokeButton({ challenge, targets, atLimit, busy, onSwap, onRevoke }) {
       (!needle || playerName(p).toLowerCase().includes(needle) || String(p.username || "").toLowerCase().includes(needle)),
   );
   const bountyOf = useBounties("singles");
+  const picked = targets.find((p) => p.id === swapTo);
   return (
     <AlertDialog open={open} onOpenChange={setOpen}>
       <AlertDialogTrigger asChild>
@@ -295,6 +296,7 @@ function RevokeButton({ challenge, targets, atLimit, busy, onSwap, onRevoke }) {
                 </li>
               )}
             </ul>
+            {picked && <SendPreview me={me} target={picked} />}
             <Button className="h-11 w-full rounded-sm" disabled={!swapTo || busy} onClick={async () => (await onSwap(swapTo), setOpen(false))}>
               {swapTo ? `Swap to ${playerName(options.find((p) => p.id === swapTo) || {})}` : "Pick a player to swap to"}
             </Button>
@@ -399,6 +401,20 @@ export function DoublesCard({ challenge: c, userId, busy, onRespond }) {
 }
 
 /** What declining / ignoring would cost the player you picked, before you send it. */
+/** Before sending (or swapping) a challenge: what's on the line for you, and what ducking it would cost them. */
+function SendPreview({ me, target }) {
+  return (
+    <div className="space-y-2">
+      {me && (
+        <StakesLine
+          request={{ format: "singles", target: 11, side_a: [{ player_id: me.id }], side_b: [{ player_id: target.id }] }}
+        />
+      )}
+      <QuoteLine target={target} />
+    </div>
+  );
+}
+
 function QuoteLine({ target }) {
   const { data } = useQuery({
     queryKey: ["challenge-quote", target.id],
@@ -519,6 +535,11 @@ export function Challenges() {
       inChallenge(t, uid) &&
       (t.status === "accepted" || (t.status === "open" && (t.challenger_user_id === uid || isDoubles(t)))),
   );
+  // Your live regular singles challenge (one at a time): open = can be swapped for free from the send list.
+  const myLive = challenges.find(
+    (t) => !isDoubles(t) && !t.matchup_id && t.challenger_user_id === uid && (t.status === "open" || t.status === "accepted"),
+  );
+  const canSwap = myLive?.status === "open";
   // Challenges are public: everyone's recent ones, with the ones you are part of marked "You".
   const isMine = (e) => inChallenge(e, uid);
   const recentAll = challenges.filter((e) => !incoming.includes(e) && !outgoing.includes(e));
@@ -580,6 +601,7 @@ export function Challenges() {
         {mine && !e.matchup_id && (e.status === "open" || e.status === "accepted") && (
           <RevokeButton
             challenge={e}
+            me={player}
             targets={ladder}
             atLimit={atLimit}
             busy={!!busy}
@@ -661,7 +683,8 @@ export function Challenges() {
                   {targets.map((e) => {
                     const full = atLimit[e.id];
                     const down = (Number(player?.singles_rating) || 0) > (Number(e.singles_rating) || 0);
-                    const tag = full ? "weekly limit" : selectedId === e.id ? "selected" : down ? "half cost" : "challenge";
+                    const current = myLive?.defender_player_id === e.id;
+                    const tag = current ? "your challenge" : full ? "weekly limit" : selectedId === e.id ? "selected" : canSwap ? (down ? "swap · half cost" : "swap") : down ? "half cost" : "challenge";
                     return (
                       <li key={e.id}>
                         <button
@@ -698,19 +721,46 @@ export function Challenges() {
                     {q ? "Nobody on the ladder matches that." : "There is nobody else on the ladder yet."}
                   </p>
                 )}
-                {selected && <QuoteLine target={selected} />}
+                {selected && <SendPreview me={player} target={selected} />}
                 {noteBox}
-                <Button
-                  onClick={async () => {
-                    (await act("createChallenge", { defender_player_id: selectedId, message }, "create")) &&
-                      (setSelectedId(""), setMessage(""));
-                  }}
-                  disabled={!selectedId || !!busy || outOfSends}
-                  className="h-12 w-full rounded-sm"
-                >
-                  {busy === "create" && <LoaderCircle className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
-                  Send challenge
-                </Button>
+                {myLive && (
+                  <p className="rounded-sm border border-border bg-secondary/50 px-3 py-2 text-xs" data-testid="swap-note">
+                    {canSwap
+                      ? `You already have a challenge out to ${myLive.defender_name}. Pick someone here to swap it to them instead: free, and it doesn't use a send.`
+                      : `${myLive.defender_name} already accepted your challenge. Play it, or revoke it from In progress, before sending another.`}
+                  </p>
+                )}
+                {canSwap ? (
+                  <Button
+                    onClick={async () => {
+                      (await act(
+                        "revokeChallenge",
+                        { challenge_id: myLive.id, swap_to_player_id: selectedId, ...(message.trim() ? { message } : null) },
+                        "create",
+                      )) && (setSelectedId(""), setMessage(""));
+                    }}
+                    disabled={!selectedId || selectedId === myLive.defender_player_id || !!busy}
+                    className="h-12 w-full rounded-sm"
+                    data-testid="swap-send"
+                  >
+                    {busy === "create" && <LoaderCircle className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
+                    {selected && selectedId !== myLive.defender_player_id
+                      ? `Swap ${myLive.defender_name} → ${playerName(selected)} · free`
+                      : "Pick someone to swap to"}
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={async () => {
+                      (await act("createChallenge", { defender_player_id: selectedId, message }, "create")) &&
+                        (setSelectedId(""), setMessage(""));
+                    }}
+                    disabled={!selectedId || !!busy || outOfSends || !!myLive}
+                    className="h-12 w-full rounded-sm"
+                  >
+                    {busy === "create" && <LoaderCircle className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
+                    Send challenge
+                  </Button>
+                )}
               </>
             )
           ) : (

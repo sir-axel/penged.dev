@@ -757,7 +757,7 @@ fns.matchStakes = async ({ env, user }, body) => {
     sides = { a: a.map((e) => e.player_id), b: b.map((e) => e.player_id) };
     for (const e of [...a, ...b]) paddles[e.player_id] = e.paddle;
     matchedCh = await challengeFor(env, fmt, sides, now, now);
-    challenge = !!matchedCh;
+    challenge = !!matchedCh || body.as_challenge === true; // as_challenge: previewing a challenge before it is sent
   }
   const { players, parts, sideOf } = await ratingParts(env, { fmt, sides, paddleOf: (id) => paddles[id] || 'default', now });
   const bySide = { a: parts.filter((p) => p.side === 'a'), b: parts.filter((p) => p.side === 'b') };

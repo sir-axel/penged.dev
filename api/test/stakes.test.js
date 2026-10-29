@@ -198,3 +198,16 @@ describe('New rival through verification', () => {
   });
 });
 
+
+describe('preview as a challenge', () => {
+  it('as_challenge: true previews the x1.25 a challenge is worth', async () => {
+    const { mkPlayer: mk, call: c } = await import('./helpers.js');
+    const [a, b] = [await mk('Aa1'), await mk('Bb2')];
+    const body = { format: 'singles', target: 11, side_a: [{ player_id: a.player.id }], side_b: [{ player_id: b.player.id }] };
+    const plain = (await c(a, 'matchStakes', body)).body;
+    const ch = (await c(a, 'matchStakes', { ...body, as_challenge: true })).body;
+    expect(plain.challenge).toBe(false);
+    expect(ch.challenge).toBe(true);
+    expect(ch.players.find((p) => p.you).win[1]).toBeGreaterThanOrEqual(plain.players.find((p) => p.you).win[1]);
+  });
+});
