@@ -219,6 +219,7 @@ export function Profile() {
               Send feedback
             </Link>
           </div>
+          <EmailNotificationsToggle />
           <AccountPanel email={user?.email} />
           <p className="text-xs text-muted-foreground">
             Your photo is stored publicly — anyone with the link can open it.
@@ -227,4 +228,50 @@ export function Profile() {
       </div>
     </>
   ) : null;
+}
+
+/** "Email me about challenges and results": on by default; only verified addresses get mail. */
+function EmailNotificationsToggle() {
+  let { user, patchUser } = useAuth(),
+    [busy, setBusy] = useState(false),
+    [error, setError] = useState(""),
+    on = user?.email_notifications !== 0;
+  return (
+    <section className="border border-border bg-card p-4">
+      <label className="flex cursor-pointer items-start gap-3">
+        <input
+          type="checkbox"
+          checked={on}
+          disabled={busy || !user}
+          onChange={async (e) => {
+            let enabled = e.target.checked;
+            (setBusy(true), setError(""), patchUser({ email_notifications: enabled ? 1 : 0 }));
+            try {
+              let r = await api.functions.invoke("setEmailNotifications", { enabled });
+              if (r.data?.error) throw Error(r.data.error);
+            } catch (err) {
+              (patchUser({ email_notifications: enabled ? 0 : 1 }),
+                setError(err.response?.data?.error || err.message || "Could not save that."));
+            } finally {
+              setBusy(false);
+            }
+          }}
+          className="mt-0.5 h-5 w-5 shrink-0 accent-primary"
+        />
+        <span className="min-w-0">
+          <span className="block text-sm font-medium">Email me about challenges and results</span>
+          <span className="mt-0.5 block text-xs text-muted-foreground">
+            {user && !user.emailVerified
+              ? "Verify your email below to start getting these."
+              : "New challenges, answers, results to confirm and final scores."}
+          </span>
+        </span>
+      </label>
+      {error && (
+        <p role="alert" className="mt-3 border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {error}
+        </p>
+      )}
+    </section>
+  );
 }

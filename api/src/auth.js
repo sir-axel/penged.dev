@@ -46,6 +46,8 @@ export function getAuth(env, origin) {
         role: { type: 'string', required: false, defaultValue: 'user', input: false },
         // 'light' | 'dark' | null (no choice yet). Only writable through the setTheme function.
         theme: { type: 'string', required: false, input: false },
+        // 1 = notification emails on (default), 0 = off. Only writable through the setEmailNotifications function.
+        email_notifications: { type: 'number', required: false, defaultValue: 1, input: false },
       },
     },
     // Rate limiting (stored in D1 so it holds across isolates). Client IP comes from Cloudflare's

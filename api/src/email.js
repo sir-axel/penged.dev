@@ -61,7 +61,7 @@ async function sha256Hex(s) {
 }
 
 /** Atomically bump the counter row `id`; false once it already holds `cap`. */
-async function bump(env, id, cap, ttlMs) {
+export async function bump(env, id, cap, ttlMs) {
   const expires = new Date(Date.now() + ttlMs).toISOString();
   const row = await env.DB.prepare(
     `INSERT INTO "verification" (id, identifier, value, expiresAt) VALUES (?1, 'email-guard', '1', ?2)
@@ -103,7 +103,8 @@ export async function guardedSend(env, kind, message) {
 }
 
 // ---- templates ------------------------------------------------------------------------------------------
-function layout({ preheader, heading, paragraphs, button, url, footer }) {
+/** Shared HTML shell. `footerLink` ({ url, text }) appends a plain link after the footer text (e.g. email settings). */
+export function layout({ preheader, heading, paragraphs, button, url, footer, footerLink }) {
   const font = "'Courier New',Courier,monospace";
   return `<!doctype html><html><body style="margin:0;padding:0;background:#f0f0f0;">
 <span style="display:none;max-height:0;overflow:hidden;opacity:0;">${esc(preheader)}</span>
@@ -114,7 +115,7 @@ function layout({ preheader, heading, paragraphs, button, url, footer }) {
 ${paragraphs.map((p) => `<tr><td style="padding:6px 20px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.5;color:#222222;">${esc(p)}</td></tr>`).join('\n')}
 <tr><td style="padding:18px 20px;"><a href="${esc(url)}" style="display:inline-block;background:#d6361f;color:#ffffff;font-family:${font};font-size:14px;font-weight:bold;letter-spacing:1px;text-decoration:none;padding:14px 22px;border:2px solid #0d0d0d;">${esc(button)}</a></td></tr>
 <tr><td style="padding:0 20px 8px 20px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5;color:#666666;">Button not working? Paste this link into your browser:<br><span style="word-break:break-all;color:#0d0d0d;">${esc(url)}</span></td></tr>
-<tr><td style="padding:12px 20px 22px 20px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5;color:#666666;">${esc(footer)}</td></tr>
+<tr><td style="padding:12px 20px 22px 20px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5;color:#666666;">${esc(footer)}${footerLink ? ` <a href="${esc(footerLink.url)}" style="color:#0d0d0d;">${esc(footerLink.text)}</a>` : ''}</td></tr>
 </table></td></tr></table></body></html>`;
 }
 
