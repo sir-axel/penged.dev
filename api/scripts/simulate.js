@@ -168,7 +168,19 @@ const arg = (n, d) => { const i = process.argv.indexOf(`--${n}`); return i > 0 ?
 const flag = (n) => process.argv.includes(`--${n}`);
 if (process.argv[1] && process.argv[1].endsWith('simulate.js')) {
   const f = (x, d = 4) => x.toFixed(d);
-  if (flag('sweep')) {
+  if (flag('scenarios')) {
+    const { runScenarios, SCENARIOS, SYSTEMS, tableFor } = await import('./sim-scenarios.js');
+    const seeds = +arg('seeds', 100);
+    const pick = arg('systems', null);
+    const systems = pick ? Object.fromEntries(pick.split(',').map((n) => [n, SYSTEMS[n]])) : SYSTEMS;
+    const only = arg('only', null);
+    const res = runScenarios({ seeds, systems, scenarios: only ? only.split(',') : Object.keys(SCENARIOS) });
+    let md = '';
+    for (const [sc, r] of Object.entries(res)) md += `## ${SCENARIOS[sc].title}\n\n${tableFor(r, Object.keys(systems))}\n`;
+    const out = arg('out', null);
+    if (out) writeFileSync(out, md);
+    console.log(md);
+  } else if (flag('sweep')) {
     const seeds = +arg('seeds', 60), matches = +arg('matches', 600);
     const scales = (arg('scales', '0.3,0.4,0.5,0.6,0.75,1')).split(',').map(Number);
     const decays = (arg('decays', '12,20,30,45')).split(',').map(Number);

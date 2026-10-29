@@ -43,7 +43,7 @@ export function describeChange(e) {
     ["mov", "margin", "bigger wins move more", e.mov],
     ["ac", e.ac >= 1 ? "upset" : "favourite", e.ac >= 1 ? "beat or lost to someone who was ahead on paper" : "favourites are damped", e.ac],
     ["rust", "back from a break", "3+ weeks away: K is higher for this whole match (up to double)", e.rust],
-    ["opp_certainty", "new opponent", "opponent has few matches, so their rating is less certain", e.opp_certainty],
+    ["opp_certainty", "settling opponent", "opponent has few games behind them, so their rating is still settling", e.opp_certainty],
     e.games
       ? ["evidence", "to 21", "a game to 21 is a more reliable result than one to 11", e.evidence]
       : ["evidence", "match length", "more games (or a 21 target) is a more reliable result", e.evidence],
