@@ -2,7 +2,7 @@
 // Constants live in rating.js (MATCHUP_*); web/src/lib/ratingCopy.js MATCHUP_POINTS explains them (explainer.test.js).
 import {
   MATCHUP_NEVER_PLAYED, MATCHUP_PER_DAY, MATCHUP_DAYS_CAP, MATCHUP_DODGE, MATCHUP_DODGE_MAX, MATCHUP_TOP_BONUS, MATCHUP_TOP_SPAN,
-  MATCHUP_REPEAT_PENALTY, MATCHUP_BACKOUT_MULT, MAX_DELTA, RATING_FLOOR,
+  MATCHUP_REPEAT_PENALTY, MATCHUP_BACKOUT_MULT, MATCHUP_LOSS_RATIO, MAX_DELTA, RATING_FLOOR,
 } from './rating.js';
 
 /** Pull toward the top of the ladder: MATCHUP_TOP_BONUS for #1, shrinking evenly to 0 past #MATCHUP_TOP_SPAN. */
@@ -66,3 +66,23 @@ export const backoutCost = (maxLoss, rating) =>
   Math.max(0, Math.min(MAX_DELTA, MATCHUP_BACKOUT_MULT * Math.abs(maxLoss || 0), rating - RATING_FLOOR));
 /** Rating a missed week costs: the max loss, never more than MAX_DELTA and never below the floor. */
 export const missCost = (maxLoss, rating) => Math.max(0, Math.min(MAX_DELTA, Math.abs(maxLoss || 0), rating - RATING_FLOOR));
+
+/**
+ * The owner's stakes for the matched game from the raw quote ({ max_win, max_loss } sizes, a dominant 2-0 either way):
+ * the loss is scaled by f = min(1, MATCHUP_LOSS_RATIO x win / loss) so the max loss is always smaller than the max win.
+ * Returns { max_win, max_loss (capped size: at least 1 when there is a loss, below max_win), loss_factor }. A best
+ * case of +1 or less means nothing is at stake (max loss 0, factor 0: a lost matched game costs nothing).
+ */
+export function cappedStakes({ max_win: rawWin, max_loss: rawLoss }) {
+  const win = rawWin > 0 ? rawWin : 1;
+  const loss = Math.max(0, rawLoss || 0);
+  if (!loss) return { max_win: win, max_loss: 0, loss_factor: 1 };
+  // A best case of +1 or less (a heavy favourite: even a 2-0 win can cost them) leaves no room for a smaller loss.
+  if (win <= 1) return { max_win: 1, max_loss: 0, loss_factor: 0 };
+  const f = Math.round(Math.min(1, (MATCHUP_LOSS_RATIO * win) / loss) * 10000) / 10000;
+  return { max_win: win, max_loss: Math.max(1, Math.min(Math.round(loss * f), win - 1)), loss_factor: f };
+}
+
+/** The owner's rating change in the matched game: a loss (delta < 0) is scaled by f, never below the floor. */
+export const softenLoss = (before, delta, f) =>
+  (delta < 0 && f != null && f < 1 ? Math.max(RATING_FLOOR, before + Math.round(delta * f)) - before : delta);

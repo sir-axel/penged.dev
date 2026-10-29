@@ -83,6 +83,13 @@ describe('weekly matchmaking copy quotes the shipped constants', () => {
     expect(M.topBonus(1)).toBe(R.MATCHUP_TOP_BONUS);
     at(`Last week's pick again: −${R.MATCHUP_REPEAT_PENALTY}`);
     at(`losing ${R.MATCHUP_BACKOUT_MULT}x your max loss (at most ${R.MAX_DELTA})`);
+    // max win > max loss: the matched game's loss is scaled by min(1, ratio x win / loss)
+    at(`at most ${Math.round(R.MATCHUP_LOSS_RATIO * 100)}% of the max win`);
+    at(`min(1, ${R.MATCHUP_LOSS_RATIO} × max win ÷ the full loss)`);
+    expect(M.cappedStakes({ max_win: 40, max_loss: 60 })).toEqual({ max_win: 40, max_loss: 30, loss_factor: 0.5 });
+    at('If a win is worth +1 or less for you, nothing is at stake');
+    expect(M.cappedStakes({ max_win: 1, max_loss: 60 }).max_loss).toBe(0);
+    at(`Decline and you lose your max loss (at most ${R.MAX_DELTA}) right away`);
     expect(M.backoutCost(30, 1500)).toBe(Math.min(R.MAX_DELTA, R.MATCHUP_BACKOUT_MULT * 30));
     at(`lose your max loss (at most ${R.MAX_DELTA})`);
     expect(M.missCost(95, 1500)).toBe(R.MAX_DELTA);

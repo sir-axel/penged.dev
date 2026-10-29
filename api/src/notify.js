@@ -11,8 +11,7 @@
 import { bump, defer, guardedSend, layout } from './email.js';
 import { TIERS } from './tiers.js';
 import { DEFAULT_TZ } from './weekdays.js';
-import { whyText } from './matchmaking.js';
-import { MAX_DELTA, MATCHUP_BACKOUT_MULT } from './rating.js';
+import { backoutCost } from './matchmaking.js';
 
 /** Notification emails per UTC day; the rest of the Resend allowance stays free for account emails. */
 export const NOTIFY_DAILY_CAP = 60;
@@ -106,7 +105,7 @@ const challengeMsgs = {
     if (!r) return [];
     const matched = !!c.matchup_id;
     const lines = [matched
-      ? `${c.challenger_name}${rankOf(c.challenger_rank)} was matched with you for this week's match and said yes: this is their matched game. For you it is a regular challenge.`
+      ? `${c.challenger_name}${rankOf(c.challenger_rank)} was matched with you for this week's match and accepted: this is their matched game. For you it is a regular challenge.`
       : `${c.challenger_name} (#${c.challenger_rank}) challenged you (#${c.defender_rank}).`];
     if (c.message) lines.push(`Their message: "${c.message}"`);
     lines.push(`Accept or decline by ${when(c.expires_at, r.tz)}. The clock only runs on weekdays. ${c.direction === 'down'
@@ -161,21 +160,21 @@ const matchMsgs = {
   },
 };
 
-// Weekly matchmaking: each owner hears once, when the week's matchups are generated (ensureMatchupWeek).
+// Weekly matchmaking: each owner hears once, when the week's matchups are generated (ensureMatchupWeek). The opponent
+// is a mystery until the owner accepts, so the email never names them (nor anything that would identify them).
 const minus = (n) => `−${Math.abs(n)}`;
 function matchupMsg(env, m, r) {
-  const opp = m.o_display || m.o_user || 'your opponent';
-  const loss = m.quote_loss || 0;
-  const back = Math.min(MAX_DELTA, MATCHUP_BACKOUT_MULT * loss);
-  const why = whyText(m);
+  const win = m.max_win || 0, loss = m.max_loss || 0;
+  const back = backoutCost(loss, Infinity);
   const lines = [
-    `Your match this week is ${opp}${rankOf(m.opponent_rank)}.`,
-    ...(why ? [`Why them: ${why}.`] : []),
-    `On the line: max win +${m.quote_win || 0}, max loss ${minus(loss)} (a 2-0 either way, played as a challenge).`,
-    `Play it by ${when(new Date(Date.parse(m.week_end) - 60000).toISOString(), r.tz)}, or lose ${loss}.`,
-    `Say "I'm in" to send them the challenge. Once you say yes you can't back out without losing 2x the max loss (${minus(back)}).`,
+    `Your mystery match this week: max win +${win}, max loss ${minus(loss)}; accept to reveal who.`,
+    'Max win is a dominant 2-0 win, played as a challenge. Lose the matched game and your loss is softened so it never costs more than the max loss.',
+    `Decline and you lose ${loss} right away. Ignore it and you lose ${loss} at the end of the week (${when(new Date(Date.parse(m.week_end) - 60000).toISOString(), r.tz)}).`,
+    `Accept and you'll see who it is and the challenge goes to them. Backing out after that costs 2x the max loss (${minus(back)}).`,
   ];
-  return message(env, r, { subject: `Your match this week: ${opp}`, heading: "This week's match", lines, button: 'SEE YOUR MATCH', path: '/challenges' });
+  return message(env, r, {
+    subject: `Your mystery match this week: max win +${win}`, heading: "This week's mystery match", lines, button: 'SEE YOUR MATCH', path: '/challenges',
+  });
 }
 
 // ---- planning + delivery ---------------------------------------------------------------------------------
@@ -192,7 +191,7 @@ export async function compose(env, event, data = {}) {
     const ids = data.matchup_ids || [];
     if (!ids.length) return [];
     const rows = (await env.DB.prepare(
-      `SELECT m.*, o.display_name AS o_display, o.username AS o_user FROM matchups m LEFT JOIN players o ON o.id = m.opponent_player_id
+      `SELECT m.* FROM matchups m
          WHERE m.id IN (${ids.map(() => '?').join(',')}) ORDER BY m.created_date, m.id`,
     ).bind(...ids).all()).results;
     const rs = await recipients(env, rows.map((m) => m.user_id));

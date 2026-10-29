@@ -17,7 +17,7 @@ import {
   RANK_SQL, DOUBLES_RANK_SQL, rankPlayers, ACTIVE_DAYS, meetingWeight, NOVELTY_DAYS, stakes, currentRd, RATING_FLOOR, challengePenalty, WALKOVER_XP, COOLDOWN_DAYS, WAIVER_DAYS, FATIGUE_DAYS,
   CHALLENGE_CAP_DAYS, CHALLENGES_RECEIVED_PER_WEEK, CHALLENGES_SENT_PER_WEEK, MATCHUP_DODGE_DAYS,
 } from './rating.js';
-import { assignMatchups, whyText, backoutCost, missCost } from './matchmaking.js';
+import { assignMatchups, whyText, backoutCost, missCost, cappedStakes, softenLoss } from './matchmaking.js';
 import { bountyFor, BOUNTY_CLAIM_DAYS, BOUNTY_RISE_DAYS } from './bounty.js';
 import { weekdayDeadline, cleanTimeZone, DEFAULT_TZ, weekStartIso, weekEndIso } from './weekdays.js';
 import { withCtx } from './email.js';
@@ -573,6 +573,26 @@ fns.bountyBoard = async ({ env, user }) => {
   return out;
 };
 
+/**
+ * Loss factors for this week's matched game played through challenge `ch`: { player_id: f } for each owner who accepted
+ * a matchup row pointing at it (f < 1 only). Empty when `ch` is not a matched challenge.
+ */
+async function matchedFactors(env, ch) {
+  if (!ch || ch.format !== 'singles') return {};
+  const rs = await all(env,
+    `SELECT player_id, loss_factor FROM matchups WHERE challenge_id = ? AND said_yes_at IS NOT NULL AND settled_at IS NULL
+       AND loss_factor IS NOT NULL AND loss_factor < 1`, ch.id);
+  return Object.fromEntries(rs.map((r) => [r.player_id, r.loss_factor]));
+}
+/** Applies a matched-game loss factor to one stakes() entry (losses only; wins unchanged). */
+function softenStakes(x, f) {
+  const s = (v) => softenLoss(x.rating, v, f);
+  x.lose = x.lose.map(s); x.narrow.lose = s(x.narrow.lose); x.dominant.lose = s(x.dominant.lose);
+  x.lose_after = x.rating + x.lose[1];
+  if (!x.placing) x.tier_lose = tierChange(x.rating, x.lose_after);
+  x.loss_factor = f;
+}
+
 /** Builds the guarded statements that verify a match (ratings, xp, records, ladder). */
 async function verifyPlan(env, m, now) {
   const fmt = m.format;
@@ -583,6 +603,7 @@ async function verifyPlan(env, m, now) {
 
   // An accepted challenge between these players (pairs), accepted before this result was submitted, is played by this match.
   const ch = await challengeFor(env, fmt, sides, m.created_date, now);
+  const soften = await matchedFactors(env, ch);
 
   const rc = `${fmt}_rating`, wc = `${fmt}_wins`, lc = `${fmt}_losses`, gwc = `${fmt}_game_wins`, glc = `${fmt}_game_losses`, vc = `${fmt}_last_verified_at`, sc = `${fmt}_win_streak`, bc = `${fmt}_best_streak`;
   const rdc = `${fmt}_rd`, volc = `${fmt}_vol`, rdat = `${fmt}_rd_at`;
@@ -620,6 +641,15 @@ async function verifyPlan(env, m, now) {
       res.after = Math.max(RATING_FLOOR, res.after + bountyDelta);
       res.delta = res.after - res.before;
     }
+    // This week's matched game: the owner's loss is softened by the row's frozen factor (after everything else).
+    const f = soften[p.id];
+    let matched = null;
+    if (f != null && !won && res.delta < 0) {
+      const raw = res.delta;
+      res.delta = softenLoss(res.before, res.delta, f);
+      res.after = res.before + res.delta;
+      matched = { loss_factor: f, unsoftened: raw };
+    }
     const xpGain = xpRes.parts.reduce((t, x) => t + x.xp, 0);
     const xp = p.xp + xpGain;
     stmts.push(guardRow(env, 'players', p.id, p.version));
@@ -639,6 +669,7 @@ async function verifyPlan(env, m, now) {
       })),
       xp_gained: xpGain, xp_parts: xpRes.parts, win_streak: streak,
       ...(res.close_loss ? { close_loss: res.close_loss } : null),
+      ...(matched ? { matched } : null),
       ...(got.length ? { bounties: got.map((c) => ({ from: c.from, name: c.from_name, parts: c.parts, rating: c.rating, xp: c.xp })) } : null),
       ...(paid.length ? { bounty_paid: paid.reduce((t, c) => t + c.rating, 0) } : null),
       matches_played: p[wc] + p[lc] + 1, // in this format, including this match (placement badge)
@@ -686,7 +717,7 @@ function withBounties(out, claims) {
 fns.matchStakes = async ({ env, user }, body) => {
   const me = await requirePlayer(env, user);
   const now = nowIso();
-  let fmt, target, sides, paddles = {}, challenge = false, match = null;
+  let fmt, target, sides, paddles = {}, challenge = false, match = null, matchedCh = null;
   if (body.match_id != null) {
     if (!isStr(body.match_id)) throw bad('Missing match.');
     const m = await getMatch(env, body.match_id);
@@ -695,14 +726,15 @@ fns.matchStakes = async ({ env, user }, body) => {
     fmt = m.format; target = m.target; match = m;
     sides = { a: m.side_a.map((e) => e.player_id), b: m.side_b.map((e) => e.player_id) };
     for (const e of [...m.side_a, ...m.side_b]) paddles[e.player_id] = e.paddle;
-    challenge = !!(await challengeFor(env, fmt, sides, m.created_date, now));
+    matchedCh = await challengeFor(env, fmt, sides, m.created_date, now);
+    challenge = !!matchedCh;
   } else if (body.challenge_id != null) {
     if (!isStr(body.challenge_id)) throw bad('Missing challenge.');
     const c = await getChallenge(env, body.challenge_id);
     if (!c) throw new HttpError(404, 'Challenge not found.');
     const users = [c.challenger_user_id, c.defender_user_id, c.challenger_partner_user_id, c.defender_partner_user_id];
     if (!users.includes(user.id)) throw new HttpError(403, 'Only players in this challenge can see this.');
-    target = 11; challenge = true;
+    target = 11; challenge = true; matchedCh = c;
     if (c.format === 'doubles') {
       fmt = 'doubles';
       const mine = [c.challenger_player_id, c.challenger_partner_player_id], theirs = [c.defender_player_id, c.defender_partner_player_id];
@@ -723,7 +755,8 @@ fns.matchStakes = async ({ env, user }, body) => {
     if (!a.some((e) => e.player_id === me.id)) throw bad('You must be on the first side of the match.');
     sides = { a: a.map((e) => e.player_id), b: b.map((e) => e.player_id) };
     for (const e of [...a, ...b]) paddles[e.player_id] = e.paddle;
-    challenge = !!(await challengeFor(env, fmt, sides, now, now));
+    matchedCh = await challengeFor(env, fmt, sides, now, now);
+    challenge = !!matchedCh;
   }
   const { players, parts, sideOf } = await ratingParts(env, { fmt, sides, paddleOf: (id) => paddles[id] || 'default', now });
   const bySide = { a: parts.filter((p) => p.side === 'a'), b: parts.filter((p) => p.side === 'b') };
@@ -733,6 +766,8 @@ fns.matchStakes = async ({ env, user }, body) => {
   const claims = { a: [], b: [] };
   if (ranked) for (const w of ['a', 'b']) claims[w] = await bountyClaims(env, { format: fmt, id: match?.id || '', winner_side: w }, players, sideOf);
   withBounties(out, claims);
+  const soften = await matchedFactors(env, matchedCh);
+  for (const x of out) if (soften[x.id] != null) softenStakes(x, soften[x.id]);
   const sum = (cs) => cs.reduce((t, c) => t + c.rating, 0);
   const nameById = Object.fromEntries(players.map((p) => [p.id, nameOf(p)]));
   // A pending match already has its scores: also say exactly what confirming it does (same rules verification uses).
@@ -740,8 +775,9 @@ fns.matchStakes = async ({ env, user }, body) => {
     ? Object.fromEntries(rateMatch(parts.map((p) => ({ ...p, paddle: paddles[p.id] || 'default' })), match.winner_side, match.games,
       { target, challenge }).map((r) => {
         const cs = claims[match.winner_side];
-        const after = Math.max(RATING_FLOOR, r.after + sum(cs.filter((c) => c.to === r.id)) - sum(cs.filter((c) => c.from === r.id)));
-        return [r.id, { ...r, after, delta: after - r.before }];
+        const after0 = Math.max(RATING_FLOOR, r.after + sum(cs.filter((c) => c.to === r.id)) - sum(cs.filter((c) => c.from === r.id)));
+        const delta = sideOf(r.id) === match.winner_side ? after0 - r.before : softenLoss(r.before, after0 - r.before, soften[r.id]);
+        return [r.id, { ...r, after: r.before + delta, delta }];
       }))
     : null;
   return {
@@ -1055,11 +1091,14 @@ fns.resolveChallenge = ({ env, user }, body) =>
 
 // ---------- weekly matchmaking ("This week's match", singles only) ----------
 // Rules: src/matchmaking.js (pure) + MATCHUP_* in rating.js. One row per (week, player who OWES the match); the
-// opponent is that player's best pair score, so many players may pick the same opponent. The owner's "I'm in" sends a
-// regular singles challenge (marked matchup_id; it skips the caps, the one-active rule and the cooldown). The opponent
-// answers it like any challenge (normal decline / expiry penalties). Week end (settleMatchups, from runSyncLadder):
-// played = a verified ranked singles match between the pair recorded during the week. Otherwise the owner pays their
-// max loss unless they said yes and the opponent then declined / ignored it (or never answered by week end).
+// opponent is that player's best pair score, so many players may pick the same opponent. The opponent is a MYSTERY to
+// the owner (and to everyone else) until the owner accepts: only the max win / max loss (frozen at generation, the loss
+// capped under the win) and the deadline show. "Accept" reveals them and sends a regular singles challenge (marked
+// matchup_id; it skips the caps, the one-active rule and the cooldown); the opponent answers it like any challenge.
+// "Decline" costs the max loss right away. If the owner loses the matched game, their loss is scaled by loss_factor.
+// Week end (settleMatchups, from runSyncLadder): played = a verified ranked singles match between the pair recorded
+// during the week. Otherwise the owner pays their max loss unless they accepted and the opponent then declined /
+// ignored it (or never answered by week end).
 const SINGLES_RANKED = `status = 'verified' AND ranked = 1 AND format = 'singles'`;
 const pairKey = (x, y) => (x < y ? `${x}|${y}` : `${y}|${x}`);
 const thisWeek = () => {
@@ -1105,6 +1144,14 @@ function quoteOf(ctx, ownerId, oppId) {
   const me = withBounties(out, claims).find((x) => x.id === a.id);
   return { max_win: me.win[1], max_loss: Math.max(0, -me.lose[1]) };
 }
+
+/** The frozen matched-game stakes for owner vs opp: the raw quote plus the capped max loss and its loss factor. */
+const matchupQuote = (ctx, ownerId, oppId) => {
+  const raw = quoteOf(ctx, ownerId, oppId);
+  return { raw, ...cappedStakes(raw) };
+};
+/** Has the owner seen who they got? Accepted, or the pair already played it. Until then the opponent is a mystery. */
+const revealed = (m) => !!m.said_yes_at || m.status === 'played';
 
 /** Where a matchup stands: settled status, else open | waiting (challenge sent) | accepted | unplayed (window ran out) | cleared. */
 function matchupState(m, ch) {
@@ -1157,17 +1204,18 @@ export async function ensureMatchupWeek(env) {
     const byId = Object.fromEntries(pool.map((p) => [p.id, p]));
     const rows = picks.map((x) => {
       const f = factsOf(x.player, x.opponent);
-      return { id: uuid(), ...x, f, q: quoteOf(ctx, x.player, x.opponent) };
+      return { id: uuid(), ...x, f, q: matchupQuote(ctx, x.player, x.opponent) };
     });
     await commit(env, [
       stmt(env, 'INSERT INTO matchup_weeks (week_start, week_end, players, created_date) VALUES (?,?,?,?)', week, end, pool.length, now),
       ...rows.map((r) => stmt(env,
         `INSERT INTO matchups (id, week_start, week_end, player_id, user_id, opponent_player_id, opponent_user_id, score, never_played,
-           last_played_days, dodged_by_them, dodged_by_me, opponent_rank, quote_win, quote_loss, created_date, updated_date)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+           last_played_days, dodged_by_them, dodged_by_me, opponent_rank, quote_win, quote_loss, max_win, max_loss, loss_factor,
+           created_date, updated_date)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         r.id, week, end, r.player, byId[r.player].user_id, r.opponent, byId[r.opponent].user_id, r.score, r.f.lastDays == null ? 1 : 0,
         r.f.lastDays, ducked[`${r.opponent}>${r.player}`] || 0, ducked[`${r.player}>${r.opponent}`] || 0, byId[r.opponent].singles_rank,
-        r.q.max_win, r.q.max_loss, now, now)),
+        r.q.raw.max_win, r.q.raw.max_loss, r.q.max_win, r.q.max_loss, r.q.loss_factor, now, now)),
     ]);
     return rows.map((r) => r.id);
   });
@@ -1242,9 +1290,9 @@ async function settleMatchups(env) {
       }
     }
     if (!plan.length) return 0;
-    const fresh = plan.filter((x) => x.owes && !x.m.said_yes_at);
+    const fresh = plan.filter((x) => x.owes && x.m.max_loss == null); // rows always carry it; legacy safety net
     const ctx = fresh.length ? await quoteCtx(env, now, [...new Set(fresh.flatMap((x) => [x.m.player_id, x.m.opponent_player_id]))]) : null;
-    const loss = (m) => (m.said_yes_at ? m.max_loss : quoteOf(ctx, m.player_id, m.opponent_player_id).max_loss);
+    const loss = (m) => (m.max_loss != null ? m.max_loss : matchupQuote(ctx, m.player_id, m.opponent_player_id).max_loss);
     const hits = plan.filter((x) => x.owes).map((x) => ({ key: x.m.id, player_id: x.m.player_id, cost: (r) => missCost(loss(x.m), r) }));
     const rh = await ratingHits(env, hits, lv);
     const stmts = [...rh.guards];
@@ -1267,13 +1315,19 @@ async function settleMatchups(env) {
   });
 }
 
-/** This week's matchmaking for player `me`: their matchup (with live or frozen stakes) and who was matched with them. */
+/**
+ * This week's matchmaking for player `me`: their matchup and who was matched with them. Until `me` accepts, the matchup
+ * is a mystery: no opponent, no why-them, no challenge, only the frozen max win / max loss, costs and the deadline.
+ * "Matched with you" lists only owners who have accepted (an un-accepted owner's pick must not leak to its target).
+ */
 async function matchupView(env, me) {
   const { start, end } = thisWeek();
   const weekRow = await first(env, 'SELECT * FROM matchup_weeks WHERE week_start = ?', start);
   const mine = await myRow(env, start, me.id);
-  const incoming = await all(env, 'SELECT * FROM matchups WHERE week_start = ? AND opponent_player_id = ? ORDER BY created_date, id', start, me.id);
-  const rows = [mine, ...incoming].filter(Boolean);
+  const incoming = (await all(env, 'SELECT * FROM matchups WHERE week_start = ? AND opponent_player_id = ? ORDER BY created_date, id', start, me.id))
+    .filter(revealed);
+  const shown = mine && revealed(mine) ? mine : null;
+  const rows = [shown, ...incoming].filter(Boolean);
   const chIds = rows.map((r) => r.challenge_id).filter(Boolean);
   const chs = Object.fromEntries((chIds.length ? await all(env, `SELECT * FROM challenges WHERE id IN (${placeholders(chIds.length)})`, ...chIds) : [])
     .map((c) => [c.id, c]));
@@ -1281,17 +1335,19 @@ async function matchupView(env, me) {
   const ps = Object.fromEntries((pids.length ? await getPlayers(env, pids) : []).map((p) => [p.id, p]));
   let matchup = null;
   if (mine) {
-    const live = !mine.said_yes_at && !mine.settled_at;
-    const q = live ? quoteOf(await quoteCtx(env, nowIso(), [me.id, mine.opponent_player_id]), me.id, mine.opponent_player_id)
-      : { max_win: mine.max_win, max_loss: mine.max_loss };
-    const ch = chs[mine.challenge_id] || null;
-    matchup = {
-      id: mine.id, status: matchupState(mine, ch), opponent: pub('Player', ps[mine.opponent_player_id]), why: whyText(mine),
-      said_yes_at: mine.said_yes_at, max_win: q.max_win, max_loss: q.max_loss, backout_cost: backoutCost(q.max_loss, me.singles_rating),
-      miss_cost: missCost(q.max_loss, me.singles_rating),
-      frozen: !live, challenge: pub('Challenge', ch), match_id: mine.match_id, penalty_rating: mine.penalty_rating,
-      penalty_reason: mine.penalty_reason, mutual: incoming.some((r) => r.player_id === mine.opponent_player_id),
+    const ch = shown ? chs[mine.challenge_id] || null : null;
+    const base = {
+      id: mine.id, status: matchupState(mine, ch), mystery: !shown, max_win: mine.max_win, max_loss: mine.max_loss,
+      loss_factor: mine.loss_factor, backout_cost: backoutCost(mine.max_loss, me.singles_rating),
+      miss_cost: missCost(mine.max_loss, me.singles_rating), decline_cost: missCost(mine.max_loss, me.singles_rating),
+      said_yes_at: mine.said_yes_at, penalty_rating: mine.penalty_rating, penalty_reason: mine.penalty_reason, frozen: true,
     };
+    matchup = shown
+      ? {
+        ...base, opponent: pub('Player', ps[mine.opponent_player_id]), why: whyText(mine), challenge: pub('Challenge', ch),
+        match_id: mine.match_id, mutual: incoming.some((r) => r.player_id === mine.opponent_player_id),
+      }
+      : { ...base, opponent: null, why: null, challenge: null, match_id: null, mutual: false };
   }
   return {
     week_start: start, week_end: end, deadline: end, ranked: me.singles_rank != null, generated: !!weekRow,
@@ -1309,7 +1365,10 @@ fns.myMatchup = async ({ env, user }) => {
   return matchupView(env, me);
 };
 
-/** Everyone's matchups this week (public): who owes a match to whom and where it stands. */
+/**
+ * Everyone's matchups this week (public): who owes a match and where it stands. An un-accepted row is a mystery: no
+ * opponent (id, name or rank), and it is not ordered by its opponent either (revealed rows first, by opponent rank).
+ */
 fns.listMatchups = async ({ env }) => {
   await ensureMatchupWeek(env);
   const { start, end } = thisWeek();
@@ -1318,20 +1377,25 @@ fns.listMatchups = async ({ env }) => {
             p.display_name AS p_display, p.username AS p_user, o.display_name AS o_display, o.username AS o_user, o.singles_rank AS o_rank
        FROM matchups m LEFT JOIN challenges c ON c.id = m.challenge_id
        LEFT JOIN players p ON p.id = m.player_id LEFT JOIN players o ON o.id = m.opponent_player_id
-       WHERE m.week_start = ? ORDER BY o.singles_rank IS NULL, o.singles_rank, m.created_date, m.id`, start);
-  return {
-    week_start: start, week_end: end,
-    items: rows.map((r) => ({
-      id: r.id, player_id: r.player_id, player_name: r.p_display || r.p_user, opponent_player_id: r.opponent_player_id,
-      opponent_name: r.o_display || r.o_user, opponent_rank: r.o_rank,
-      status: matchupState(r, r.challenge_id && r.ch_status ? { status: r.ch_status, challenger_player_id: r.ch_challenger, responded_at: r.ch_responded } : null),
-    })),
-  };
+       WHERE m.week_start = ? ORDER BY m.created_date, m.id`, start);
+  const items = rows.map((r) => {
+    const shown = revealed(r);
+    return {
+      id: r.id, player_id: r.player_id, player_name: r.p_display || r.p_user, mystery: !shown,
+      opponent_player_id: shown ? r.opponent_player_id : null, opponent_name: shown ? r.o_display || r.o_user : null,
+      opponent_rank: shown ? r.o_rank : null,
+      status: matchupState(r, shown && r.challenge_id && r.ch_status ? { status: r.ch_status, challenger_player_id: r.ch_challenger, responded_at: r.ch_responded } : null),
+    };
+  });
+  const order = (x) => (x.mystery ? 2e9 : x.opponent_rank ?? 1e9);
+  items.sort((x, y) => order(x) - order(y) || String(x.player_name).localeCompare(String(y.player_name)) || x.id.localeCompare(y.id));
+  return { week_start: start, week_end: end, items };
 };
 
 /**
- * "I'm in": the owner commits to this week's match. Freezes max win / max loss, then sends the challenge: a live singles
- * challenge between the pair is reused (one from the opponent is accepted), otherwise a new matched challenge goes out.
+ * "Accept": the owner commits to this week's mystery match. Reveals the opponent (the stakes were frozen at generation)
+ * and sends the challenge: a live singles challenge between the pair is reused (one from the opponent is accepted),
+ * otherwise a new matched challenge goes out. Backing out afterwards costs 2x the max loss.
  */
 fns.matchupYes = async ({ env, user }) => {
   await requirePlayer(env, user);
@@ -1342,12 +1406,11 @@ fns.matchupYes = async ({ env, user }) => {
     const m = await myRow(env, start, me.id);
     if (!m) throw bad('You have no match this week.');
     if (m.settled_at) throw bad("This week's match is already settled.");
-    if (m.status !== 'open') throw bad('You already said yes to this match.');
+    if (m.status !== 'open') throw bad('You already accepted this match.');
     const now = nowIso();
     if (m.week_end <= now) throw bad('This week is over.');
     const opp = (await getPlayers(env, [m.opponent_player_id]))[0];
     if (!opp) throw new HttpError(409, 'Your opponent is no longer on the ladder.');
-    const q = quoteOf(await quoteCtx(env, now, [me.id, opp.id]), me.id, opp.id);
     const live = await first(env,
       `SELECT * FROM challenges WHERE format = 'singles' AND status IN ('open','accepted') AND (expires_at IS NULL OR expires_at > ?)
          AND ((challenger_player_id = ? AND defender_player_id = ?) OR (challenger_player_id = ? AND defender_player_id = ?))
@@ -1367,15 +1430,44 @@ fns.matchupYes = async ({ env, user }) => {
       stmts.push(insertSinglesChallenge(env, { id: chId, me, def: opp, message: '', now, matchupId: m.id }), touch(env, me.id, now));
     }
     stmts.push(stmt(env,
-      `UPDATE matchups SET status = 'committed', said_yes_at = ?, max_win = ?, max_loss = ?, challenge_id = ?, updated_date = ?, version = version + 1 WHERE id = ?`,
-      now, q.max_win, q.max_loss, chId, now, m.id));
+      `UPDATE matchups SET status = 'committed', said_yes_at = ?, challenge_id = ?, updated_date = ?, version = version + 1 WHERE id = ?`,
+      now, chId, now, m.id));
     await commit(env, stmts);
     if (sent) await notify(env, 'challenge_received', { challenge_id: chId, actor_user_id: user.id });
     return matchupView(env, me);
   });
 };
 
-/** Backing out after "I'm in": 2x the frozen max loss (at most 80, never below the floor); the challenge is cancelled. */
+/**
+ * "Decline": the owner turns down this week's mystery match without ever learning who it was. Costs the max loss right
+ * away (at most MAX_DELTA, never below the floor) and settles the week (no week-end charge).
+ */
+fns.matchupDecline = async ({ env, user }) => {
+  await requirePlayer(env, user);
+  await ensureMatchupWeek(env);
+  return retrying(async () => {
+    const me = await requirePlayer(env, user);
+    const { start } = thisWeek();
+    const m = await myRow(env, start, me.id);
+    if (!m) throw bad('You have no match this week.');
+    if (m.settled_at) throw bad("This week's match is already settled.");
+    if (m.status !== 'open') throw bad('You already accepted this match. Backing out is the only way out now.');
+    const now = nowIso();
+    if (m.week_end <= now) throw bad('This week is over.');
+    const lv = await ladderVersion(env);
+    const rh = await ratingHits(env, [{ key: m.id, player_id: me.id, cost: (r) => missCost(m.max_loss, r) }], lv);
+    const r = rh.res[m.id];
+    await commit(env, [
+      ...rh.guards,
+      guardRow(env, 'matchups', m.id, m.version, 'open'),
+      stmt(env, `UPDATE matchups SET ${penaltyCols} WHERE id = ?`, 'declined', r.penalty, 'declined', r.before, r.after, now, now, m.id),
+      ...rh.stmts,
+    ]);
+    return matchupView(env, (await getPlayers(env, [me.id]))[0]);
+  });
+};
+
+/** Backing out after "Accept": 2x the frozen max loss (at most 80, never below the floor); the challenge is cancelled. */
 fns.matchupBackOut = ({ env, user }) =>
   retrying(async () => {
     const me = await requirePlayer(env, user);

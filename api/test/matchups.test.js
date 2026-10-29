@@ -1,10 +1,11 @@
-// Weekly matchmaking ("This week's match"): generation, assignment, "I'm in", backing out, week-end settlement, emails.
+// Weekly matchmaking ("This week's match"): generation, the mystery opponent, Accept / Decline, the softened matched loss,
+// backing out, week-end settlement, emails.
 import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from 'vitest';
 import { env, appWith, dispose, reset, call, mkPlayer, seasoned } from './helpers.js';
 import { runSyncLadder } from '../src/functions.js';
-import { assignMatchups, matchupScore, whyText, topBonus } from '../src/matchmaking.js';
+import { assignMatchups, matchupScore, whyText, topBonus, cappedStakes, softenLoss } from '../src/matchmaking.js';
 import { compose } from '../src/notify.js';
-import { MATCHUP_NEVER_PLAYED, MATCHUP_DODGE, MATCHUP_TOP_BONUS, MAX_DELTA } from '../src/rating.js';
+import { MATCHUP_NEVER_PLAYED, MATCHUP_DODGE, MATCHUP_TOP_BONUS, MATCHUP_LOSS_RATIO, MAX_DELTA, RATING_FLOOR } from '../src/rating.js';
 
 beforeEach(reset);
 afterEach(() => {
@@ -46,11 +47,17 @@ const ducked = (ducker, from, days = 5) => sql(
   `duck-${++cid}`, from.id, from.player.id, ducker.id, ducker.player.id, ago(days), ago(days), ago(days));
 const pickOf = async (u) => (await one('SELECT opponent_player_id AS o FROM matchups WHERE player_id = ?', u.player.id))?.o;
 const rowOf = (u) => one('SELECT * FROM matchups WHERE player_id = ?', u.player.id);
-/** Only `u` owes a match this week, to `opp` (the rest of the generated rows are dropped). */
+/**
+ * Only `u` owes a match this week, to `opp`: the week is generated with just the two of them in the pool (so the frozen
+ * stakes are quoted against `opp`), then everyone's ladder position is restored and the other row is dropped.
+ */
 const only = async (u, opp) => {
+  const ranks = await rows('SELECT id, singles_rank FROM players');
+  await sql('UPDATE players SET singles_rank = NULL WHERE id NOT IN (?, ?)', u.player.id, opp.player.id);
   await call(u, 'myMatchup');
+  for (const r of ranks) await sql('UPDATE players SET singles_rank = ? WHERE id = ?', r.singles_rank, r.id);
   await sql('DELETE FROM matchups WHERE player_id <> ?', u.player.id);
-  await sql('UPDATE matchups SET opponent_player_id = ?, opponent_user_id = ? WHERE player_id = ?', opp.player.id, opp.id, u.player.id);
+  expect(await pickOf(u)).toBe(opp.player.id);
 };
 const endWeek = () => sql('UPDATE matchups SET week_end = ?', ago(1 / 1440));
 const submit = async (sub, opp) =>
@@ -58,6 +65,22 @@ const submit = async (sub, opp) =>
 const play = async (sub, opp) => {
   const m = await submit(sub, opp);
   return (await call(opp, 'respondMatch', { match_id: m.id, decision: 'accept' })).body.match;
+};
+/** Ladder with set ratings (ranked by rating: first = #1). */
+const rated = async (...pairs) => {
+  const ps = [];
+  for (const [n, r] of pairs) {
+    const u = await mkPlayer(n);
+    await sql('UPDATE players SET singles_rating = ? WHERE id = ?', r, u.player.id);
+    ps.push(u);
+  }
+  await seasoned(...ps);
+  return ps;
+};
+/** Everything in a response that could identify player u. */
+const mentions = (body, u) => {
+  const t = JSON.stringify(body);
+  return [u.player.id, u.id, u.player.username].some((x) => t.includes(x));
 };
 
 describe('pair score and assignment (pure)', () => {
@@ -88,10 +111,15 @@ describe('generation', () => {
     expect((await sync()).matchups_assigned).toBe(0);
     expect((await rows('SELECT * FROM matchups')).length).toBe(5);
     const me = rs[0].body;
-    expect(me).toMatchObject({ ranked: true, bye: false, matchup: { status: 'open', frozen: false } });
+    expect(me).toMatchObject({ ranked: true, bye: false, matchup: { status: 'open', frozen: true, mystery: true, opponent: null, why: null } });
     expect(me.matchup.max_win).toBeGreaterThan(0);
     expect(me.matchup.max_loss).toBeGreaterThan(0);
+    expect(me.matchup.max_loss).toBeLessThan(me.matchup.max_win);
     expect(me.matchup.backout_cost).toBe(Math.min(MAX_DELTA, 2 * me.matchup.max_loss));
+    expect(me.matchup.decline_cost).toBe(Math.min(MAX_DELTA, me.matchup.max_loss));
+    // frozen at generation: the row carries the shown numbers
+    const row = await rowOf(ps[0]);
+    expect([row.max_win, row.max_loss, row.loss_factor]).toEqual([me.matchup.max_win, me.matchup.max_loss, me.matchup.loss_factor]);
     expect(new Date(me.deadline).getUTCDay()).toBe(1); // next Monday 00:00 Chicago (05:00 or 06:00 UTC)
   });
 
@@ -101,7 +129,8 @@ describe('generation', () => {
     expect((await sync()).matchups_assigned).toBe(2);
     expect((await call(n, 'myMatchup')).body).toMatchObject({ ranked: false, matchup: null, reason: 'unranked' });
     const list = (await call(null, 'listMatchups')).body;
-    expect(list.items.map((x) => x.opponent_name).sort()).toEqual(['Aa1', 'Bb2']);
+    expect(list.items.map((x) => [x.player_name, x.mystery, x.opponent_name, x.opponent_player_id, x.opponent_rank]).sort())
+      .toEqual([['Aa1', true, null, null, null], ['Bb2', true, null, null, null]]);
   });
 
   it('picks never-played, then dodgers, over regulars; many can pick the same (top) target', async () => {
@@ -119,9 +148,13 @@ describe('generation', () => {
     // B, C, D never played anyone but E/F: all pull to #1 A; A picks #2
     for (const x of [b, c, d]) expect(await pickOf(x)).toBe(a.player.id);
     expect(await pickOf(a)).toBe(b.player.id);
+    // nobody has accepted: A's "matched with you" list is empty (it would tip A off)
+    expect((await call(a, 'myMatchup')).body.incoming).toEqual([]);
+    for (const x of [b, c, d]) expect((await call(x, 'matchupYes')).status).toBe(200);
     const aView = (await call(a, 'myMatchup')).body;
     expect(aView.incoming.map((x) => x.player.username).sort()).toEqual(['Bb2', 'Cc3', 'Dd4']);
-    expect((await call(e, 'myMatchup')).body.matchup.why).toBe("They dodged you twice lately · Last played 1 day ago · They're #3");
+    expect((await call(e, 'myMatchup')).body.matchup.why).toBe(null); // a mystery until E accepts
+    expect((await call(e, 'matchupYes')).body.matchup.why).toBe("They dodged you twice lately · Last played 1 day ago · They're #3");
   });
 
   it('a pool of one gets nothing', async () => {
@@ -130,7 +163,186 @@ describe('generation', () => {
   });
 });
 
-describe("I'm in", () => {
+describe('mystery opponent', () => {
+  it('until the owner accepts, myMatchup, listMatchups and the target\'s list never reveal the opponent; after, everything does', async () => {
+    const [a, b, c] = await ladder('Aa1', 'Bb2', 'Cc3');
+    await only(c, a);
+    const v = (await call(c, 'myMatchup')).body;
+    expect(v.matchup).toMatchObject({ status: 'open', mystery: true, opponent: null, why: null, challenge: null, mutual: false });
+    expect(v.matchup.max_win).toBeGreaterThan(v.matchup.max_loss);
+    expect(mentions(v, a)).toBe(false);
+    const hidden = (await call(null, 'listMatchups')).body.items;
+    expect(hidden).toEqual([expect.objectContaining({ player_id: c.player.id, mystery: true, opponent_player_id: null, opponent_name: null, opponent_rank: null })]);
+    expect(mentions(hidden, a)).toBe(false);
+    expect((await call(a, 'myMatchup')).body.incoming).toEqual([]);
+    // accept: revealed everywhere
+    const yes = (await call(c, 'matchupYes')).body;
+    expect(yes.matchup).toMatchObject({ mystery: false, status: 'waiting', opponent: { id: a.player.id }, why: "You've never played · They're #1" });
+    expect(yes.matchup.challenge).toMatchObject({ defender_player_id: a.player.id });
+    const shown = (await call(null, 'listMatchups')).body.items;
+    expect(shown).toEqual([expect.objectContaining({ mystery: false, opponent_player_id: a.player.id, opponent_name: 'Aa1', opponent_rank: 1 })]);
+    expect((await call(a, 'myMatchup')).body.incoming.map((x) => x.player.id)).toEqual([c.player.id]);
+    void b;
+  });
+
+  it('the public list does not order mystery rows by their opponent', async () => {
+    const [a, b, c, d] = await ladder('Aa1', 'Bb2', 'Cc3', 'Dd4');
+    await only(d, b); // only D owes, to #2
+    await call(d, 'matchupYes');
+    // put back a mystery row for C pointing at #1 (would sort first if ordered by opponent rank)
+    await sql(`INSERT INTO matchups (id, week_start, week_end, player_id, user_id, opponent_player_id, opponent_user_id, max_win, max_loss, loss_factor, created_date, updated_date)
+      SELECT 'mx', week_start, week_end, ?, ?, ?, ?, 50, 30, 0.8, created_date, updated_date FROM matchups WHERE player_id = ?`, c.player.id, c.id, a.player.id, a.id, d.player.id);
+    const items = (await call(null, 'listMatchups')).body.items;
+    expect(items.map((x) => [x.player_name, x.mystery])).toEqual([['Dd4', false], ['Cc3', true]]);
+  });
+});
+
+describe('max win > max loss', () => {
+  it('the max loss is always under the max win, scaled by f = min(1, 0.75 x win / loss)', () => {
+    expect(MATCHUP_LOSS_RATIO).toBe(0.75);
+    for (const w of [1, 2, 3, 5, 8, 13, 21, 40, 63, 80]) {
+      for (const l of [1, 2, 4, 9, 20, 41, 60, 79, 80, 95]) {
+        const q = cappedStakes({ max_win: w, max_loss: l });
+        expect(q.max_win).toBe(w);
+        expect(q.max_loss).toBeLessThan(q.max_win);
+        expect(q.max_loss).toBeLessThanOrEqual(l);
+        if (w > 1) {
+          expect(q.max_loss).toBeGreaterThanOrEqual(1);
+          expect(q.loss_factor).toBeCloseTo(Math.min(1, (0.75 * w) / l), 3);
+        }
+      }
+    }
+    expect(cappedStakes({ max_win: 80, max_loss: 80 })).toEqual({ max_win: 80, max_loss: 60, loss_factor: 0.75 });
+    expect(cappedStakes({ max_win: 40, max_loss: 10 })).toEqual({ max_win: 40, max_loss: 10, loss_factor: 1 });
+    // best case <= +1 (a heavy favourite, whose 2-0 win can even cost rating): W counts as 1 and nothing is at stake
+    expect(cappedStakes({ max_win: -15, max_loss: 98 })).toEqual({ max_win: 1, max_loss: 0, loss_factor: 0 });
+    expect(cappedStakes({ max_win: 1, max_loss: 30 })).toEqual({ max_win: 1, max_loss: 0, loss_factor: 0 });
+    expect(cappedStakes({ max_win: 2, max_loss: 30 })).toEqual({ max_win: 2, max_loss: 1, loss_factor: 0.05 });
+    expect(cappedStakes({ max_win: 30, max_loss: 0 })).toEqual({ max_win: 30, max_loss: 0, loss_factor: 1 });
+    expect(softenLoss(1500, -40, 0.25)).toBe(-10);
+    expect(softenLoss(1500, 12, 0.25)).toBe(12); // wins untouched
+    expect(softenLoss(RATING_FLOOR + 3, -3, 0.5)).toBe(-1); // round(-1.5)
+    expect(softenLoss(RATING_FLOOR + 1, -1, 0)).toBe(0);
+  });
+
+  it('holds across a spread-out ladder, including #1 matched with the bottom player (and the bottom with #1)', async () => {
+    const ps = await rated(['Top', 2300], ['High', 1900], ['Mid', 1500], ['Low', 1150], ['Bot', 850]);
+    await call(ps[0], 'myMatchup');
+    for (const r of await rows('SELECT * FROM matchups')) {
+      expect(r.max_win).toBeGreaterThan(r.max_loss);
+      expect(r.max_loss).toBeLessThanOrEqual(Math.round(MATCHUP_LOSS_RATIO * r.max_win));
+    }
+    // regenerate with #1 and the bottom player alone in the pool: each one's only possible pick is the other
+    const [top, , , , bot] = ps;
+    await sql('DELETE FROM matchups');
+    await sql('DELETE FROM matchup_weeks');
+    await sql('UPDATE players SET singles_rank = NULL WHERE id NOT IN (?, ?)', top.player.id, bot.player.id);
+    const vt = (await call(top, 'myMatchup')).body.matchup;
+    const vb = (await call(bot, 'myMatchup')).body.matchup;
+    for (const v of [vt, vb]) expect(v.max_win).toBeGreaterThan(v.max_loss);
+    const rt = await rowOf(top);
+    expect(rt.opponent_player_id).toBe(bot.player.id);
+    // #1 vs the bottom: a 2-0 win even costs #1 rating (the underdog's close-loss credit), so nothing is at stake for #1
+    expect(rt.quote_win).toBeLessThanOrEqual(1);
+    expect(rt.quote_loss).toBeGreaterThan(0);
+    expect(vt).toMatchObject({ max_win: 1, max_loss: 0, loss_factor: 0, decline_cost: 0, backout_cost: 0 });
+    // the bottom player has everything to win and nothing to lose
+    expect(vb.max_win).toBeGreaterThan(40);
+    expect(vb.max_loss).toBe(0);
+  });
+});
+
+describe('decline', () => {
+  it('costs the max loss right away, settles the week (no week-end charge) and never reveals the opponent', async () => {
+    const [a, , c] = await ladder('Aa1', 'Bb2', 'Cc3');
+    await only(c, a);
+    const v = (await call(c, 'myMatchup')).body.matchup;
+    const r0 = await rating(c);
+    const d = await call(c, 'matchupDecline');
+    expect(d.status).toBe(200);
+    expect(d.body.matchup).toMatchObject({ status: 'declined', penalty_reason: 'declined', penalty_rating: v.decline_cost, mystery: true, opponent: null });
+    expect(v.decline_cost).toBe(Math.min(MAX_DELTA, v.max_loss));
+    expect(mentions(d.body, a)).toBe(false);
+    expect(await rating(c)).toBe(r0 - v.max_loss);
+    const row = await rowOf(c);
+    expect(row).toMatchObject({ status: 'declined', penalty_rating: v.max_loss });
+    expect(row.settled_at).toBeTruthy();
+    expect(row.penalty_rank_before).not.toBe(null);
+    expect((await call(c, 'matchupDecline')).status).toBe(400); // idempotent: once
+    expect((await call(c, 'matchupYes')).status).toBe(400);
+    expect((await rows('SELECT * FROM challenges')).length).toBe(0);
+    expect((await call(null, 'listMatchups')).body.items[0]).toMatchObject({ mystery: true, opponent_name: null, status: 'declined' });
+    await endWeek();
+    await sync();
+    expect(await rating(c)).toBe(r0 - v.max_loss); // no week-end charge on top
+  });
+
+  it('is gone once you accept: backing out is the only way out', async () => {
+    const [a, b] = await ladder('Aa1', 'Bb2');
+    await only(b, a);
+    await call(b, 'matchupYes');
+    expect((await call(b, 'matchupDecline')).status).toBe(400);
+  });
+
+  it('ignoring it costs the same max loss at week end', async () => {
+    const [a, b] = await ladder('Aa1', 'Bb2');
+    await only(b, a);
+    const v = (await call(b, 'myMatchup')).body.matchup;
+    const r0 = await rating(b);
+    await endWeek();
+    await sync();
+    expect(await rowOf(b)).toMatchObject({ status: 'missed', penalty_rating: Math.min(MAX_DELTA, v.max_loss) });
+    expect(await rating(b)).toBe(r0 - Math.min(MAX_DELTA, v.max_loss));
+  });
+});
+
+describe('the matched game', () => {
+  it("the owner losing it has their loss scaled by f; the opponent's change is untouched; a win is normal", async () => {
+    const [top, , low] = await rated(['Top', 1700], ['Mid', 1500], ['Low', 1300]);
+    await only(top, low); // the favourite owes: raw loss > win, so f < 1
+    const v = (await call(top, 'matchupYes')).body.matchup;
+    expect(v.loss_factor).toBeLessThan(1);
+    expect((await call(low, 'respondChallenge', { challenge_id: v.challenge.id, decision: 'accept' })).status).toBe(200);
+    // the stakes line on the challenge shows the softened loss for the owner
+    const st = (await call(top, 'matchStakes', { challenge_id: v.challenge.id })).body.players;
+    const mine = st.find((x) => x.you), theirs = st.find((x) => !x.you);
+    expect(mine.loss_factor).toBe(v.loss_factor);
+    expect(-mine.lose[1]).toBeLessThan(mine.win[1]);
+    expect(Math.abs(-mine.lose[1] - v.max_loss)).toBeLessThanOrEqual(3); // frozen at generation; ratings' RD drifts a little
+    expect(theirs.loss_factor).toBeUndefined();
+    const before = await rating(top);
+    const m = await submit(low, top); // Low wins 2-0
+    const preview = (await call(top, 'matchStakes', { match_id: m.id })).body.players;
+    const done = (await call(top, 'respondMatch', { match_id: m.id, decision: 'accept' })).body.match;
+    expect(done.status).toBe('verified');
+    const ownerCh = done.rating_changes.find((x) => x.player_id === top.player.id);
+    const oppCh = done.rating_changes.find((x) => x.player_id === low.player.id);
+    expect(ownerCh.matched).toEqual({ loss_factor: v.loss_factor, unsoftened: expect.any(Number) });
+    expect(ownerCh.delta).toBe(softenLoss(ownerCh.before, ownerCh.matched.unsoftened, v.loss_factor));
+    expect(ownerCh.delta).toBeGreaterThan(ownerCh.matched.unsoftened);
+    expect(ownerCh.delta).toBeLessThan(0);
+    expect(await rating(top)).toBe(before + ownerCh.delta);
+    expect(oppCh.matched).toBeUndefined();
+    expect(oppCh.delta).toBeGreaterThan(0);
+    expect(preview.find((x) => x.player_id === low.player.id).result).toBe(oppCh.delta); // same as an unsoftened preview
+    expect(preview.find((x) => x.player_id === top.player.id).result).toBe(ownerCh.delta);
+    expect(await rowOf(top)).toMatchObject({ status: 'played', match_id: m.id });
+  });
+
+  it('the owner winning it is a normal win (no factor recorded)', async () => {
+    const [top, , low] = await rated(['Top', 1700], ['Mid', 1500], ['Low', 1300]);
+    await only(top, low);
+    const v = (await call(top, 'matchupYes')).body.matchup;
+    await call(low, 'respondChallenge', { challenge_id: v.challenge.id, decision: 'accept' });
+    const done = await play(top, low);
+    const ownerCh = done.rating_changes.find((x) => x.player_id === top.player.id);
+    expect(ownerCh.matched).toBeUndefined();
+    expect(ownerCh.delta).toBe(ownerCh.after - ownerCh.before);
+    expect(ownerCh.delta).toBeGreaterThan(0);
+  });
+});
+
+describe('Accept', () => {
   it('sends a matched challenge that skips the weekly caps, the one-active rule and the cooldown', async () => {
     const [a, b, c, d, e] = await ladder('Aa1', 'Bb2', 'Cc3', 'Dd4', 'Ee5');
     // E has used all 3 sends (one still open, to D), A declined E (cooldown) and A has received 2 this week
@@ -150,11 +362,13 @@ describe("I'm in", () => {
     const r = await call(e, 'matchupYes');
     expect(r.status).toBe(200);
     const m = r.body.matchup;
-    expect(m).toMatchObject({ status: 'waiting', frozen: true, max_loss: before.max_loss, max_win: before.max_win });
+    expect(m).toMatchObject({ status: 'waiting', frozen: true, max_loss: before.max_loss, max_win: before.max_win, loss_factor: before.loss_factor });
     expect(m.challenge).toMatchObject({ challenger_player_id: e.player.id, defender_player_id: a.player.id, status: 'open', matchup_id: m.id });
-    // the stakes it froze are what the challenge's own stakes line shows (dominant 2-0 each way)
+    // the challenge's own stakes line shows the same (frozen at generation, so within a point or two), the loss softened
     const st = (await call(e, 'matchStakes', { challenge_id: m.challenge.id })).body.players.find((x) => x.you);
-    expect([st.win[1], -st.lose[1]]).toEqual([m.max_win, m.max_loss]);
+    expect(st.loss_factor).toBe(m.loss_factor);
+    expect(Math.abs(st.win[1] - m.max_win)).toBeLessThanOrEqual(3);
+    expect(Math.abs(-st.lose[1] - m.max_loss)).toBeLessThanOrEqual(3);
     // matched challenges don't use up anyone's weekly allowance
     expect((await call(e, 'challengeLimits')).body.sent).toBe(3);
     expect((await call(e, 'matchupYes')).status).toBe(400);
@@ -182,7 +396,29 @@ describe("I'm in", () => {
     expect(await rating(a)).toBe(ra);
   });
 
-  it('backing out costs 2x the stored max loss and cancels the challenge', async () => {
+  it('backing out costs 2x the stored (capped) max loss and cancels the challenge', async () => {
+    const [a, b, c] = await rated(['Aa1', 2000], ['Bb2', 1600], ['Cc3', 1500]);
+    await only(a, c); // the favourite owes: raw loss > win, so the capped max loss is what doubles
+    const yes = (await call(a, 'matchupYes')).body.matchup;
+    const row = await rowOf(a);
+    expect(row.quote_loss).toBeGreaterThan(yes.max_loss);
+    expect(yes.max_loss).toBeLessThan(yes.max_win);
+    expect(2 * yes.max_loss).toBeLessThan(MAX_DELTA); // so the cap doesn't hide which loss was doubled
+    await sql('UPDATE players SET singles_rating = 1700 WHERE id = ?', c.player.id); // stakes drift after accept: the cost doesn't
+    const r0 = await rating(a);
+    const r = await call(a, 'matchupBackOut');
+    expect(r.status).toBe(200);
+    expect(r.body.matchup).toMatchObject({ status: 'backed_out', penalty_reason: 'backed_out', penalty_rating: 2 * yes.max_loss });
+    expect(await rating(a)).toBe(r0 - 2 * yes.max_loss);
+    expect((await one('SELECT status FROM challenges WHERE id = ?', yes.challenge.id)).status).toBe('cancelled');
+    expect((await call(a, 'matchupBackOut')).status).toBe(400);
+    await endWeek();
+    await sync();
+    expect(await rating(a)).toBe(r0 - 2 * yes.max_loss); // settled once
+    void b;
+  });
+
+  it('backing out (old shape): 2x, at most MAX_DELTA', async () => {
     const [a, b, c] = await ladder('Aa1', 'Bb2', 'Cc3');
     await only(c, a);
     const yes = (await call(c, 'matchupYes')).body.matchup;
@@ -296,15 +532,21 @@ describe('emails', () => {
     const sent = mockResend();
     await runSyncLadder({ env: { ...env, ...KEY_ENV } });
     await runSyncLadder({ env: { ...env, ...KEY_ENV } });
-    expect(sent.map((s) => `${s.to[0]}: ${s.subject}`).sort()).toEqual(['aa1@x.test: Your match this week: Bb2', 'bb2@x.test: Your match this week: Aa1']);
-    const row = await rowOf(b);
+    const [ra, rb] = [await rowOf(a), await rowOf(b)];
+    expect(sent.map((s) => `${s.to[0]}: ${s.subject}`).sort())
+      .toEqual([`aa1@x.test: Your mystery match this week: max win +${ra.max_win}`, `bb2@x.test: Your mystery match this week: max win +${rb.max_win}`]);
     const t = sent.find((s) => s.to[0] === 'bb2@x.test').text;
-    expect(t).toContain(`max win +${row.quote_win}, max loss −${row.quote_loss}`);
-    expect(t).toContain("Why them: You've never played · They're #1.");
-    expect(t).toContain(`or lose ${row.quote_loss}`);
-    expect(t).toContain(`(−${Math.min(MAX_DELTA, 2 * row.quote_loss)})`);
-    expect(t).toMatch(/Play it by Sun, \w+ \d+, 11:59pm C[SD]T/);
+    expect(t).toContain(`Your mystery match this week: max win +${rb.max_win}, max loss −${rb.max_loss}; accept to reveal who.`);
+    expect(t).toContain(`Decline and you lose ${rb.max_loss} right away. Ignore it and you lose ${rb.max_loss} at the end of the week`);
+    expect(t).toContain(`(−${Math.min(MAX_DELTA, 2 * rb.max_loss)})`);
+    expect(t).toMatch(/end of the week \(Sun, \w+ \d+, 11:59pm C[SD]T\)/);
     expect(t).toContain('https://penged.dev/challenges');
+    // never names (or describes) the opponent
+    for (const s of sent) {
+      const opp = s.to[0] === 'aa1@x.test' ? 'Bb2' : 'Aa1';
+      for (const n of [opp, opp.toLowerCase(), '#1', '#2', 'never played', 'Why them']) expect(`${s.subject}\n${s.text}`).not.toContain(n);
+      for (const n of [opp, opp.toLowerCase(), 'never played', 'Why them']) expect(s.html).not.toContain(n);
+    }
   });
 
   it("the matched challenge email says it is this week's matched game", async () => {
