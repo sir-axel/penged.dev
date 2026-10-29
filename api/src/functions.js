@@ -785,8 +785,15 @@ fns.matchStakes = async ({ env, user }, body) => {
     format: fmt, target, challenge, ranked, assumed: 'a narrow 2-1 (11-9, 9-11, 11-9) up to a dominant 2-0 (11-4, 11-5)',
     players: out.map((x) => {
       const r = actual?.[x.id];
+      // XP estimate: a 2-0 win (plus any bounty) / a narrow 2-1 loss. First-of-day and streak bonuses are left out.
+      const part = parts.find((p) => p.id === x.id);
+      const avg = (sd) => { const ps = parts.filter((p) => p.side === sd); return ps.reduce((t, p) => t + p.rating, 0) / ps.length; };
+      const gap = avg(x.side === 'a' ? 'b' : 'a') - avg(x.side);
+      const xpWin = xpForMatch({ won: true, gamesWon: 2, ratingGap: gap, newRival: part?.novel }).total + (x.bounty_win?.xp || 0);
+      const xpLose = xpForMatch({ won: false, gamesWon: 1, ratingGap: gap, newRival: part?.novel }).total;
       return {
-        ...x, player_id: x.id, name: nameById[x.id], you: x.id === me.id,
+        ...x, player_id: x.id, name: nameById[x.id], you: x.id === me.id, xp_win: ranked ? xpWin : xpWin - (x.bounty_win?.xp || 0), xp_lose: xpLose,
+        new_rival: !!part?.novel,
         ...(r ? { result: r.delta, result_after: r.after, result_tier: x.placing ? null : tierChange(x.rating, r.after) } : null),
       };
     }),

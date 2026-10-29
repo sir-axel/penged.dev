@@ -14,7 +14,7 @@ import { PlayerPicker } from "@/components/match/PlayerPicker";
 import { BountyChip } from "@/components/BountyChip";
 import { Avatar } from "@/components/Avatar";
 import { useBounties } from "@/hooks/useBounties";
-import { StakesLine, useStakes } from "@/components/match/StakesLine";
+import { StakesLine, useStakes, rangeText } from "@/components/match/StakesLine";
 import { MatchupCard, MatchedChip, WeekMatchesList } from "@/components/MatchupCard";
 import {
   AlertDialog,
@@ -296,9 +296,10 @@ function RevokeButton({ challenge, me, targets, atLimit, busy, onSwap, onRevoke 
                 </li>
               )}
             </ul>
-            {picked && <SendPreview me={me} target={picked} />}
+            {picked && <SwapCompare from={challenge} to={picked} me={me} />}
+            {picked && <QuoteLine target={picked} />}
             <Button className="h-11 w-full rounded-sm" disabled={!swapTo || busy} onClick={async () => (await onSwap(swapTo), setOpen(false))}>
-              {swapTo ? `Swap to ${playerName(options.find((p) => p.id === swapTo) || {})}` : "Pick a player to swap to"}
+              {picked ? `Swap ${challenge.defender_name} → ${playerName(picked)} · free` : "Pick a player to swap to"}
             </Button>
           </div>
         )}
@@ -401,6 +402,78 @@ export function DoublesCard({ challenge: c, userId, busy, onRespond }) {
 }
 
 /** What declining / ignoring would cost the player you picked, before you send it. */
+/** Side by side: the challenge you have out now vs the one you'd swap to, for you (elo ranges, XP, bounty). */
+function SwapCompare({ from, to, me }) {
+  const now = useStakes({ challenge_id: from.id }).data;
+  const next = useStakes(
+    me ? { format: "singles", target: 11, as_challenge: true, side_a: [{ player_id: me.id }], side_b: [{ player_id: to.id }] } : null,
+  ).data;
+  const a = now?.players?.find((p) => p.you);
+  const b = next?.players?.find((p) => p.you);
+  const rows = [
+    ["If you win", (x) => x && rangeText(x.win), (x) => x?.win?.[1]],
+    ["If you lose", (x) => x && rangeText(x.lose), (x) => x?.lose?.[1]],
+    ["XP if you win", (x) => x && `+${x.xp_win}`, (x) => x?.xp_win],
+    ["XP if you lose", (x) => x && `+${x.xp_lose}`, (x) => x?.xp_lose],
+    ["Bounty", (x) => (x ? (x.bounty_win ? `+${x.bounty_win.rating} · ${x.bounty_win.xp}xp` : "none") : null), (x) => x?.bounty_win?.rating || 0],
+  ];
+  const better = (va, vb) => (va == null || vb == null || va === vb ? null : vb > va ? "b" : "a");
+  return (
+    <div className="overflow-hidden rounded-sm border border-border bg-card text-xs" data-testid="swap-compare">
+      <div className="grid grid-cols-[1fr_1fr_1fr] border-b border-border bg-secondary/60 font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+        <span className="px-2 py-1.5" />
+        <span className="truncate px-2 py-1.5">{`Now: ${from.defender_name}`}</span>
+        <span className="truncate px-2 py-1.5 text-foreground">{`Swap: ${playerName(to)}`}</span>
+      </div>
+      {rows.map(([label, show, val]) => {
+        const w = better(val(a), val(b));
+        return (
+          <div key={label} className="grid grid-cols-[1fr_1fr_1fr] border-b border-border last:border-0">
+            <span className="px-2 py-1.5 text-muted-foreground">{label}</span>
+            <span className={`px-2 py-1.5 font-mono tabular-nums ${w === "a" ? "font-semibold text-success" : ""}`}>{show(a) ?? "…"}</span>
+            <span className={`px-2 py-1.5 font-mono tabular-nums ${w === "b" ? "font-semibold text-success" : ""}`}>{show(b) ?? "…"}</span>
+          </div>
+        );
+      })}
+      <p className="border-t border-border px-2 py-1.5 text-[10px] text-muted-foreground">
+        Elo: a narrow 2-1 to a dominant 2-0, played as a challenge. XP: a 2-0 win or a 2-1 loss, before first-of-day and streak bonuses.
+      </p>
+    </div>
+  );
+}
+
+/** The swap button with its confirmation: who goes out, who comes in, and what changes for you. */
+function SwapConfirm({ from, to, me, busy, onSwap, className = "" }) {
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <Button disabled={!to || busy} className={`h-12 w-full rounded-sm ${className}`} data-testid="swap-send">
+          {busy && <LoaderCircle className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
+          {to ? `Swap ${from.defender_name} → ${playerName(to)} · free` : "Pick someone to swap to"}
+        </Button>
+      </AlertDialogTrigger>
+      {to && (
+        <AlertDialogContent className="max-h-[88dvh] w-[calc(100%-2rem)] overflow-y-auto overscroll-contain rounded-sm">
+          <AlertDialogHeader>
+            <AlertDialogTitle>{`Swap ${from.defender_name} for ${playerName(to)}?`}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {`Your challenge to ${from.defender_name} is taken back and goes to ${playerName(to)} instead. Free, and it doesn't use one of your weekly sends.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <SwapCompare from={from} to={to} me={me} />
+          <QuoteLine target={to} />
+          <AlertDialogFooter>
+            <AlertDialogCancel className="min-h-10 rounded-sm">{`Keep ${from.defender_name}`}</AlertDialogCancel>
+            <AlertDialogAction className="min-h-10 rounded-sm" onClick={onSwap}>
+              {`Swap to ${playerName(to)}`}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      )}
+    </AlertDialog>
+  );
+}
+
 /** Before sending (or swapping) a challenge: what's on the line for you, and what ducking it would cost them. */
 function SendPreview({ me, target }) {
   return (
@@ -731,23 +804,19 @@ export function Challenges() {
                   </p>
                 )}
                 {canSwap ? (
-                  <Button
-                    onClick={async () => {
+                  <SwapConfirm
+                    from={myLive}
+                    to={selected && selectedId !== myLive.defender_player_id ? selected : null}
+                    me={player}
+                    busy={busy === "create"}
+                    onSwap={async () => {
                       (await act(
                         "revokeChallenge",
                         { challenge_id: myLive.id, swap_to_player_id: selectedId, ...(message.trim() ? { message } : null) },
                         "create",
                       )) && (setSelectedId(""), setMessage(""));
                     }}
-                    disabled={!selectedId || selectedId === myLive.defender_player_id || !!busy}
-                    className="h-12 w-full rounded-sm"
-                    data-testid="swap-send"
-                  >
-                    {busy === "create" && <LoaderCircle className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
-                    {selected && selectedId !== myLive.defender_player_id
-                      ? `Swap ${myLive.defender_name} → ${playerName(selected)} · free`
-                      : "Pick someone to swap to"}
-                  </Button>
+                  />
                 ) : (
                   <Button
                     onClick={async () => {
