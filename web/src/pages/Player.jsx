@@ -16,6 +16,8 @@ import { LevelBar } from "@/components/LevelBar";
 import { Stat } from "@/components/Stat";
 import { MatchRow } from "@/components/MatchRow";
 import { api } from "@/api/client";
+import { GuildTag } from "@/components/GuildBadge";
+import { useGuildTags } from "@/hooks/useGuildTags";
 
 function TierProgress({ player, format }) {
   const rating = ratingFor(player, format);
@@ -130,6 +132,7 @@ function FormatBlock({ player, format }) {
 }
 
 export function PlayerProfile() {
+  const guildTags = useGuildTags();
   let { username } = useParams(),
     { data: player, isLoading } = useQuery({
       queryKey: ["player", username],
@@ -198,7 +201,25 @@ export function PlayerProfile() {
   return (
     <>
       <BackButton fallback="/leaderboard" />
-      <PageHeader eyebrow={`@${player.username}`} title={playerName(player)} />
+      <PageHeader
+        eyebrow={`@${player.username}`}
+        title={
+          guildTags[player.id] ? (
+            <span className="flex flex-wrap items-center gap-2">
+              <span className="min-w-0 break-words">{playerName(player)}</span>
+              <GuildTag
+                tag={guildTags[player.id].tag}
+                color={guildTags[player.id].color}
+                to={`/guilds/${guildTags[player.id].guild_id}`}
+                title={guildTags[player.id].name}
+                className="min-h-7 px-1.5 text-xs"
+              />
+            </span>
+          ) : (
+            playerName(player)
+          )
+        }
+      />
       <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
         <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
           <div className="flex items-center gap-4">

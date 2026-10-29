@@ -7,6 +7,8 @@ import { ScrollToTop } from "@/components/ScrollToTop";
 import { RedirectIfSignedIn, RequireAuth, RequirePlayer } from "@/components/guards";
 import { Home } from "@/pages/Home";
 import { Leaderboard } from "@/pages/Leaderboard";
+import { Guilds, GuildNew } from "@/pages/Guilds";
+import { GuildPage } from "@/pages/Guild";
 import { Feed } from "@/pages/Feed";
 import { Confirm } from "@/pages/Confirm";
 import { MatchDetail } from "@/pages/MatchDetail";
@@ -41,6 +43,8 @@ function AppRoutes() {
       <Route element={<Layout />}>
         <Route path="/" element={<Home />} />
         <Route path="/leaderboard" element={<Leaderboard />} />
+        <Route path="/guilds" element={<Guilds />} />
+        <Route path="/guilds/:id" element={<GuildPage />} />
         <Route path="/feed" element={<Feed />} />
         <Route path="/matches" element={<Navigate to="/feed" replace />} />
         <Route path="/matches/:id" element={<MatchDetail />} />
@@ -55,6 +59,7 @@ function AppRoutes() {
           <Route path="/welcome" element={<Welcome />} />
           <Route element={<RequirePlayer />}>
             <Route path="/matches/new" element={<NewMatch />} />
+            <Route path="/guilds/new" element={<GuildNew />} />
             <Route path="/confirm" element={<Confirm />} />
             <Route path="/challenges" element={<Challenges />} />
             <Route path="/profile" element={<Profile />} />
