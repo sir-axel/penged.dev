@@ -540,6 +540,13 @@ export const dodgeK = (defRd) => Math.max(DODGE_K_MIN, Math.min(DODGE_K_MAX, DOD
 // Ladder-gap weighting: 1 place apart -> 1.0, 2 -> 0.8, 3 -> 0.6, 4-5 -> 0.4, 6 or more -> 0.25
 export const DODGE_RANK_FACTOR = { 1: 1.0, 2: 0.8, 3: 0.6, 4: 0.4, 5: 0.4, 6: 0.25 };
 export const DODGE_BASE_MULT = 0.5;
+// Standing: the higher you are rated, the more ducking costs you. x1 at DUCK_STANDING_FROM or below, rising linearly to
+// x DUCK_STANDING_MAX at DUCK_STANDING_FROM + DUCK_STANDING_SPAN and above.
+export const DUCK_STANDING_FROM = 1400;
+export const DUCK_STANDING_SPAN = 400;
+export const DUCK_STANDING_MAX = 2;
+export const duckStanding = (defRating) =>
+  1 + (DUCK_STANDING_MAX - 1) * Math.max(0, Math.min(1, (Number(defRating) - DUCK_STANDING_FROM) / DUCK_STANDING_SPAN));
 export const rankFactor = (rankGap) => DODGE_RANK_FACTOR[Math.max(1, Math.min(6, Math.round(rankGap || 1)))];
 /** 1.0 when evenly matched, shrinking as the rating gap grows (~0.75 at 200, ~0.36 at 400). */
 export function closeness(defRating, chalRating) {
@@ -549,7 +556,7 @@ export function closeness(defRating, chalRating) {
 
 /** What ducking costs before the expired/declined multiplier: peaks for close, adjacent, rarely-played pairs. */
 export function dodgeBase({ defRating, defRd, chalRating, meetings = 0, rankGap = 1 }) {
-  return DODGE_BASE_MULT * dodgeK(defRd) * closeness(defRating, chalRating) * rankFactor(rankGap) * repeatFactor(meetings);
+  return DODGE_BASE_MULT * dodgeK(defRd) * closeness(defRating, chalRating) * rankFactor(rankGap) * repeatFactor(meetings) * duckStanding(defRating);
 }
 
 /**

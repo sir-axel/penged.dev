@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, LoaderCircle } from "lucide-react";
+import { Check, LoaderCircle, LogOut } from "lucide-react";
 import { useMyPlayer } from "@/hooks/useMyPlayer";
 import { Avatar } from "@/components/Avatar";
 import { TierEmblem } from "@/components/TierEmblem";
@@ -352,16 +352,25 @@ export function MatchupCard({ onRecord, className = "" }) {
       {errorBox}
       {record && <div className="mt-3">{record}</div>}
       {canBackOut && (
-        <div className="mt-2 text-right">
+        <div className="mt-3 flex items-center justify-between gap-3 border-t border-border pt-3">
+          <p className="text-xs text-muted-foreground">Changed your mind? It costs double your max loss.</p>
           <Confirm
             trigger={
               <button
                 type="button"
                 disabled={!!busy}
-                className="min-h-10 px-1 text-xs text-muted-foreground underline underline-offset-4 hover:text-destructive disabled:opacity-50"
+                className="group inline-flex min-h-10 shrink-0 items-center gap-2 rounded-sm border border-border bg-card px-3 text-sm font-medium text-foreground transition-colors hover:border-destructive/60 hover:bg-destructive/5 hover:text-destructive disabled:opacity-50"
                 data-testid="matchup-backout"
               >
-                {busy === "matchupBackOut" ? "Backing out…" : `Back out (${minus(m.backout_cost)})`}
+                {busy === "matchupBackOut" ? (
+                  <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <LogOut className="h-4 w-4" aria-hidden="true" />
+                )}
+                {busy === "matchupBackOut" ? "Backing out…" : "Back out"}
+                <span className="rounded-sm bg-destructive/10 px-1.5 py-0.5 font-mono text-[11px] font-semibold tabular-nums text-destructive">
+                  {minus(m.backout_cost)}
+                </span>
               </button>
             }
             title="Back out of this week's match?"

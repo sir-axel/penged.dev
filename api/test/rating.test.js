@@ -90,7 +90,8 @@ describe('challenge penalties', () => {
     expect(near).toBeGreaterThan(farBelow);
     expect(near).toBeGreaterThan(farAbove);
     expect(farBelow).toBeGreaterThanOrEqual(5);
-    expect(pen('expired', { defRating: 1600 }).penalty).toBeLessThan(near);
+    // same standing (1600): the 200-point gap costs less than an equal challenger
+    expect(pen('expired', { defRating: 1600 }).penalty).toBeLessThan(pen('expired', { defRating: 1600, chalRating: 1590 }).penalty);
   });
   it('rank gap 3 pays less than rank gap 1 at the same ratings', () => {
     const g1 = pen('expired', { rankGap: 1 }).penalty;
@@ -239,5 +240,14 @@ describe('close-loss credit', () => {
   it('took a shot: XP for losing to someone 100+ above', () => {
     expect(R.xpForMatch({ won: false, ratingGap: 150 }).parts.map((p) => p.key)).toContain('shot');
     expect(R.xpForMatch({ won: false, ratingGap: 50 }).parts.map((p) => p.key)).not.toContain('shot');
+  });
+});
+
+describe('ducking costs more the higher you stand', () => {
+  it('x1 up to 1400, x2 from 1800', () => {
+    expect([1200, 1400, 1600, 1800, 2100].map(R.duckStanding)).toEqual([1, 1, 1.5, 2, 2]);
+    const pen = (defRating) => R.challengePenalty({ kind: 'expired', defRating, defRd: 60, chalRating: defRating - 100, rankGap: 1 }).penalty;
+    expect(pen(1700)).toBeGreaterThan(pen(1400));
+    expect(pen(1800)).toBeGreaterThanOrEqual(Math.round(2 * pen(1400)) - 1);
   });
 });

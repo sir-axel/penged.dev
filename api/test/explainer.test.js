@@ -55,6 +55,7 @@ describe('explainer quotes the shipped constants', () => {
     expect(f[5]).toBe(f[4]);
     expect(R.DOWN_MULT).toBe(0.5); expect(R.DOWN_CLOSE_GAP).toBeUndefined(); has('declining or not answering costs half the usual amount, with no walkover');
     has('there is no weekly limit on ducking penalties');
+    has(`×1 at ${R.DUCK_STANDING_FROM} or below, rising to ×${R.DUCK_STANDING_MAX} at ${R.DUCK_STANDING_FROM + R.DUCK_STANDING_SPAN} and up`);
     const share = (gap) => Math.round(100 * R.expectedPointShare(R.expectedScore(1400 - gap, 1400)));
     has(`about ${share(100)}% against someone 100 above, ${share(300)}% at 300, ${share(450)}% at 450`);
     has(`${R.CLOSE_CREDIT_PER} rating for every whole share of points above that mark, at most +${R.CLOSE_CREDIT_MAX}`);
