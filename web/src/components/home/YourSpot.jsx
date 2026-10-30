@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { formatRecord, matchesPlayed, playerName, overallRating, rankFor, ratingFor, streakFor, isProvisional, isInactive, settlingHint } from "@/lib/ladder";
+import { formatRecord, matchesPlayed, playerName, overallRating, rankFor, ratingFor, streakFor, isProvisional, isPlacing, isInactive, settlingHint } from "@/lib/ladder";
 import { LevelBar } from "@/components/LevelBar";
 import { TierBadge } from "@/components/TierBadge";
 import { EloButton } from "@/components/EloButton";
@@ -31,7 +31,7 @@ export function YourSpot({ player, toConfirm = 0 }) {
                     </p>
                     <p className="font-heading text-2xl font-bold leading-none">{rank ? `#${rank}` : "—"}</p>
                     <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
-                      {matchesPlayed(player, fmt) ? ratingFor(player, fmt) : "nil"}
+                      {!matchesPlayed(player, fmt) ? "nil" : isProvisional(player, fmt) ? "rating hidden" : ratingFor(player, fmt)}
                       {" · "}
                       {`Matches ${formatRecord(player[`${fmt}_wins`], player[`${fmt}_losses`])}`}
                     </p>
@@ -61,7 +61,7 @@ export function YourSpot({ player, toConfirm = 0 }) {
               })}
             </div>
             <p className="font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
-              {`Overall ${overallRating(player)}`}
+              {isPlacing(player, "overall") ? "Overall hidden until placement" : `Overall ${overallRating(player)}`}
             </p>
           </div>
           <div className="flex gap-2">

@@ -10,7 +10,7 @@ import { RatingChart } from "@/components/RatingChart";
 import { BackButton } from "@/components/BackButton";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
-import { formatRecord, matchesPlayed, playerName, isInactive, isProvisional, overallRating, rankFor, ratingFor, streakFor, bestStreakFor, settlingHint } from "@/lib/ladder";
+import { formatRecord, matchesPlayed, playerName, isInactive, isProvisional, isPlacing, placementCount, overallRating, rankFor, ratingFor, streakFor, bestStreakFor, settlingHint } from "@/lib/ladder";
 import { Avatar } from "@/components/Avatar";
 import { TierBadge, TIER_STYLE } from "@/components/TierBadge";
 import { tierFor, nextTier, tierProgress } from "@/lib/tiers";
@@ -90,7 +90,14 @@ function FormatBlock({ player, format }) {
       <div className="mt-2 flex items-start gap-4">
         <div>
           <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Rating</p>
-          <p className="font-heading text-2xl font-bold leading-none">{matchesPlayed(player, format) ? ratingFor(player, format) : "nil"}</p>
+          {matchesPlayed(player, format) && isProvisional(player, format) ? (
+            <>
+              <p className="font-heading text-2xl font-bold leading-none text-muted-foreground" data-testid={`rating-hidden-${format}`}>?</p>
+              <p className="mt-1 font-mono text-[10px] text-muted-foreground">{`hidden · placement ${placementCount(player, format)}`}</p>
+            </>
+          ) : (
+            <p className="font-heading text-2xl font-bold leading-none">{matchesPlayed(player, format) ? ratingFor(player, format) : "nil"}</p>
+          )}
           {settlingHint(player, format) && (
             <p className="mt-1 font-mono text-[10px] text-muted-foreground" title="Still settling: results move this rating more until it firms up." data-testid="settling-hint">
               {settlingHint(player, format)}
@@ -248,7 +255,9 @@ export function PlayerProfile() {
           ))}
         </div>
         <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-          {`Overall ${overallRating(player)} · a display blend of the two ratings, not a rating of its own`}
+          {isPlacing(player, "overall")
+            ? "Overall hidden until a format finishes placement"
+            : `Overall ${overallRating(player)} · a display blend of the placed ratings, not a rating of its own`}
         </p>
         <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
           <Stat label="Verified matches" value={singlesPlayed + doublesPlayed} />

@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { Avatar } from "@/components/Avatar";
 import { allChips, CHIP_TONES } from "@/lib/feedChips";
 import { timeAgo } from "@/lib/timeAgo";
+import { isPlacementChange } from "@/lib/ladder";
 
 export function Chip({ chip }) {
   return (
@@ -16,6 +17,12 @@ export function Chip({ chip }) {
 
 function Delta({ change }) {
   if (!change || !Number.isFinite(change.delta)) return null;
+  if (isPlacementChange(change))
+    return (
+      <span className="w-9 shrink-0 text-right font-mono text-xs text-muted-foreground" aria-label="placement match, rating hidden" title="Placement match: rating hidden">
+        —
+      </span>
+    );
   const up = change.delta >= 0;
   return (
     <span

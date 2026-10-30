@@ -5,7 +5,7 @@ import { ArrowLeftRight, Check, LoaderCircle, Search, Undo2 } from "lucide-react
 import { useAuth } from "@/context/AuthContext";
 import { useMyPlayer } from "@/hooks/useMyPlayer";
 import { PageHeader } from "@/components/PageHeader";
-import { clockFor, playerName } from "@/lib/ladder";
+import { clockFor, playerName, ratingText } from "@/lib/ladder";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/EmptyState";
@@ -282,7 +282,7 @@ function RevokeButton({ challenge, me, targets, atLimit, busy, onSwap, onRevoke 
                       <Avatar name={playerName(p)} src={p.avatar_url} size={28} player={p} />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate font-heading text-sm font-semibold">{playerName(p)}</span>
-                        <span className={`block font-mono text-[10px] uppercase tracking-[0.1em] ${picked ? "text-background/70" : "text-muted-foreground"}`}>{`${p.singles_rating} rating`}</span>
+                        <span className={`block font-mono text-[10px] uppercase tracking-[0.1em] ${picked ? "text-background/70" : "text-muted-foreground"}`}>{ratingText(p)}</span>
                       </span>
                       <BountyChip bounty={bountyOf(p)} />
                       {picked && <Check className="h-4 w-4 shrink-0" aria-hidden="true" />}
@@ -763,7 +763,7 @@ export function Challenges() {
                               <BountyChip bounty={bountyOf(e)} />
                             </span>
                             <span className="block font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
-                              {`${e.singles_rating} rating${down ? " · half cost" : ""}`}
+                              {`${ratingText(e)}${down ? " · half cost" : ""}`}
                             </span>
                           </span>
                           <SwapConfirm
@@ -804,8 +804,7 @@ export function Challenges() {
                               <BountyChip bounty={bountyOf(e)} />
                             </span>
                             <span className="block font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
-                              {e.singles_rating}
-                              {" rating"}
+                              {ratingText(e)}
                               {full ? ` · free again ${localWhen(full)}` : ""}
                             </span>
                           </span>

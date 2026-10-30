@@ -84,8 +84,11 @@ export function matchesPlayed(e, t) {
 }
 /** DISPLAY ONLY: blend of the two independent ratings for the Overall board. Never an input to any rating, rank or stored field. */
 export function overallRating(e) {
-  let t = matchesPlayed(e, "singles"),
-    n = matchesPlayed(e, "doubles"),
+  // Formats still in placement stay out of the blend (their ratings are hidden); all of them if nothing is placed yet.
+  const placed = (f) => matchesPlayed(e, f) >= PROVISIONAL_MATCHES;
+  const any = placed("singles") || placed("doubles");
+  let t = !any || placed("singles") ? matchesPlayed(e, "singles") : 0,
+    n = !any || placed("doubles") ? matchesPlayed(e, "doubles") : 0,
     r = t + n;
   if (!r) return 1400;
   let i = (Number(e.singles_rating) || 1400) * t + (Number(e.doubles_rating) || 1400) * n;
@@ -98,6 +101,17 @@ export function playerName(e) {
 export const PROVISIONAL_MATCHES = 3;
 export const ACTIVE_DAYS = 30;
 export const isProvisional = (player, format) => matchesPlayed(player, format) < PROVISIONAL_MATCHES;
+/** Ratings stay hidden until placement is done: a format's rating is only shown after PROVISIONAL_MATCHES matches in it. */
+export const isPlacing = (player, format) =>
+  format === "overall" ? isProvisional(player, "singles") && isProvisional(player, "doubles") : isProvisional(player, format);
+/** "2/3" while placing (matches played in that format, Overall counts the further-along format). */
+export const placementCount = (player, format) =>
+  `${Math.min(PROVISIONAL_MATCHES, format === "overall" ? Math.max(matchesPlayed(player, "singles"), matchesPlayed(player, "doubles")) : matchesPlayed(player, format))}/${PROVISIONAL_MATCHES}`;
+/** "1523 rating", or "placing 2/3" while that format's rating is hidden. */
+export const ratingText = (player, format = "singles") =>
+  isProvisional(player, format) ? `placing ${placementCount(player, format)}` : `${ratingFor(player, format)} rating`;
+/** A rating change from a placement match (one of a player's first PROVISIONAL_MATCHES in that format): its numbers stay hidden. */
+export const isPlacementChange = (c) => Number(c?.matches_played) > 0 && Number(c.matches_played) <= PROVISIONAL_MATCHES;
 /** Singles only: played at least once but off the ranked ladder (no verified match for 30 days). */
 /** Played that format at least once but is off its ranked ladder (no verified match of that format for 30 days). */
 export const isInactive = (player, format = "singles") =>

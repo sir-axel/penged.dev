@@ -1,12 +1,13 @@
 import { Link } from "react-router-dom";
 import { StatusBadge } from "@/components/StatusBadge";
 import { timeAgo } from "@/lib/timeAgo";
+import { isPlacementChange } from "@/lib/ladder";
 
 const signed = (n) => (n > 0 ? `+${n}` : n < 0 ? `−${Math.abs(n)}` : "±0");
 
 /** One side of a match: W/L block, names, each player's rating change, set score. */
 function SideLine({ players = [], games, won, decided, changes, pov, unranked }) {
-  const delta = (id) => changes.find((c) => c.player_id === id)?.delta;
+  const change = (id) => changes.find((c) => c.player_id === id);
   return (
     <div className="flex items-center gap-2.5" data-side={won ? "win" : "loss"}>
       <span
@@ -17,7 +18,9 @@ function SideLine({ players = [], games, won, decided, changes, pov, unranked })
       </span>
       <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-0.5">
         {players.map((e, i) => {
-          const d = delta(e.player_id);
+          const c = change(e.player_id);
+          const d = c?.delta;
+          const hidden = isPlacementChange(c); // placement match: the number stays hidden
           return (
             <span key={e.player_id} className="inline-flex min-w-0 items-baseline gap-1.5">
               {i > 0 && <span className="text-muted-foreground">&</span>}
@@ -26,7 +29,10 @@ function SideLine({ players = [], games, won, decided, changes, pov, unranked })
               >
                 {e.display_name || e.username}
               </span>
-              {d != null && !unranked && (
+              {d != null && !unranked && hidden && (
+                <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground" title="Placement match: rating hidden until placement is done">placing</span>
+              )}
+              {d != null && !unranked && !hidden && (
                 <span className={`font-mono text-[11px] font-semibold tabular-nums ${d >= 0 ? "text-success" : "text-destructive"}`}>{signed(d)}</span>
               )}
             </span>

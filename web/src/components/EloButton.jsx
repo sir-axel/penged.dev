@@ -55,7 +55,7 @@ export function EloButton({ format = "singles", className = "" }) {
           <p className="font-display text-[0.58rem] uppercase tracking-[0.2em] text-brand">{`${fmt} ladder`}</p>
           <DialogTitle className="mt-2 font-heading text-2xl font-bold tracking-tight">The ranks</DialogTitle>
           <DialogDescription className="mt-1 text-sm leading-relaxed text-muted-foreground">
-            {`Your tier comes straight from your ${fmt} rating. Everyone starts at 1400 and plays ${PROVISIONAL} placement matches before a tier shows.`}
+            {`Your tier comes straight from your ${fmt} rating. Everyone starts at 1400 and plays ${PROVISIONAL} placement matches before their rating and tier show.`}
           </DialogDescription>
         </div>
         {mine && (
@@ -87,7 +87,7 @@ export function EloButton({ format = "singles", className = "" }) {
                 <div className="h-full rounded-full bg-muted-foreground" style={{ width: `${Math.round(((PROVISIONAL - placing) / PROVISIONAL) * 100)}%` }} />
               </div>
               <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
-                {`${PROVISIONAL - placing}/${PROVISIONAL} placement · ${placing} more ${fmt} match${placing === 1 ? "" : "es"} to reveal your tier`}
+                {`${PROVISIONAL - placing}/${PROVISIONAL} placement · ${placing} more ${fmt} match${placing === 1 ? "" : "es"} to reveal your rating and tier`}
               </p>
             </div>
           </div>

@@ -6,7 +6,7 @@ export const SEPARATE_RATINGS =
 
 export const RATING_POINTS = [
   SEPARATE_RATINGS,
-  "Everyone starts at 1400. No rating ever drops below 100, so there is a long way down to the Dirt.",
+  "Everyone starts at 1400 and plays 3 placement matches per format. Until the 3rd is in, your rating and the change on each placement match stay hidden (to everyone, you included); then it shows with your tier. No rating ever drops below 100, so there is a long way down to the Dirt.",
   "Bounties: what beating someone is worth to you, on top of the normal result, and it comes straight out of their rating. Three kinds stack. The top 3 carry one for anyone ranked below them (#1 12 rating and 50 xp, #2 9 and 35, #3 6 and 25, plus 2 rating and 5 xp for every extra place between you, up to +10 and +30), so chasing the top pays most from the bottom. Anyone on a 3+ win streak carries one for everybody, #1 included (3 rating and 10 xp per win past 2, up to 15 and 50). Anyone up 50+ rating in the last 7 days carries one too (1 rating per 10 points risen, up to 12; 1 xp per 2, up to 40). At most 30 rating and 120 xp. You can claim the same player's bounty once a week; in doubles the winners split the rating and each get the xp. Bounties show next to names when you pick someone to record or challenge.",
   "Derank protection: once you are placed, a loss that would drop you out of your tier lands you at 0 in that tier instead. Lose again from 0 and you drop, never more than one tier in one match.",
   "Only Ranked matches move ratings. Record a match as Unranked to just play for XP: ratings, records, streaks, rematch counts and challenges stay as they are.",

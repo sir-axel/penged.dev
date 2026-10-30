@@ -6,7 +6,7 @@ import { useMyPlayer } from "@/hooks/useMyPlayer";
 import { Avatar } from "@/components/Avatar";
 import { TierEmblem } from "@/components/TierEmblem";
 import { Button } from "@/components/ui/button";
-import { clockFor, playerName } from "@/lib/ladder";
+import { clockFor, playerName, ratingText } from "@/lib/ladder";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -321,7 +321,7 @@ export function MatchupCard({ onRecord, className = "" }) {
           <span className="block truncate font-heading text-lg font-semibold leading-tight">{name}</span>
           <span className="block font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
             {opp.singles_rank ? `#${opp.singles_rank} · ` : ""}
-            {opp.singles_rating} rating
+            {ratingText(opp)}
           </span>
         </span>
       </Link>

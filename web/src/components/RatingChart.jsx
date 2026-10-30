@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/api/client";
 import { TIERS } from "@/lib/tiers";
 import { EloButton } from "@/components/EloButton";
-import { ratingFor } from "@/lib/ladder";
+import { ratingFor, isProvisional, placementCount } from "@/lib/ladder";
 
 const START = 1400;
 const WIDE = { W: 640, H: 220 };
@@ -121,6 +121,8 @@ export function RatingChart({ player }) {
           <div className="flex h-40 items-center justify-center">
             <div className="h-6 w-6 animate-spin rounded-full border-2 border-border border-t-foreground" />
           </div>
+        ) : isProvisional(player, format) && pts.length >= 2 ? (
+          <p className="py-10 text-center text-sm text-muted-foreground" data-testid="chart-placement">{`Rating hidden during placement (${placementCount(player, format)} ${format}). The chart appears once placement is done.`}</p>
         ) : pts.length < 2 ? (
           <p className="py-10 text-center text-sm text-muted-foreground">{`No verified ${format} matches yet. The chart starts with the first one.`}</p>
         ) : (

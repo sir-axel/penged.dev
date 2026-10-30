@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { Avatar } from "@/components/Avatar";
-import { playerName } from "@/lib/ladder";
+import { playerName, isPlacing } from "@/lib/ladder";
 import { TierBadge } from "@/components/TierBadge";
 import { GuildTag } from "@/components/GuildBadge";
 import { useGuildTags } from "@/hooks/useGuildTags";
@@ -10,6 +10,7 @@ import { useBounties } from "@/hooks/useBounties";
 export function LadderRow({ rank, player, rating: rating, wins = 0, losses = 0, provisional = false, inactive = false, unrated = false, streak = 0, format = "singles" }) {
   const guild = useGuildTags()[player.id];
   const bountyOf = useBounties(format);
+  const placing = !unrated && isPlacing(player, format); // rating hidden until placement is done
   return (
     <li className="border-b border-border last:border-0">
       <Link
@@ -44,8 +45,11 @@ export function LadderRow({ rank, player, rating: rating, wins = 0, losses = 0, 
             )}
           </span>
         </span>
-        <span className={`w-12 shrink-0 text-right font-mono text-sm tabular-nums${unrated ? " text-muted-foreground" : ""}`}>
-          {unrated ? "nil" : rating}
+        <span
+          className={`w-12 shrink-0 text-right font-mono text-sm tabular-nums${unrated || placing ? " text-muted-foreground" : ""}`}
+          title={placing ? "Rating hidden until placement is done" : undefined}
+        >
+          {unrated ? "nil" : placing ? "—" : rating}
         </span>
       </Link>
     </li>

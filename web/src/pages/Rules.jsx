@@ -29,7 +29,7 @@ export const RULE_SECTIONS = [
         i === 0 ? `${t.name}: 100 (the floor)–${TIERS[1].min - 1}` : i === TIERS.length - 1 ? `${t.name}: ${t.min} and up` : `${t.name}: ${t.min}–${TIERS[i + 1].min - 1}`,
       ),
       "Singles and doubles each have their own tier, from their own rating. The Overall board shows the tier of its blended score, for display only.",
-      "Placement until you've played 3 matches in that format.",
+      "Placement until you've played 3 matches in that format. Your rating, and the rating change on each placement match, stays hidden until then; it shows once the 3rd match is in.",
       "Tiers follow your rating — they go down as well as up.",
     ],
   },
@@ -46,7 +46,7 @@ export const RULE_SECTIONS = [
     items: [
       "Rank is your place in the rating order. New players start at 1400 but are unranked (shown as nil, at the bottom of the board) until their first verified match in that format, then slot in by rating.",
       "Win and your rating rises, so you pass everyone you now out-rate. Ties go to whoever has played more, then whoever joined first.",
-      "Stay active: with no verified match of a format in 30 days you move to that format's Inactive list (singles and doubles are tracked separately), keeping your rating, and are ranked again when you next play it. Under 5 matches is marked provisional.",
+      "Stay active: with no verified match of a format in 30 days you move to that format's Inactive list (singles and doubles are tracked separately), keeping your rating, and are ranked again when you next play it. Under 3 matches is placement: the rating stays hidden.",
       "Beating someone far below you earns little rating, so it barely moves you.",
       "Doubles is ranked the same way, on its own: by doubles rating, then doubles matches played.",
       "Overall blends both ratings, weighted by how many matches you have played in each. It is shown on the Overall board only and is never used in any rating, rank or challenge.",

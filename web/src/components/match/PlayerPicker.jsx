@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { ChevronsUpDown, Search } from "lucide-react";
-import { playerName, rankFor, ratingFor } from "@/lib/ladder";
+import { playerName, rankFor, ratingFor, isProvisional, placementCount } from "@/lib/ladder";
 import { BountyChip } from "@/components/BountyChip";
 import { useBounties } from "@/hooks/useBounties";
 import { Avatar } from "@/components/Avatar";
@@ -103,7 +103,7 @@ export function PlayerPicker({
                       {`${format} rank `}
                       {rankFor(e, format) || "—"}
                       {" · "}
-                      {ratingFor(e, format) || 1400}
+                      {isProvisional(e, format) ? `placing ${placementCount(e, format)}` : ratingFor(e, format)}
                     </span>
                   </span>
                   {chip(e)}

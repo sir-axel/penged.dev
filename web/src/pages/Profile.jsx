@@ -7,7 +7,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useMyPlayer } from "@/hooks/useMyPlayer";
 import { PageHeader } from "@/components/PageHeader";
 import { Avatar } from "@/components/Avatar";
-import { formatRecord, playerName } from "@/lib/ladder";
+import { formatRecord, playerName, isProvisional } from "@/lib/ladder";
 import { LevelBar } from "@/components/LevelBar";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -65,9 +65,9 @@ export function Profile() {
             <div className="min-w-0 flex-1">
               <p className="line-clamp-2 break-words font-heading text-lg font-semibold">{playerName(player)}</p>
               <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-                {`Singles #${player.singles_rank || "—"} · ${player.singles_rating} · ${formatRecord(player.singles_wins, player.singles_losses)}`}
+                {`Singles #${player.singles_rank || "—"} · ${isProvisional(player, "singles") ? "rating hidden" : player.singles_rating} · ${formatRecord(player.singles_wins, player.singles_losses)}`}
                 <br />
-                {`Doubles #${player.doubles_rank || "—"} · ${player.doubles_rating} · ${formatRecord(player.doubles_wins, player.doubles_losses)}`}
+                {`Doubles #${player.doubles_rank || "—"} · ${isProvisional(player, "doubles") ? "rating hidden" : player.doubles_rating} · ${formatRecord(player.doubles_wins, player.doubles_losses)}`}
               </p>
             </div>
             <Link

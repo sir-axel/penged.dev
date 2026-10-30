@@ -7,7 +7,7 @@ import { Check, ChevronDown, LoaderCircle, MessageSquare, TriangleAlert, X } fro
 import { useAuth } from "@/context/AuthContext";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
-import { formatShortDate } from "@/lib/ladder";
+import { formatShortDate, isPlacementChange, PROVISIONAL_MATCHES } from "@/lib/ladder";
 import { StatusBadge } from "@/components/StatusBadge";
 import { SideCard } from "@/components/SideCard";
 import { Button } from "@/components/ui/button";
@@ -333,7 +333,12 @@ export function MatchDetail() {
                 <li className="px-3 py-2.5" key={e.player_id}>
                   <div className="flex items-center gap-2">
                     <span className="flex-1 truncate font-heading text-sm">{e.name}</span>
-                    {!e.unranked && (<>
+                    {!e.unranked && isPlacementChange(e) && (
+                      <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground" data-testid="placement-hidden">
+                        {`placement ${Math.min(e.matches_played, PROVISIONAL_MATCHES)}/${PROVISIONAL_MATCHES} · rating hidden`}
+                      </span>
+                    )}
+                    {!e.unranked && !isPlacementChange(e) && (<>
                     <span className="font-mono text-xs tabular-nums text-muted-foreground">
                       {e.before}
                       {" → "}
@@ -352,24 +357,24 @@ export function MatchDetail() {
                       {`Bounty claimed on ${b.name}${(b.parts || []).length ? ` (${b.parts.map((k) => ({ podium: "top 3", streak: "streak", riser: "riser" })[k] || k).join(" + ")})` : ""}: +${b.rating} rating · +${b.xp} xp`}
                     </p>
                   ))}
-                  {e.close_loss && (
+                  {!isPlacementChange(e) && e.close_loss && (
                     <p className={`mt-1 font-mono text-[10px] uppercase tracking-[0.08em] ${e.close_loss.credit > 0 ? "text-success" : "text-destructive"}`} data-testid="close-loss">
                       {e.close_loss.credit > 0
                         ? `Close-loss credit +${e.close_loss.credit}: took ${Math.round(e.close_loss.share * 100)}% of the points vs ${Math.round(e.close_loss.expected * 100)}% expected (${e.close_loss.gap} rating apart)`
                         : `Let them get close: ${e.close_loss.credit} (they took ${Math.round(e.close_loss.share * 100)}% of the points vs ${Math.round(e.close_loss.expected * 100)}% expected)`}
                     </p>
                   )}
-                  {e.bounty_paid > 0 && (
+                  {!isPlacementChange(e) && e.bounty_paid > 0 && (
                     <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.08em] text-destructive">{`Bounty paid: −${e.bounty_paid} rating`}</p>
                   )}
-                  {e.matched && (
+                  {!isPlacementChange(e) && e.matched && (
                     <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.08em] text-brand" data-testid="matched-softened">
                       {e.matched.min_win != null
                         ? `Matched game: win topped up to +${e.matched.min_win} (was ${e.matched.raw_win > 0 ? "+" : ""}${e.matched.raw_win})`
                         : `Matched game: loss softened ×${Number(e.matched.loss_factor.toFixed(2))}${e.matched.unsoftened != null ? ` (${e.matched.unsoftened} → ${e.delta})` : ""}`}
                     </p>
                   )}
-                  {(e.games || []).length > 0 ? <GameLines change={e} /> : e.mov != null && <FactorLines change={e} />}
+                  {isPlacementChange(e) ? null : (e.games || []).length > 0 ? <GameLines change={e} /> : e.mov != null && <FactorLines change={e} />}
                   {(e.xp_parts || []).length > 0 && (
                     <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.08em] text-brand">
                       {e.xp_parts.map((x) => `+${x.xp} ${x.label}`).join(" · ")}
