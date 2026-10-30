@@ -76,12 +76,12 @@ describe('match flow', () => {
     expect(acc.status).toBe(200);
     expect(acc.body.match.status).toBe('verified');
     const rc = acc.body.match.rating_changes;
-    expect(rc.find((x) => x.player_id === b.player.id)).toMatchObject({ before: 1400, after: 1480, delta: 80, xp_gained: 25 + 25 + 10 + 10 + 10 }); // +10 new rival
-    expect(rc.find((x) => x.player_id === a.player.id)).toMatchObject({ delta: -80, xp_gained: 25 + 10 + 10 });
+    expect(rc.find((x) => x.player_id === b.player.id)).toMatchObject({ before: 1400, after: 1468, delta: 68, xp_gained: 25 + 25 + 10 + 10 + 10 }); // +10 new rival
+    expect(rc.find((x) => x.player_id === a.player.id)).toMatchObject({ delta: -68, xp_gained: 25 + 10 + 10 });
     const players = (await get('/api/entities/Player?sort=singles_rank')).body.items;
     expect(players.map((p) => [p.username, p.singles_rank])).toEqual([['Bobby', 1], ['Alice', 2], ['Carol', null]]); // only those who played are ranked; unplayed Carol sorts last
-    expect(players[0]).toMatchObject({ singles_wins: 1, xp: 80, level: 2, singles_rating: 1480, singles_win_streak: 1, singles_best_streak: 1 });
-    expect(players[1]).toMatchObject({ singles_losses: 1, xp: 45, singles_rating: 1320, singles_win_streak: 0 });
+    expect(players[0]).toMatchObject({ singles_wins: 1, xp: 80, level: 2, singles_rating: 1468, singles_win_streak: 1, singles_best_streak: 1 });
+    expect(players[1]).toMatchObject({ singles_losses: 1, xp: 45, singles_rating: 1332, singles_win_streak: 0 });
     // second response after verification is rejected
     expect((await call(a, 'respondMatch', { match_id: m.id, decision: 'accept' })).status).toBe(400);
   });
@@ -96,7 +96,7 @@ describe('match flow', () => {
     const first = await play();
     const second = await play();
     const d = (rc, id) => rc.find((x) => x.player_id === id).delta;
-    expect(d(first, a.player.id)).toBe(80); // two brand-new players (RD 200): the match cap
+    expect(d(first, a.player.id)).toBe(68); // two brand-new players (RD 200): the match cap
     expect(first.find((x) => x.player_id === a.player.id).novelty).toBeCloseTo(1.1, 9);
     expect(second.find((x) => x.player_id === a.player.id).novelty).toBe(1);
     expect(d(second, a.player.id)).toBeLessThan(d(first, a.player.id));
@@ -132,7 +132,7 @@ describe('match flow', () => {
     const ps = (await get('/api/entities/Player?sort=created_date')).body.items;
     expect(ps.map((p) => p.username)).toEqual(['Aa1', 'Bb2', 'Cc3', 'Dd4']);
     expect(ps.every((p) => p.singles_rank === null)).toBe(true); // a doubles match does not put anyone on the singles ladder
-    expect(ps.find((p) => p.username === 'Dd4')).toMatchObject({ doubles_wins: 1, doubles_game_wins: 1, doubles_game_losses: 0, singles_game_wins: 0, doubles_rating: 1440, singles_rating: 1400 });
+    expect(ps.find((p) => p.username === 'Dd4')).toMatchObject({ doubles_wins: 1, doubles_game_wins: 1, doubles_game_losses: 0, singles_game_wins: 0, doubles_rating: 1434, singles_rating: 1400 });
   });
 });
 
@@ -326,8 +326,8 @@ describe('rating-derived ranks', () => {
   it('a win moves you past everyone you now out-rate, not just the opponent', async () => {
     const a = await mkPlayer('Aa1'); const b = await mkPlayer('Bb2'); const c = await mkPlayer('Cc3');
     await seasoned(a, b, c);
-    await win(c, a); // c 1480, a 1320, b 1400, plus a's #1 bounty for c two places below (12 + 2): c 1494, a 1306
-    expect(await ranks()).toEqual([['Cc3', 1, 1494], ['Bb2', 2, 1400], ['Aa1', 3, 1306]]);
+    await win(c, a); // c 1468, a 1332, b 1400, plus a's #1 bounty for c two places below (12 + 2): c 1482, a 1318
+    expect(await ranks()).toEqual([['Cc3', 1, 1482], ['Bb2', 2, 1400], ['Aa1', 3, 1318]]);
     void b;
   });
 
@@ -347,10 +347,10 @@ describe('rating-derived ranks', () => {
     const a = await mkPlayer('Aa1'); const b = await mkPlayer('Bb2');
     expect(a.player.singles_rank).toBeNull();
     expect(b.player.singles_rank).toBeNull();
-    await win(a, b); // a 1480, b 1320: only players with a verified match are ranked
+    await win(a, b); // a 1468, b 1332: only players with a verified match are ranked
     const c = await mkPlayer('Cc3'); // 1400 but unplayed -> no rank, listed last
     expect(c.player.singles_rank).toBeNull();
-    expect(await ranks()).toEqual([['Aa1', 1, 1480], ['Bb2', 2, 1320], ['Cc3', null, 1400]]);
+    expect(await ranks()).toEqual([['Aa1', 1, 1468], ['Bb2', 2, 1332], ['Cc3', null, 1400]]);
     // a fresh player can neither challenge nor be challenged until they have played
     expect((await call(c, 'createChallenge', { defender_player_id: a.player.id })).status).toBe(400);
     expect((await call(b, 'createChallenge', { defender_player_id: c.player.id })).status).toBe(400);
@@ -359,7 +359,7 @@ describe('rating-derived ranks', () => {
     expect(r.map((x) => x[1])).toEqual([1, 2, 3]);
     expect(r.map((x) => x[0]).slice(-1)).toEqual(['Bb2']);
     await call(c, 'deleteAccount', { confirm: 'DELETE' });
-    expect(await ranks()).toEqual([['Aa1', 1, 1480], ['Bb2', 2, expect.any(Number)]]);
+    expect(await ranks()).toEqual([['Aa1', 1, 1468], ['Bb2', 2, expect.any(Number)]]);
   });
 
   it('ties are deterministic: more games played first, then earlier joiner', async () => {

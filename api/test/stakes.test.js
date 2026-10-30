@@ -86,7 +86,7 @@ describe('novelty and New rival (pure)', () => {
     const r = (novel) => rateMatch([
       { id: 'a', side: 'a', rating: 1400, gamesPlayed: 40, earlierMeetings: 0, novel },
       { id: 'b', side: 'b', rating: 1400, gamesPlayed: 40, earlierMeetings: 0, novel },
-    ], 'a', [{ a: 11, b: 7 }, { a: 7, b: 11 }, { a: 11, b: 7 }], { target: 11 });
+    ], 'a', [{ a: 11, b: 3 }, { a: 11, b: 4 }, { a: 11, b: 2 }], { target: 11 }); // big enough that x1.1 survives rounding
     const fresh = r(true), old = r(false);
     expect(fresh[0].games.every((g) => g.novelty === 1.1)).toBe(true);
     expect(fresh[0].novelty).toBe(1.1);

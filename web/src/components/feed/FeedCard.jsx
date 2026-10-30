@@ -3,7 +3,9 @@ import { ArrowUp, ArrowDown } from "lucide-react";
 import { Avatar } from "@/components/Avatar";
 import { allChips, CHIP_TONES } from "@/lib/feedChips";
 import { timeAgo } from "@/lib/timeAgo";
-import { isPlacementChange } from "@/lib/ladder";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/api/client";
+import { isPlacementChange, isProvisional, placementCount, rankFor } from "@/lib/ladder";
 
 export function Chip({ chip }) {
   return (
@@ -44,7 +46,25 @@ function Delta({ change }) {
   );
 }
 
-function SideRow({ players, games, won, changes }) {
+/** Everyone's current ladder standing, shared with the leaderboard's cached player list. */
+function usePlayersById() {
+  const { data = [] } = useQuery({
+    queryKey: ["players"],
+    queryFn: async () => (await api.entities.Player.list({ limit: 300 })).items || [],
+    staleTime: 60_000,
+  });
+  return Object.fromEntries(data.map((p) => [p.id, p]));
+}
+
+/** "#3", "placing 2/3" or "unranked" for a player in this match's format (their standing now). */
+function standing(p, format) {
+  if (!p) return null;
+  if (isProvisional(p, format)) return { text: `placing ${placementCount(p, format)}`, placing: true };
+  const r = rankFor(p, format);
+  return { text: r ? `#${r}` : "inactive", placing: false };
+}
+
+function SideRow({ players, games, won, changes, format, byId }) {
   return (
     <div className="flex items-center gap-2">
       <span
@@ -58,8 +78,21 @@ function SideRow({ players, games, won, changes }) {
           <Avatar key={p.player_id} name={p.display_name || p.username} src={p.avatar_url} size={28} className="ring-2 ring-card" />
         ))}
       </span>
-      <span className={`min-w-0 flex-1 truncate font-heading text-[15px] ${won ? "font-bold text-foreground" : "text-muted-foreground"}`}>
-        {players.map((p) => p.display_name || p.username).join(" & ")}
+      <span className="min-w-0 flex-1">
+        <span className={`block truncate font-heading text-[15px] ${won ? "font-bold text-foreground" : "text-muted-foreground"}`}>
+          {players.map((p) => p.display_name || p.username).join(" & ")}
+        </span>
+        <span className="block truncate font-mono text-[11px] text-muted-foreground" data-testid="feed-standing">
+          {players.map((p, i) => {
+            const st = standing(byId[p.player_id], format);
+            return (
+              <span key={p.player_id}>
+                {i > 0 && " & "}
+                <span className={st?.placing ? "text-brand" : undefined}>{st ? st.text : "—"}</span>
+              </span>
+            );
+          })}
+        </span>
       </span>
       <span className="flex shrink-0 flex-col items-end gap-0.5">
         {players.map((p) => (
@@ -77,6 +110,8 @@ export function FeedCard({ match }) {
   const aWon = match.winner_side === "a";
   const changes = match.ranked === false ? [] : match.rating_changes || [];
   const chips = allChips(match);
+  const byId = usePlayersById();
+  const format = match.format === "doubles" ? "doubles" : "singles";
   return (
     <li className="border-b border-border last:border-0" data-testid="feed-card">
       <Link to={`/matches/${match.id}`} className="block px-3 py-3 transition-colors hover:bg-secondary/60">
@@ -94,8 +129,8 @@ export function FeedCard({ match }) {
           ))}
         </div>
         <div className="space-y-1.5">
-          <SideRow players={match.side_a || []} games={match.games_a} won={aWon} changes={changes} />
-          <SideRow players={match.side_b || []} games={match.games_b} won={!aWon} changes={changes} />
+          <SideRow players={match.side_a || []} games={match.games_a} won={aWon} changes={changes} format={format} byId={byId} />
+          <SideRow players={match.side_b || []} games={match.games_b} won={!aWon} changes={changes} format={format} byId={byId} />
         </div>
         {(match.games || []).length > 0 && (
           <p className="mt-2 font-mono text-[11px] tabular-nums text-muted-foreground">

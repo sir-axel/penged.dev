@@ -18,7 +18,7 @@ export const RATING_POINTS = [
   "Playing up always means growth. Lose to someone at least 3 tiers above you (Bronze against Platinum, say; and at least 100 rating apart) but keep it close, taking more of the points than the gap says you should (about 46% against someone 100 above, 39% at 300, 35% at 450), and the loss turns into a gain: 150 rating for every whole share of points above that mark, at most +15. Across that gap the favourite's win is worth only +0 (a close one) to +3 (a blowout), and if the underdog wins it is a huge upset: both changes ×1.5. Closer than 3 tiers, every match you win gains you at least +3. Get beaten clearly and it is an ordinary loss: you still have to prove it. Rematches earn less of it, like everything else.",
   "Upsets pay. Beat someone rated above you and the win is boosted (up to ×1.6); crushing someone far below you is damped (down to ×0.6).",
   "You lose points the same way you win them. Get crushed in a game and you lose big; lose narrowly to someone better and it barely stings. Between two equally settled players in singles, what the winner gains the loser drops.",
-  "One game moves you at most 40 points, and one match (all its games together) at most 80.",
+  "One game moves you at most 34 points, and one match (all its games together) at most 68. Every swing is toned down 15% (×0.85) so results stay meaningful without whiplash.",
   "Rematches count, just a little less, and the effect fades fast. Each recent match against the same opponent shrinks the swing, but it halves every 3 days: play the same person every day and results count about half (×0.48), weekly ×0.89, after a few weeks off fully. Never below ×0.30, so regulars keep moving.",
   "New rivals count more. Your first match against someone in 30+ days (or ever) is fresh evidence: ×1.1 and +10 xp. Playing around the office is the fastest way to find your real level.",
   "Games to 21 count 30% more than games to 11: a longer game is a truer result, so a short one swings less. An accepted challenge counts ×1.25.",
@@ -37,8 +37,8 @@ export const RATING_FORMULA =
   "g(opp RD)       = 1 / sqrt(1 + 3 * (oppRD / 173.7)^2 / pi^2)\n" +
   "expected        = 1 / (1 + e ^ (-g * ((you + edge) - (opp + their edge)) / 173.7))\n" +
   "new RD          1 / RD'^2 = 1 / RD^2 + to21 * repeat * g^2 * expected * (1 - expected) / 173.7^2\n" +
-  "change          = 0.6 * RD'^2 / 173.7 * g * (result - expected)\n" +
-  "                  * margin * upset * repeat * new rival * to21 * partner * challenge   (max 40 per game)\n\n" +
+  "change          = 0.6 * 0.85 * RD'^2 / 173.7 * g * (result - expected)\n" +
+  "                  * margin * upset * repeat * new rival * to21 * partner * challenge   (max 34 per game)\n\n" +
   "result    = 1 for a win, 0 for a loss (the loser gets the same margin and upset factors)\n" +
   "dominance = (winnerPoints - loserPoints) / (winnerPoints + loserPoints)   of THAT game\n" +
   "margin    = 0.75 + 1.25 * sqrt(dominance)          (0.75 to 2.0)\n" +
@@ -47,10 +47,10 @@ export const RATING_FORMULA =
   "new rival = 1.1 if you have not met these opponents in 30 days, else 1\n" +
   "to21      = 1.3 for games to 21      challenge = 1.25 for an accepted challenge\n" +
   "partner   = doubles: 0.75 to 1.25 (stronger partner gains less, loses more)\n" +
-  "match total = sum of its games, never more than 80; rating never below 100";
+  "match total = sum of its games, never more than 68; rating never below 100";
 
 export const WORKED_EXAMPLE =
-  "Two regulars (confidence ±60, last played 3 days ago, free paddles): 1400 beats 1600. A 3-0 blowout (11-2, 11-3, 11-1) is three wins: +19, +17, +17 = +53, and the loser drops 53. The same match played narrowly (11-9, 9-11, 12-10) is two wins and a loss: +12, −4, +12 = +20. With a paid paddle the blowout is +48 for the winner. Between two evenly rated regulars (1400 each), a 3-0 sweep is +27, a 2-1 grind +6, a close 2-0 +14. Back after 45 days away the same grind is worth +12, after 90 days +17. A brand-new player (±200) who beats a regular 2-1 gains +40 while the regular drops only 5. What's on the line for two equal regulars: +8 to +21 against a new rival, +6 to +17 if you meet weekly, +3 to +9 if you play every day, and +11 to +34 for the one coming back from six weeks off. Rank simply follows rating.";
+  "Two regulars (confidence ±60, last played 3 days ago, free paddles): 1400 beats 1600. A 3-0 blowout (11-2, 11-3, 11-1) is three wins: +17, +14, +15 = +46, and the loser drops 46. The same match played narrowly (11-9, 9-11, 12-10) is two wins and a loss: +11, −3, +10 = +18. With a paid paddle the blowout is +41 for the winner. Between two evenly rated regulars (1400 each), a 3-0 sweep is +23, a 2-1 grind +5, a close 2-0 +12. Back after 45 days away the same grind is worth +11, after 90 days +15. A brand-new player (±200) who beats a regular 2-1 gains +34 while the regular drops only 4. What's on the line for two equal regulars: +7 to +18 against a new rival, +5 to +15 if you meet weekly, +3 to +8 if you play every day, and +10 to +29 for the one coming back from six weeks off. Rank simply follows rating.";
 
 export const XP_POINTS = [
   "+25 xp for playing, +25 for winning",
@@ -88,9 +88,9 @@ export const MATCHUP_POINTS = [
   "It's a mystery match: you don't see who it is until you accept. Before that you only see your max win, your max loss and the deadline. Nobody else sees who you got either, and they don't see you on their list until you accept.",
   "Max win is a dominant 2-0 win, played as a challenge (×1.25), bounties included. Your max win is always bigger than your max loss: your loss in the matched game is softened so it is at most 75% of the max win (a loss is scaled by min(1, 0.75 × max win ÷ the full loss)). A win in your weekly match is always worth at least +5 to you, even if you are the heavy favourite. Both numbers are fixed on Monday.",
   "Accept and you see who it is, and the challenge goes to them. It skips the weekly limits, the one-open-challenge rule and the 7-day cooldown, and it doesn't use up anyone's weekly limits. Lose the matched game and your loss is softened as above; win it and it counts as normal. The other player's result is never softened.",
-  "Decline and you lose your max loss (at most 80) right away, without finding out who it was. That settles your week.",
-  "Once you accept you can't back out without losing 2x your max loss (at most 80).",
-  "Ignore it, or accept and not play it by Sunday night, and you lose your max loss (at most 80) at the end of the week. If you accepted and they decline it, ignore it or haven't answered by the end of the week, you owe nothing.",
+  "Decline and you lose your max loss (at most 68) right away, without finding out who it was. That settles your week.",
+  "Once you accept you can't back out without losing 2x your max loss (at most 68).",
+  "Ignore it, or accept and not play it by Sunday night, and you lose your max loss (at most 68) at the end of the week. If you accepted and they decline it, ignore it or haven't answered by the end of the week, you owe nothing.",
   "A matched challenge you receive is a regular challenge for you: decline it or let it run out and the normal penalties apply. Several people can be matched with the same player, so #1 may have a queue.",
   "Any verified ranked singles match between you two that week counts. Matched with each other? One match covers you both.",
 ];

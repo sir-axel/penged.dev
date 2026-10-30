@@ -83,7 +83,7 @@ describe('confidence (RD)', () => {
     expect(vsNew).toBeLessThan(vsSettled);
     // a brand-new player's win barely dents a regular
     const n = duel({ rd: 200, daysSinceLast: null }, {}, GRIND);
-    expect([n.w.delta, n.l.delta]).toEqual([40, -5]);
+    expect([n.w.delta, n.l.delta]).toEqual([34, -4]);
   });
   it('sigma moves once per match and stays near 0.06 at office scale', () => {
     const r = duel({}, {}, SWEEP).w;
@@ -206,18 +206,18 @@ describe('challenge dodges use the RD-based K', () => {
 describe('worked examples (asserted so the Rules copy stays true): two regulars at RD 60, last played 3 days ago', () => {
   it('1400 beats 1600', () => {
     const b = duel({}, { rating: 1600 }, BLOW);
-    expect([b.w.delta, b.l.delta]).toEqual([53, -53]);
-    expect(b.w.games.map((g) => g.delta)).toEqual([19, 17, 17]);
+    expect([b.w.delta, b.l.delta]).toEqual([46, -46]);
+    expect(b.w.games.map((g) => g.delta)).toEqual([17, 14, 15]);
     const n = duel({}, { rating: 1600 }, NARROW);
-    expect([n.w.delta, n.l.delta]).toEqual([20, -20]);
-    expect(n.w.games.map((g) => g.delta)).toEqual([12, -4, 12]);
-    expect(duel({ paddle: 'modded' }, { rating: 1600 }, BLOW).w.delta).toBe(48);
+    expect([n.w.delta, n.l.delta]).toEqual([18, -18]);
+    expect(n.w.games.map((g) => g.delta)).toEqual([11, -3, 10]);
+    expect(duel({ paddle: 'modded' }, { rating: 1600 }, BLOW).w.delta).toBe(41);
   });
   it('equal 1400s: 3-0 sweep, 2-1 grind, 2-0 close', () => {
-    expect([SWEEP, GRIND, CLOSE20].map((g) => duel({}, {}, g).w.delta)).toEqual([27, 6, 14]);
+    expect([SWEEP, GRIND, CLOSE20].map((g) => duel({}, {}, g).w.delta)).toEqual([23, 5, 12]);
   });
   it('new and returning players move fast', () => {
-    expect(duel({ daysSinceLast: 45 }, {}, GRIND).w.delta).toBe(12);
-    expect(duel({ daysSinceLast: 90 }, {}, GRIND).w.delta).toBe(17);
+    expect(duel({ daysSinceLast: 45 }, {}, GRIND).w.delta).toBe(11);
+    expect(duel({ daysSinceLast: 90 }, {}, GRIND).w.delta).toBe(15);
   });
 });

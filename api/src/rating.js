@@ -12,8 +12,8 @@ import { tierIndex, TIERS } from './tiers.js';
 // ===================================================================================================
 export const START_RATING = 1400;
 export const RATING_FLOOR = 100;
-export const MAX_DELTA = 80; // hard cap on one player's TOTAL change in one match (all its games together)
-export const MAX_GAME_DELTA = 40; // cap on one game
+export const MAX_DELTA = 68; // hard cap on one player's TOTAL change in one match (all its games together)
+export const MAX_GAME_DELTA = 34; // cap on one game
 export const MAX_GAMES = 10; // games in one match
 // ---- Glicko-2 core ----
 // Confidence = RD (rating deviation, in rating points): how sure the ladder is about your rating. High RD = you move fast.
@@ -27,6 +27,8 @@ export const VOL_MIN = 0.03;
 export const VOL_MAX = 0.15;
 export const GLICKO_TAU = 0.5; // how fast sigma itself may change (per match, from how surprising its results were)
 export const RD_GROWTH_PER_GAME_DAYS = 0.25; // each game also adds a quarter day of drift (keeps busy players movable)
+// Owner 2026-10-30: swings felt too big, so every game's change (and both caps, was 40 / 80) is 15% smaller.
+export const SWING_SCALE = 0.85;
 export const GLICKO_SCALE = 0.6; // per-game step scale (tuned in the sim: 0.6 beat 0.5 / 0.75 / 1.0 on log-loss)
 export const Q = 400 / Math.LN10; // 173.7178: the Glicko-2 rating scale
 // Backfill (migration 0016) and players with no stored RD: RD after `games` played, as if each game taught the
@@ -343,10 +345,10 @@ export function rateMatch(participants, winnerSide, games = [], ctx = {}) {
       const teammate = mate ? teammateFactor(s.r, st[mate.id].r, won) : 1;
       const novelty = p.novel ? NOVELTY_BONUS : 1;
       const k = C.scale * Q * phiNew * phiNew * g;
-      const raw = k * ((won ? 1 : 0) - E) * mov * ac * evidence * repeat * teammate * challenge * novelty;
+      const raw = SWING_SCALE * k * ((won ? 1 : 0) - E) * mov * ac * evidence * repeat * teammate * challenge * novelty;
       let d = Math.sign(raw) * Math.round(Math.abs(raw));
       d = Math.max(-MAX_GAME_DELTA, Math.min(MAX_GAME_DELTA, d));
-      step[p.id] = { d, phiNew, E, k, mov, ac, repeat, teammate, novelty, won };
+      step[p.id] = { d, raw, phiNew, E, k, mov, ac, repeat, teammate, novelty, won };
     }
     for (const p of participants) {
       const s = st[p.id];
@@ -359,6 +361,7 @@ export function rateMatch(participants, winnerSide, games = [], ctx = {}) {
       d = after - before;
       if (d === 0) d = 0;
       s.total += d;
+      s.favTotal = (s.favTotal || 0) + Math.sign(x.raw) * Math.round(Math.abs(x.raw) / SWING_SCALE); // pre-scale per-game change, for the class-gap favourite band
       const rdBefore = s.phi * Q;
       s.r = after;
       s.phi = x.phiNew;
@@ -398,7 +401,8 @@ export function rateMatch(participants, winnerSide, games = [], ctx = {}) {
     let classGap = null;
     if (games.length && farApart && p.side === winnerSide) {
       // Favourite across a class gap: +0 (close) to +3 (blowout), never a loss for a win.
-      const d = Math.max(TIER_FAV_WIN_MIN, Math.min(TIER_FAV_WIN_MAX, s.r - p.rating));
+      // The owner's explicit +0..+3 band reads the unscaled per-game changes (SWING_SCALE doesn't shrink it).
+      const d = Math.max(TIER_FAV_WIN_MIN, Math.min(TIER_FAV_WIN_MAX, s.r - p.rating - s.total + (s.favTotal || 0)));
       classGap = { favourite_win: d, raw: s.r - p.rating };
       s.r = p.rating + d;
     } else if (upset) {

@@ -426,7 +426,7 @@ function GameLines({ change }) {
         ))}
         <p className="font-mono text-[10px] text-muted-foreground">
           {games[0]?.change?.rd_before != null
-            ? "each game: step size (from both confidences) × (result − expected) × the factors above, rounded, at most 40 a game; the match total never exceeds 80; every game firms your confidence up"
+            ? "each game: step size (from both confidences) × (result − expected) × the factors above × 0.85, rounded, at most 34 a game (40 before Oct 30); the match total never exceeds 68 (was 80); every game firms your confidence up"
             : "each game: ½ × K × (result − expected) × the factors above, rounded, at most 40 a game; the match total never exceeds 80"}
         </p>
       </ol>
