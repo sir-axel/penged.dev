@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { ArrowUp, ArrowDown } from "lucide-react";
 import { StatusBadge } from "@/components/StatusBadge";
 import { timeAgo } from "@/lib/timeAgo";
 import { isPlacementChange } from "@/lib/ladder";
@@ -30,7 +31,13 @@ function SideLine({ players = [], games, won, decided, changes, pov, unranked })
                 {e.display_name || e.username}
               </span>
               {d != null && !unranked && hidden && (
-                <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground" title="Placement match: rating hidden until placement is done">placing</span>
+                <span
+                  className={`self-center ${d >= 0 ? "text-success" : "text-destructive"}`}
+                  aria-label={`placement match: rating ${d >= 0 ? "up" : "down"}`}
+                  title="Placement match: amount hidden"
+                >
+                  {d >= 0 ? <ArrowUp className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden="true" /> : <ArrowDown className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden="true" />}
+                </span>
               )}
               {d != null && !unranked && !hidden && (
                 <span className={`font-mono text-[11px] font-semibold tabular-nums ${d >= 0 ? "text-success" : "text-destructive"}`}>{signed(d)}</span>

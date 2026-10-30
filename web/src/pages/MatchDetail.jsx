@@ -3,7 +3,7 @@ import { describeChange, describeGames } from "@/lib/ratingFactors";
 import { useState, useEffect } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Check, ChevronDown, LoaderCircle, MessageSquare, TriangleAlert, X } from "lucide-react";
+import { Check, ChevronDown, LoaderCircle, MessageSquare, TriangleAlert, X, ArrowUp, ArrowDown } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { EmptyState } from "@/components/EmptyState";
 import { PageHeader } from "@/components/PageHeader";
@@ -334,8 +334,11 @@ export function MatchDetail() {
                   <div className="flex items-center gap-2">
                     <span className="flex-1 truncate font-heading text-sm">{e.name}</span>
                     {!e.unranked && isPlacementChange(e) && (
-                      <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground" data-testid="placement-hidden">
-                        {`placement ${Math.min(e.matches_played, PROVISIONAL_MATCHES)}/${PROVISIONAL_MATCHES} · rating hidden`}
+                      <span className="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.08em] text-muted-foreground" data-testid="placement-hidden">
+                        {`placement ${Math.min(e.matches_played, PROVISIONAL_MATCHES)}/${PROVISIONAL_MATCHES}`}
+                        {e.delta >= 0
+                          ? <ArrowUp className="h-4 w-4 text-success" strokeWidth={2.5} aria-label="rating up" />
+                          : <ArrowDown className="h-4 w-4 text-destructive" strokeWidth={2.5} aria-label="rating down" />}
                       </span>
                     )}
                     {!e.unranked && !isPlacementChange(e) && (<>

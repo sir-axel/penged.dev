@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { ArrowUp, ArrowDown } from "lucide-react";
 import { Avatar } from "@/components/Avatar";
 import { allChips, CHIP_TONES } from "@/lib/feedChips";
 import { timeAgo } from "@/lib/timeAgo";
@@ -17,12 +18,20 @@ export function Chip({ chip }) {
 
 function Delta({ change }) {
   if (!change || !Number.isFinite(change.delta)) return null;
-  if (isPlacementChange(change))
+  if (isPlacementChange(change)) {
+    // Placement match: only the direction shows, never the amount.
+    const Arrow = change.delta >= 0 ? ArrowUp : ArrowDown;
     return (
-      <span className="w-9 shrink-0 text-right font-mono text-xs text-muted-foreground" aria-label="placement match, rating hidden" title="Placement match: rating hidden">
-        —
+      <span
+        className={`flex w-9 shrink-0 justify-end ${change.delta >= 0 ? "text-success" : "text-destructive"}`}
+        aria-label={`placement match: rating ${change.delta >= 0 ? "up" : "down"}`}
+        title="Placement match: amount hidden"
+        data-testid="placement-arrow"
+      >
+        <Arrow className="h-4 w-4" strokeWidth={2.5} aria-hidden="true" />
       </span>
     );
+  }
   const up = change.delta >= 0;
   return (
     <span
