@@ -71,7 +71,8 @@ export const CLOSE_GAP_MIN = 100;
 // ...and only across a real class gap: the sides' tiers (by rating, team mean in doubles) at least CLOSE_TIER_GAP apart,
 // e.g. Platinum vs Bronze. Closer than that, the normal rules apply (and a win always gains, see MATCH_WIN_MIN).
 export const CLOSE_TIER_GAP = 3;
-// Across that gap the favourite's win is worth only TIER_FAV_WIN_MIN..TIER_FAV_WIN_MAX (a close win +0, a blowout +3),
+// Across that gap the favourite's win is worth only TIER_FAV_WIN_MIN..TIER_FAV_WIN_MAX (a close win +0, a blowout +3)
+// and the underdog's ordinary loss mirrors it (−0..−3; a close loss still earns credit),
 // and an upset is a big deal: both sides' changes x TIER_UPSET_MULT (match cap and rating floor still apply).
 export const TIER_FAV_WIN_MIN = 0;
 export const TIER_FAV_WIN_MAX = 3;
@@ -405,6 +406,11 @@ export function rateMatch(participants, winnerSide, games = [], ctx = {}) {
       const d = Math.max(TIER_FAV_WIN_MIN, Math.min(TIER_FAV_WIN_MAX, s.r - p.rating - s.total + (s.favTotal || 0)));
       classGap = { favourite_win: d, raw: s.r - p.rating };
       s.r = p.rating + d;
+    } else if (games.length && farApart && p.side === loserSide && s.r < p.rating) {
+      // Underdog beaten across a class gap (no close-loss credit): mirrors the favourite's band, −0 (close) to −3 (blowout).
+      const d = Math.min(0, Math.max(-TIER_FAV_WIN_MAX, s.r - p.rating - s.total + (s.favTotal || 0)));
+      classGap = { underdog_loss: d, raw: s.r - p.rating };
+      s.r = Math.max(RATING_FLOOR, p.rating + d);
     } else if (upset) {
       // Underdog beats a side 3+ tiers up: both changes x TIER_UPSET_MULT.
       const raw = s.r - p.rating;

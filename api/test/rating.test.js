@@ -232,7 +232,9 @@ describe('close-loss credit', () => {
   it('a clear beating is an ordinary loss; peers (gap < 100) get nothing extra', () => {
     const r = run([[11, 5], [11, 6]]);
     expect(r.low.delta).toBeLessThan(0);
+    expect(r.low.delta).toBeGreaterThanOrEqual(-3); // across a class gap the underdog's loss mirrors the favourite's +0..+3
     expect(r.low.close_loss).toBeUndefined();
+    expect(run([[11, 1], [11, 0]]).low.delta).toBe(-3);
     const peers = Object.fromEntries(R.rateMatch([P('a', 'a', 1400), P('b', 'b', 1350)], 'a', G([[11, 9], [11, 9]]), {}).map((x) => [x.id, x]));
     expect(peers.b.close_loss).toBeUndefined();
     expect(peers.b.delta).toBeLessThan(0);
