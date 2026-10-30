@@ -72,10 +72,11 @@ export const CLOSE_GAP_MIN = 100;
 // e.g. Platinum vs Bronze. Closer than that, the normal rules apply (and a win always gains, see MATCH_WIN_MIN).
 export const CLOSE_TIER_GAP = 3;
 // Across that gap the favourite's win is worth only TIER_FAV_WIN_MIN..TIER_FAV_WIN_MAX (a close win +0, a blowout +3)
-// and the underdog's ordinary loss mirrors it (−0..−3; a close loss still earns credit),
+// and the underdog's ordinary loss is small too (−0..−TIER_DOG_LOSS_MAX; a close loss still earns credit),
 // and an upset is a big deal: both sides' changes x TIER_UPSET_MULT (match cap and rating floor still apply).
 export const TIER_FAV_WIN_MIN = 0;
 export const TIER_FAV_WIN_MAX = 3;
+export const TIER_DOG_LOSS_MAX = 6; // ...and the underdog's ordinary loss is −0 (close) to −6 (blowout)
 export const TIER_UPSET_MULT = 1.5;
 // Derank protection: once placed, a loss that would take you out of your tier lands you at that tier's floor (0 progress)
 // instead; only a loss from the floor itself drops you a tier. One match never costs you more than one tier.
@@ -407,8 +408,8 @@ export function rateMatch(participants, winnerSide, games = [], ctx = {}) {
       classGap = { favourite_win: d, raw: s.r - p.rating };
       s.r = p.rating + d;
     } else if (games.length && farApart && p.side === loserSide && s.r < p.rating) {
-      // Underdog beaten across a class gap (no close-loss credit): mirrors the favourite's band, −0 (close) to −3 (blowout).
-      const d = Math.min(0, Math.max(-TIER_FAV_WIN_MAX, s.r - p.rating - s.total + (s.favTotal || 0)));
+      // Underdog beaten across a class gap (no close-loss credit): −0 (close) to −TIER_DOG_LOSS_MAX (blowout).
+      const d = Math.min(0, Math.max(-TIER_DOG_LOSS_MAX, s.r - p.rating - s.total + (s.favTotal || 0)));
       classGap = { underdog_loss: d, raw: s.r - p.rating };
       s.r = Math.max(RATING_FLOOR, p.rating + d);
     } else if (upset) {

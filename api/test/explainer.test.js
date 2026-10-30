@@ -14,7 +14,7 @@ const sg = (n) => (n >= 0 ? `+${n}` : `−${-n}`);
 
 describe('explainer quotes the shipped constants', () => {
   it('start, floor, caps', () => {
-    has(`starts at ${R.START_RATING}`); has(`below ${R.RATING_FLOOR}`);
+    has(`starts at ${R.START_RATING}`); has(`lose only −0 to −${R.TIER_DOG_LOSS_MAX}`); has(`below ${R.RATING_FLOOR}`);
     has(`at most ${R.MAX_GAME_DELTA} points`); has(`at most ${R.MAX_DELTA}`);
     expect(RATING_FORMULA).toContain(`max ${R.MAX_GAME_DELTA} per game`);
     expect(RATING_FORMULA).toContain(`never more than ${R.MAX_DELTA}`);

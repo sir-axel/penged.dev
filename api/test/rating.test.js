@@ -232,9 +232,13 @@ describe('close-loss credit', () => {
   it('a clear beating is an ordinary loss; peers (gap < 100) get nothing extra', () => {
     const r = run([[11, 5], [11, 6]]);
     expect(r.low.delta).toBeLessThan(0);
-    expect(r.low.delta).toBeGreaterThanOrEqual(-3); // across a class gap the underdog's loss mirrors the favourite's +0..+3
+    expect(r.low.delta).toBeGreaterThanOrEqual(-R.TIER_DOG_LOSS_MAX); // across a class gap the underdog's loss is small
     expect(r.low.close_loss).toBeUndefined();
-    expect(run([[11, 1], [11, 0]]).low.delta).toBe(-3);
+    expect(R.TIER_DOG_LOSS_MAX).toBe(6);
+    expect(run([[11, 1], [11, 0]]).low.delta).toBe(-4);
+    // the reported case: Bronze 1315 crushed 1-11 by Platinum 1570 in a challenge (was −16)
+    const rc = R.rateMatch([P('dog', 'a', 1315, { rd: 112, daysSinceLast: 1, matchesPlayed: 8 }), P('fav', 'b', 1570, { rd: 112, daysSinceLast: 1, matchesPlayed: 8 })], 'b', G([[1, 11]]), { target: 11, challenge: true });
+    expect(rc.map((x) => x.delta)).toEqual([-6, 3]);
     const peers = Object.fromEntries(R.rateMatch([P('a', 'a', 1400), P('b', 'b', 1350)], 'a', G([[11, 9], [11, 9]]), {}).map((x) => [x.id, x]));
     expect(peers.b.close_loss).toBeUndefined();
     expect(peers.b.delta).toBeLessThan(0);
